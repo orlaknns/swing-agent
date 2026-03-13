@@ -51,6 +51,12 @@ def calc_rsi(closes: list, period: int = 14) -> float:
     return round(100 - (100 / (1 + rs)), 1)
 
 
+def calc_sma(closes: list, period: int) -> float | None:
+    if len(closes) < period:
+        return None
+    return round(sum(closes[-period:]) / period, 2)
+
+
 def safe_float(val, default=None):
     try:
         f = float(val)
@@ -75,7 +81,7 @@ async def fetch_prices(ticker: str, client_: httpx.AsyncClient) -> list:
     url = (
         f"https://www.alphavantage.co/query"
         f"?function=TIME_SERIES_DAILY&symbol={symbol}"
-        f"&outputsize=compact&apikey={AV_KEY}"
+        f"&outputsize=full&apikey={AV_KEY}"
     )
     r = await client_.get(url)
     r.raise_for_status()
@@ -91,7 +97,7 @@ async def fetch_prices(ticker: str, client_: httpx.AsyncClient) -> list:
     if not ts:
         raise HTTPException(status_code=404, detail=f"No se encontraron datos para {ticker}")
 
-    dates = sorted(ts.keys())[-90:]
+    dates = sorted(ts.keys())[-220:]
     candles = []
     for d in dates:
         try:
@@ -145,6 +151,30 @@ async def fetch_fundamentals(ticker: str, client_: httpx.AsyncClient) -> dict:
         }
     except Exception:
         return {}
+
+
+async def fetch_earnings(ticker: str, client_: httpx.AsyncClient) -> str | None:
+    """Obtiene la próxima fecha de earnings desde Alpha Vantage EARNINGS_CALENDAR."""
+    symbol = TICKER_MAP.get(ticker, ticker)
+    url = (
+        f"https://www.alphavantage.co/query"
+        f"?function=EARNINGS_CALENDAR&symbol={symbol}&horizon=3month&apikey={AV_KEY}"
+    )
+    try:
+        r = await client_.get(url)
+        r.raise_for_status()
+        text = r.text.strip()
+        if not text or "Note" in text or "Information" in text:
+            return None
+        # El endpoint devuelve CSV: symbol,name,reportDate,fiscalDateEnding,estimate,currency
+        lines = [l for l in text.splitlines() if l.strip() and not l.startswith("symbol")]
+        if not lines:
+            return None
+        # Primera línea = próximo earnings
+        parts = lines[0].split(",")
+        return parts[2] if len(parts) > 2 else None
+    except Exception:
+        return None
 
 
 async def fetch_spy_closes(client_: httpx.AsyncClient) -> list:
@@ -222,10 +252,11 @@ async def analyze(ticker: str):
     ticker = ticker.upper().strip()
 
     async with httpx.AsyncClient(timeout=20) as http:
-        candles, fundamentals, spy_closes = await asyncio.gather(
+        candles, fundamentals, spy_closes, next_earnings = await asyncio.gather(
             fetch_prices(ticker, http),
             fetch_fundamentals(ticker, http),
             fetch_spy_closes(http),
+            fetch_earnings(ticker, http),
         )
 
     if len(candles) < 5:
@@ -243,6 +274,7 @@ async def analyze(ticker: str):
     ema20 = calc_ema(closes, 20)
     ema50 = calc_ema(closes, 50)
     rsi   = calc_rsi(closes)
+    sma200 = calc_sma(closes, 200)
 
     avg_vol     = sum(volumes[-20:]) / min(20, len(volumes))
     vol_ratio   = round(volumes[-1] / avg_vol * 100) if avg_vol else 100
@@ -264,7 +296,7 @@ async def analyze(ticker: str):
 
     prompt = f"""Analiza {ticker} para swing trading. Datos reales:
 Precio: ${price} | Cambio: {change}% | EMA20: ${ema20} | EMA50: ${ema50} | RSI: {rsi} | Vol%: {vol_ratio}
-Max20d: ${round(recent_high,2)} | Min20d: ${round(recent_low,2)} | Ultimos5: {last_5}
+Max20d: ${round(recent_high,2)} | Min20d: ${round(recent_low,2)} | SMA200: ${sma200 or "N/A"} | Ultimos5: {last_5}
 
 Responde UNICAMENTE con este JSON (sin texto antes ni despues, sin markdown):
 {{"signal":"buy","strategy":"pullback","entryLow":{el_default},"entryHigh":{eh_default},"stopLoss":{sl_default},"breakeven":{be_default},"target1":{t1_default},"target2":{t2_default},"target3":{t3_default},"trend":"bullish","successRate":60,"keyLevel":{ema20},"analysis":"texto aqui"}}
@@ -325,6 +357,8 @@ signal=buy/sell/hold, strategy=pullback/breakout/reversal/neutral, trend=bullish
         "keyLevel":     round(float(ai.get("keyLevel", ema20)), 2),
         "analysis":     str(ai.get("analysis", "")),
         "mansfieldRS":  mansfield_rs,
+        "sma200":       sma200,
+        "nextEarnings": next_earnings,
         # Fundamentales
         "fundamentals": fundamentals,
     }

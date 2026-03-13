@@ -194,6 +194,17 @@ export default function StockCard({ ticker, onRemove }) {
             <span style={{ color:C.muted }}>EMA50</span>
             <span style={{ color:C.text, fontFamily:'monospace' }}>${data.ema50?.toFixed(2)}</span>
           </div>
+          {data.sma200 != null && (
+            <div style={{ display:'flex', justifyContent:'space-between' }}>
+              <span style={{ color:C.muted }}>SMA200</span>
+              <span style={{ color: data.price > data.sma200 ? C.green : C.red, fontFamily:'monospace' }}>
+                ${data.sma200?.toFixed(2)}
+                <span style={{ fontSize:9, marginLeft:4, opacity:0.7 }}>
+                  {data.price > data.sma200 ? '▲ alcista' : '▼ bajista'}
+                </span>
+              </span>
+            </div>
+          )}
           <div style={{ display:'flex', justifyContent:'space-between' }}>
             <span style={{ color:C.muted }}>Volumen vs avg</span>
             <span style={{ color:data.volRatio > 120 ? C.green : C.text, fontFamily:'monospace' }}>{data.volRatio}%</span>
@@ -241,11 +252,30 @@ export default function StockCard({ ticker, onRemove }) {
             f.revenueGrowth != null && { label:'Crecim. ventas',  val:(f.revenueGrowth>0?'+':'')+f.revenueGrowth+'%', color:f.revenueGrowth>0?C.green:C.red },
             f.analystTarget && { label:'Precio objetivo anal.', val:'$'+f.analystTarget?.toFixed(2), color:C.accent },
           ].filter(Boolean)
+          // Agregar earnings fuera del array de fundamentals (viene del nivel superior)
+          const earningsRow = data.nextEarnings ? [{
+            label: 'Próx. earnings',
+            val: (() => {
+              const d = new Date(data.nextEarnings + 'T00:00:00')
+              const today = new Date()
+              const days = Math.ceil((d - today) / (1000*60*60*24))
+              const dateStr = d.toLocaleDateString('es-CL', {day:'numeric', month:'short'})
+              return days <= 14
+                ? dateStr + ' ⚠️ ' + days + 'd'
+                : dateStr + ' (' + days + 'd)'
+            })(),
+            color: (() => {
+              const d = new Date(data.nextEarnings + 'T00:00:00')
+              const days = Math.ceil((d - new Date()) / (1000*60*60*24))
+              return days <= 14 ? C.red : days <= 30 ? C.amber : C.muted
+            })()
+          }] : []
+          const allRows = [...rows, ...earningsRow]
           if (!rows.length) return null
           return (
             <div style={{ background:C.bg, borderRadius:8, padding:'8px 10px' }}>
               <div style={{ fontSize:9, color:C.muted, letterSpacing:'0.07em', marginBottom:6, textTransform:'uppercase' }}>Fundamentales</div>
-              {rows.map(({ label, val, color }) => (
+              {allRows.map(({ label, val, color }) => (
                 <div key={label} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'3px 0', borderBottom:`1px solid ${C.border}` }}>
                   <span style={{ fontSize:11, color:C.muted }}>{label}</span>
                   <span style={{ fontSize:11, fontWeight:600, color, fontFamily:'monospace' }}>{val}</span>
