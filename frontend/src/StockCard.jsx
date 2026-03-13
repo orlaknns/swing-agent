@@ -204,6 +204,33 @@ export default function StockCard({ ticker, onRemove }) {
           </div>
         </div>
 
+        {/* Fundamentals */}
+        {data.fundamentals && Object.keys(data.fundamentals).length > 0 && (() => {
+          const f = data.fundamentals
+          const rows = [
+            f.sector        && { label:'Sector',         val:f.sector,                             color:C.text   },
+            f.marketCap     && { label:'Market cap',     val:f.marketCap,                          color:C.text   },
+            f.peRatio       && { label:'P/E ratio',      val:f.peRatio?.toFixed(1)+'x',            color:C.text   },
+            f.eps           && { label:'EPS',            val:'$'+f.eps?.toFixed(2),                color:C.text   },
+            f.epsGrowth     != null && { label:'Crecim. EPS trim.', val:(f.epsGrowth>0?'+':'')+f.epsGrowth+'%', color:f.epsGrowth>0?C.green:C.red },
+            f.roe           != null && { label:'ROE',             val:f.roe+'%',                   color:f.roe>15?C.green:C.text },
+            f.revenueGrowth != null && { label:'Crecim. ventas',  val:(f.revenueGrowth>0?'+':'')+f.revenueGrowth+'%', color:f.revenueGrowth>0?C.green:C.red },
+            f.analystTarget && { label:'Precio objetivo anal.', val:'$'+f.analystTarget?.toFixed(2), color:C.accent },
+          ].filter(Boolean)
+          if (!rows.length) return null
+          return (
+            <div style={{ background:C.bg, borderRadius:8, padding:'8px 10px' }}>
+              <div style={{ fontSize:9, color:C.muted, letterSpacing:'0.07em', marginBottom:6, textTransform:'uppercase' }}>Fundamentales</div>
+              {rows.map(({ label, val, color }) => (
+                <div key={label} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'3px 0', borderBottom:`1px solid ${C.border}` }}>
+                  <span style={{ fontSize:11, color:C.muted }}>{label}</span>
+                  <span style={{ fontSize:11, fontWeight:600, color, fontFamily:'monospace' }}>{val}</span>
+                </div>
+              ))}
+            </div>
+          )
+        })()}
+
         {/* Expandable analysis */}
         <button onClick={() => setExpanded(!expanded)}
           style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:7, color:C.muted, cursor:'pointer', padding:'6px 10px', fontSize:11, textAlign:'left', display:'flex', justifyContent:'space-between', alignItems:'center' }}>

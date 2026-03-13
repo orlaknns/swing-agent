@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import httpx
+import asyncio
 import json
 import re
 import os
@@ -47,24 +48,41 @@ def calc_rsi(closes: list, period: int = 14) -> float:
     return round(100 - (100 / (1 + rs)), 1)
 
 
-async def fetch_prices(ticker: str) -> list:
+def safe_float(val, default=None):
+    try:
+        f = float(val)
+        return None if f == 0 else round(f, 2)
+    except (TypeError, ValueError):
+        return default
+
+
+def fmt_market_cap(val):
+    try:
+        v = float(val)
+        if v >= 1e12: return f"${v/1e12:.1f}T"
+        if v >= 1e9:  return f"${v/1e9:.1f}B"
+        if v >= 1e6:  return f"${v/1e6:.1f}M"
+        return f"${v:.0f}"
+    except Exception:
+        return None
+
+
+async def fetch_prices(ticker: str, client_: httpx.AsyncClient) -> list:
     symbol = TICKER_MAP.get(ticker, ticker)
     url = (
         f"https://www.alphavantage.co/query"
         f"?function=TIME_SERIES_DAILY&symbol={symbol}"
         f"&outputsize=compact&apikey={AV_KEY}"
     )
-    async with httpx.AsyncClient(timeout=20) as c:
-        r = await c.get(url)
-        r.raise_for_status()
-        data = r.json()
+    r = await client_.get(url)
+    r.raise_for_status()
+    data = r.json()
 
     if "Note" in data or "Information" in data:
         msg = data.get("Note", data.get("Information", ""))
         raise HTTPException(status_code=429, detail=f"Límite de API Alpha Vantage: {msg[:100]}")
-
     if "Error Message" in data:
-        raise HTTPException(status_code=404, detail=f"Ticker '{ticker}' no encontrado en Alpha Vantage")
+        raise HTTPException(status_code=404, detail=f"Ticker '{ticker}' no encontrado")
 
     ts = data.get("Time Series (Daily)")
     if not ts:
@@ -87,6 +105,45 @@ async def fetch_prices(ticker: str) -> list:
     return candles
 
 
+async def fetch_fundamentals(ticker: str, client_: httpx.AsyncClient) -> dict:
+    symbol = TICKER_MAP.get(ticker, ticker)
+    url = (
+        f"https://www.alphavantage.co/query"
+        f"?function=OVERVIEW&symbol={symbol}&apikey={AV_KEY}"
+    )
+    try:
+        r = await client_.get(url)
+        r.raise_for_status()
+        data = r.json()
+        if not data or "Note" in data or "Information" in data or "Symbol" not in data:
+            return {}
+
+        mc = fmt_market_cap(data.get("MarketCapitalization"))
+        eps = safe_float(data.get("EPS"))
+        pe  = safe_float(data.get("PERatio"))
+        roe_raw = safe_float(data.get("ReturnOnEquityTTM"))
+        roe = round(roe_raw * 100, 1) if roe_raw else None
+        rev_growth_raw = safe_float(data.get("QuarterlyRevenueGrowthYOY"))
+        rev_growth = round(rev_growth_raw * 100, 1) if rev_growth_raw else None
+        eps_growth_raw = safe_float(data.get("QuarterlyEarningsGrowthYOY"))
+        eps_growth = round(eps_growth_raw * 100, 1) if eps_growth_raw else None
+
+        return {
+            "sector":       data.get("Sector") or None,
+            "industry":     data.get("Industry") or None,
+            "marketCap":    mc,
+            "eps":          eps,
+            "peRatio":      pe,
+            "roe":          roe,
+            "revenueGrowth": rev_growth,
+            "epsGrowth":    eps_growth,
+            "analystTarget": safe_float(data.get("AnalystTargetPrice")),
+            "debtToEquity": safe_float(data.get("DebtToEquityRatio")),
+        }
+    except Exception:
+        return {}
+
+
 def extract_json(text: str) -> dict:
     text = re.sub(r"```[a-z]*|```", "", text).strip()
     match = re.search(r'\{[^{}]*\}', text, re.DOTALL)
@@ -99,7 +156,12 @@ def extract_json(text: str) -> dict:
 async def analyze(ticker: str):
     ticker = ticker.upper().strip()
 
-    candles = await fetch_prices(ticker)
+    async with httpx.AsyncClient(timeout=20) as http:
+        candles, fundamentals = await asyncio.gather(
+            fetch_prices(ticker, http),
+            fetch_fundamentals(ticker, http),
+        )
+
     if len(candles) < 5:
         raise HTTPException(status_code=404, detail=f"Datos insuficientes para {ticker}")
 
@@ -116,8 +178,8 @@ async def analyze(ticker: str):
     ema50 = calc_ema(closes, 50)
     rsi   = calc_rsi(closes)
 
-    avg_vol    = sum(volumes[-20:]) / min(20, len(volumes))
-    vol_ratio  = round(volumes[-1] / avg_vol * 100) if avg_vol else 100
+    avg_vol     = sum(volumes[-20:]) / min(20, len(volumes))
+    vol_ratio   = round(volumes[-1] / avg_vol * 100) if avg_vol else 100
     recent_high = max(highs[-20:])
     recent_low  = min(lows[-20:])
     prices_20d  = [round(c, 2) for c in closes[-20:]]
@@ -172,28 +234,30 @@ signal=buy/sell/hold, strategy=pullback/breakout/reversal/neutral, trend=bullish
     rr = round(abs((target2 - entry_mid) / (entry_mid - stop)), 2) if abs(entry_mid - stop) > 0.001 else 0
 
     return {
-        "ticker":      ticker,
-        "price":       price,
-        "change":      change,
-        "ema20":       ema20,
-        "ema50":       ema50,
-        "rsi":         rsi,
-        "volRatio":    vol_ratio,
-        "prices20d":   prices_20d,
-        "signal":      ai.get("signal",      "hold"),
-        "strategy":    ai.get("strategy",    "neutral"),
-        "entryLow":    round(entry_low,  2),
-        "entryHigh":   round(entry_high, 2),
-        "stopLoss":    round(stop,       2),
-        "breakeven":   round(breakeven,  2),
-        "target1":     round(target1,    2),
-        "target2":     round(target2,    2),
-        "target3":     round(target3,    2),
-        "rr":          rr,
-        "trend":       ai.get("trend",       "sideways"),
-        "successRate": int(ai.get("successRate", 50)),
-        "keyLevel":    round(float(ai.get("keyLevel", ema20)), 2),
-        "analysis":    str(ai.get("analysis", "")),
+        "ticker":       ticker,
+        "price":        price,
+        "change":       change,
+        "ema20":        ema20,
+        "ema50":        ema50,
+        "rsi":          rsi,
+        "volRatio":     vol_ratio,
+        "prices20d":    prices_20d,
+        "signal":       ai.get("signal",      "hold"),
+        "strategy":     ai.get("strategy",    "neutral"),
+        "entryLow":     round(entry_low,  2),
+        "entryHigh":    round(entry_high, 2),
+        "stopLoss":     round(stop,       2),
+        "breakeven":    round(breakeven,  2),
+        "target1":      round(target1,    2),
+        "target2":      round(target2,    2),
+        "target3":      round(target3,    2),
+        "rr":           rr,
+        "trend":        ai.get("trend",       "sideways"),
+        "successRate":  int(ai.get("successRate", 50)),
+        "keyLevel":     round(float(ai.get("keyLevel", ema20)), 2),
+        "analysis":     str(ai.get("analysis", "")),
+        # Fundamentales
+        "fundamentals": fundamentals,
     }
 
 
