@@ -83,6 +83,56 @@ async function fetchAnalysis(ticker) {
   }
 }
 
+
+function earningsDays(dateStr) {
+  try {
+    const d = new Date(dateStr + 'T00:00:00')
+    return Math.ceil((d - new Date()) / (1000*60*60*24))
+  } catch { return null }
+}
+
+function FundamentalsBlock({ f, nextEarnings }) {
+  if (!f || Object.keys(f).length === 0) return null
+  const rows = [
+    f.sector        ? { label:'Sector',         val: f.sector,                                               color: C.text   } : null,
+    f.marketCap     ? { label:'Market cap',      val: f.marketCap,                                            color: C.text   } : null,
+    f.peRatio       ? { label:'P/E ratio',       val: f.peRatio.toFixed(1) + 'x',                             color: C.text   } : null,
+    f.eps           ? { label:'EPS',             val: '$' + f.eps.toFixed(2),                                 color: C.text   } : null,
+    f.epsGrowth     != null ? { label:'Crecim. EPS',   val: (f.epsGrowth > 0 ? '+' : '') + f.epsGrowth + '%',   color: f.epsGrowth > 0 ? C.green : C.red } : null,
+    f.roe           != null ? { label:'ROE',            val: f.roe + '%',                                        color: f.roe > 15 ? C.green : C.text } : null,
+    f.revenueGrowth != null ? { label:'Crecim. ventas', val: (f.revenueGrowth > 0 ? '+' : '') + f.revenueGrowth + '%', color: f.revenueGrowth > 0 ? C.green : C.red } : null,
+    f.analystTarget ? { label:'Obj. analistas',  val: '$' + f.analystTarget.toFixed(2),                       color: C.accent } : null,
+  ].filter(Boolean)
+
+  if (nextEarnings) {
+    const days = earningsDays(nextEarnings)
+    if (days !== null) {
+      let dateLabel = nextEarnings
+      try { dateLabel = new Date(nextEarnings + 'T00:00:00').toLocaleDateString('es-CL', {day:'numeric', month:'short'}) } catch {}
+      rows.push({
+        label: 'Prox. earnings',
+        val:   days <= 14 ? dateLabel + ' !! ' + days + 'd' : dateLabel + ' (' + days + 'd)',
+        color: days <= 14 ? C.red : days <= 30 ? C.amber : C.muted
+      })
+    }
+  }
+
+  if (!rows.length) return null
+  return (
+    <div style={{ background:C.bg, borderRadius:8, padding:'8px 10px' }}>
+      <div style={{ fontSize:9, color:C.muted, letterSpacing:'0.07em', marginBottom:6, textTransform:'uppercase' }}>Fundamentales</div>
+      {rows.map(function(row) {
+        return (
+          <div key={row.label} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'3px 0', borderBottom:'1px solid ' + C.border }}>
+            <span style={{ fontSize:11, color:C.muted }}>{row.label}</span>
+            <span style={{ fontSize:11, fontWeight:600, color:row.color, fontFamily:'monospace' }}>{row.val}</span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 export default function StockCard({ ticker, onRemove }) {
   const [data,     setData]     = useState(null)
   const [loading,  setLoading]  = useState(false)
@@ -252,50 +302,7 @@ export default function StockCard({ ticker, onRemove }) {
         </div>
 
         {/* Fundamentals */}
-        {data.fundamentals && Object.keys(data.fundamentals).length > 0 && (() => {
-          const f = data.fundamentals
-          const rows = [
-            f.sector        && { label:'Sector',         val:f.sector,                             color:C.text   },
-            f.marketCap     && { label:'Market cap',     val:f.marketCap,                          color:C.text   },
-            f.peRatio       && { label:'P/E ratio',      val:f.peRatio?.toFixed(1)+'x',            color:C.text   },
-            f.eps           && { label:'EPS',            val:'$'+f.eps?.toFixed(2),                color:C.text   },
-            f.epsGrowth     != null && { label:'Crecim. EPS trim.', val:(f.epsGrowth>0?'+':'')+f.epsGrowth+'%', color:f.epsGrowth>0?C.green:C.red },
-            f.roe           != null && { label:'ROE',             val:f.roe+'%',                   color:f.roe>15?C.green:C.text },
-            f.revenueGrowth != null && { label:'Crecim. ventas',  val:(f.revenueGrowth>0?'+':'')+f.revenueGrowth+'%', color:f.revenueGrowth>0?C.green:C.red },
-            f.analystTarget && { label:'Precio objetivo anal.', val:'$'+f.analystTarget?.toFixed(2), color:C.accent },
-          ].filter(Boolean)
-          // Agregar earnings fuera del array de fundamentals (viene del nivel superior)
-          const earningsRow = data.nextEarnings ? [{
-            label: 'Próx. earnings',
-            val: (() => {
-              const d = new Date(data.nextEarnings + 'T00:00:00')
-              const today = new Date()
-              const days = Math.ceil((d - today) / (1000*60*60*24))
-              const dateStr = d.toLocaleDateString('es-CL', {day:'numeric', month:'short'})
-              return days <= 14
-                ? dateStr + ' ⚠️ ' + days + 'd'
-                : dateStr + ' (' + days + 'd)'
-            })(),
-            color: (() => {
-              const d = new Date(data.nextEarnings + 'T00:00:00')
-              const days = Math.ceil((d - new Date()) / (1000*60*60*24))
-              return days <= 14 ? C.red : days <= 30 ? C.amber : C.muted
-            })()
-          }] : []
-          const allRows = [...rows, ...earningsRow]
-          if (!rows.length) return null
-          return (
-            <div style={{ background:C.bg, borderRadius:8, padding:'8px 10px' }}>
-              <div style={{ fontSize:9, color:C.muted, letterSpacing:'0.07em', marginBottom:6, textTransform:'uppercase' }}>Fundamentales</div>
-              {allRows.map(({ label, val, color }) => (
-                <div key={label} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'3px 0', borderBottom:`1px solid ${C.border}` }}>
-                  <span style={{ fontSize:11, color:C.muted }}>{label}</span>
-                  <span style={{ fontSize:11, fontWeight:600, color, fontFamily:'monospace' }}>{val}</span>
-                </div>
-              ))}
-            </div>
-          )
-        })()}
+        <FundamentalsBlock f={data.fundamentals} nextEarnings={data.nextEarnings} />
 
         {/* Expandable analysis */}
         <button onClick={() => setExpanded(!expanded)}
