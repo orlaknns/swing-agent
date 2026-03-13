@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "https://TU-BACKEND-URL.railway.app/$1"
+      "destination": "https://swing-agent-production.up.railway.app/$1"
     }
   ]
 }
