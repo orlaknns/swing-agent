@@ -144,6 +144,56 @@ async def fetch_fundamentals(ticker: str, client_: httpx.AsyncClient) -> dict:
         return {}
 
 
+async def fetch_spy_closes(client_: httpx.AsyncClient) -> list:
+    """Fetches SPY daily closes for Mansfield RS calculation (52w = ~252 days, use full output)."""
+    url = (
+        f"https://www.alphavantage.co/query"
+        f"?function=TIME_SERIES_DAILY&symbol=SPY"
+        f"&outputsize=full&apikey={AV_KEY}"
+    )
+    try:
+        r = await client_.get(url)
+        r.raise_for_status()
+        data = r.json()
+        ts = data.get("Time Series (Daily)")
+        if not ts:
+            return []
+        dates = sorted(ts.keys())[-260:]
+        return [float(ts[d]["4. close"]) for d in dates]
+    except Exception:
+        return []
+
+
+def calc_mansfield_rs(stock_closes: list, spy_closes: list) -> float | None:
+    """
+    Mansfield RS = ((stock_now / stock_52w) / (spy_now / spy_52w) - 1) * 100
+    Normalized to roughly -5 to +5 scale by dividing by 5.
+    Positive = outperforming S&P500, negative = underperforming.
+    """
+    try:
+        if len(stock_closes) < 252 or len(spy_closes) < 252:
+            periods = min(len(stock_closes), len(spy_closes), 252)
+            if periods < 20:
+                return None
+        else:
+            periods = 252
+
+        stock_now  = stock_closes[-1]
+        stock_52w  = stock_closes[-periods]
+        spy_now    = spy_closes[-1]
+        spy_52w    = spy_closes[-periods]
+
+        if stock_52w == 0 or spy_52w == 0:
+            return None
+
+        rs_raw = ((stock_now / stock_52w) / (spy_now / spy_52w) - 1) * 100
+        # normalize: typical range ±25% → scale to ±5
+        normalized = round(rs_raw / 5, 2)
+        return max(-5.0, min(5.0, normalized))
+    except Exception:
+        return None
+
+
 def extract_json(text: str) -> dict:
     text = re.sub(r"```[a-z]*|```", "", text).strip()
     match = re.search(r'\{[^{}]*\}', text, re.DOTALL)
@@ -157,9 +207,10 @@ async def analyze(ticker: str):
     ticker = ticker.upper().strip()
 
     async with httpx.AsyncClient(timeout=20) as http:
-        candles, fundamentals = await asyncio.gather(
+        candles, fundamentals, spy_closes = await asyncio.gather(
             fetch_prices(ticker, http),
             fetch_fundamentals(ticker, http),
+            fetch_spy_closes(http),
         )
 
     if len(candles) < 5:
@@ -180,6 +231,8 @@ async def analyze(ticker: str):
 
     avg_vol     = sum(volumes[-20:]) / min(20, len(volumes))
     vol_ratio   = round(volumes[-1] / avg_vol * 100) if avg_vol else 100
+    mansfield_rs = calc_mansfield_rs(closes, spy_closes)
+
     recent_high = max(highs[-20:])
     recent_low  = min(lows[-20:])
     prices_20d  = [round(c, 2) for c in closes[-20:]]
@@ -256,6 +309,7 @@ signal=buy/sell/hold, strategy=pullback/breakout/reversal/neutral, trend=bullish
         "successRate":  int(ai.get("successRate", 50)),
         "keyLevel":     round(float(ai.get("keyLevel", ema20)), 2),
         "analysis":     str(ai.get("analysis", "")),
+        "mansfieldRS":  mansfield_rs,
         # Fundamentales
         "fundamentals": fundamentals,
     }

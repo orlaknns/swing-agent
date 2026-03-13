@@ -202,6 +202,30 @@ export default function StockCard({ ticker, onRemove }) {
             <span style={{ color:C.muted, flexShrink:0 }}>R:B</span>
             <div style={{ flex:1 }}><RRBar rr={data.rr} /></div>
           </div>
+          {data.mansfieldRS != null && (
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:8 }}>
+              <span style={{ color:C.muted, flexShrink:0 }}>Mansfield RS</span>
+              <div style={{ display:'flex', alignItems:'center', gap:6, flex:1, justifyContent:'flex-end' }}>
+                <div style={{ width:80, height:3, background:C.border, borderRadius:2, overflow:'hidden', position:'relative' }}>
+                  <div style={{
+                    position:'absolute',
+                    left: data.mansfieldRS >= 0 ? '50%' : `${50 + (data.mansfieldRS / 5) * 50}%`,
+                    width: `${Math.abs(data.mansfieldRS) / 5 * 50}%`,
+                    height:'100%',
+                    background: data.mansfieldRS >= 0 ? C.green : C.red,
+                    borderRadius:2
+                  }}/>
+                  <div style={{ position:'absolute', left:'50%', top:0, width:1, height:'100%', background:C.muted }}/>
+                </div>
+                <span style={{
+                  fontSize:11, fontWeight:700, fontFamily:'monospace', minWidth:36, textAlign:'right',
+                  color: data.mansfieldRS > 1 ? C.green : data.mansfieldRS < -1 ? C.red : C.amber
+                }}>
+                  {data.mansfieldRS > 0 ? '+' : ''}{data.mansfieldRS?.toFixed(1)}
+                </span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Fundamentals */}
