@@ -63,23 +63,31 @@ function Sparkline({ prices, signal }) {
   )
 }
 
-async function fetchAnalysis(ticker) {
-  const res = await fetch(`/api/analyze/${ticker}`)
-  if (!res.ok) {
-    let msg = `Error ${res.status}`
-    try { const err = await res.json(); msg = err.detail || msg } catch {}
-    throw new Error(msg)
-  }
-  const text = await res.text()
+async function fetchAnalysis(ticker, attempt = 1) {
+  const delay = ms => new Promise(r => setTimeout(r, ms))
   try {
-    return JSON.parse(text)
-  } catch {
-    // Fallback: fix common encoding issues before parsing
-    const fixed = text
-      .replace(/Ã¡/g,'á').replace(/Ã©/g,'é').replace(/Ã­/g,'í').replace(/Ã³/g,'ó').replace(/Ãº/g,'ú')
-      .replace(/Ã±/g,'ñ').replace(/Ã/g,'Á').replace(/Ã‰/g,'É').replace(/Ã"/g,'Ó').replace(/Ãš/g,'Ú')
-      .replace(/Ã€/g,'À').replace(/â€™/g,"'").replace(/â€œ/g,'"').replace(/â€/g,'"')
-    return JSON.parse(fixed)
+    const res = await fetch(`/api/analyze/${ticker}`)
+    if (!res.ok) {
+      // 503/502 = servidor reiniciando, reintentar
+      if ((res.status === 502 || res.status === 503) && attempt < 3) {
+        await delay(attempt * 2000)
+        return fetchAnalysis(ticker, attempt + 1)
+      }
+      let msg = `Error ${res.status}`
+      try { const err = await res.json(); msg = err.detail || msg } catch {}
+      throw new Error(msg)
+    }
+    return await res.json()
+  } catch (e) {
+    // Error de red (servidor caído/reiniciando), reintentar hasta 3 veces
+    if (e.name === 'TypeError' && attempt < 3) {
+      await delay(attempt * 2000)
+      return fetchAnalysis(ticker, attempt + 1)
+    }
+    throw new Error(attempt > 1
+      ? `Sin conexión con el servidor (${attempt} intentos). Railway puede estar reiniciando, espera 30 segundos e intenta de nuevo.`
+      : e.message
+    )
   }
 }
 
@@ -324,7 +332,7 @@ export default function StockCard({ ticker, onRemove }) {
         )}
         {/* Save to journal button */}
         {data && !data.error && !loading && (
-          <button onClick={saveToJournal}
+          <button onClick={saveTradeToJournal}
             style={{ width:'100%', background: journalSaved ? C.green+'22' : 'none',
               border:`1px solid ${journalSaved ? C.green : C.border}`,
               borderRadius:7, color: journalSaved ? C.green : C.muted,
