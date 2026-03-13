@@ -19,6 +19,9 @@ app.add_middleware(
 client = Anthropic()
 AV_KEY = os.environ.get("ALPHA_VANTAGE_KEY", "I3ZGIWYTKOVF07TP")
 
+# Cache SPY para evitar llamadas repetidas (se renueva cada 60 min)
+_spy_cache: dict = {"closes": [], "ts": 0}
+
 TICKER_MAP = {
     "GOOGL": "GOOGL",
     "META": "META",
@@ -145,7 +148,14 @@ async def fetch_fundamentals(ticker: str, client_: httpx.AsyncClient) -> dict:
 
 
 async def fetch_spy_closes(client_: httpx.AsyncClient) -> list:
-    """Fetches SPY daily closes for Mansfield RS calculation (52w = ~252 days, use full output)."""
+    """Fetches SPY daily closes con caché de 60 minutos."""
+    import time
+    global _spy_cache
+
+    # Retornar desde caché si tiene menos de 60 minutos
+    if _spy_cache["closes"] and (time.time() - _spy_cache["ts"]) < 3600:
+        return _spy_cache["closes"]
+
     url = (
         f"https://www.alphavantage.co/query"
         f"?function=TIME_SERIES_DAILY&symbol=SPY"
@@ -157,11 +167,16 @@ async def fetch_spy_closes(client_: httpx.AsyncClient) -> list:
         data = r.json()
         ts = data.get("Time Series (Daily)")
         if not ts:
-            return []
+            return _spy_cache["closes"]  # devuelve caché viejo si falla
         dates = sorted(ts.keys())[-260:]
-        return [float(ts[d]["4. close"]) for d in dates]
+        closes = [float(ts[d]["4. close"]) for d in dates]
+
+        # Guardar en caché
+        _spy_cache["closes"] = closes
+        _spy_cache["ts"] = time.time()
+        return closes
     except Exception:
-        return []
+        return _spy_cache["closes"]  # devuelve caché viejo si hay error
 
 
 def calc_mansfield_rs(stock_closes: list, spy_closes: list) -> float | None:
