@@ -1,9 +1,9 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-import yfinance as yf
-import requests
+import httpx
 import json
 import re
+import os
 from anthropic import Anthropic
 
 app = FastAPI()
@@ -16,15 +16,7 @@ app.add_middleware(
 )
 
 client = Anthropic()
-
-
-def get_session():
-    session = requests.Session()
-    session.headers.update({
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    })
-    return session
+AV_KEY = os.environ.get("ALPHA_VANTAGE_KEY", "I3ZGIWYTKOVF07TP")
 
 
 def calc_ema(closes: list, period: int) -> float:
@@ -49,54 +41,68 @@ def calc_rsi(closes: list, period: int = 14) -> float:
     return round(100 - (100 / (1 + rs)), 1)
 
 
-def calc_avg_volume(volumes: list, period: int = 20) -> float:
-    recent = [v for v in volumes[-period:] if v]
-    return sum(recent) / len(recent) if recent else 0
+async def fetch_prices(ticker: str) -> dict:
+    url = (
+        f"https://www.alphavantage.co/query"
+        f"?function=TIME_SERIES_DAILY&symbol={ticker}"
+        f"&outputsize=compact&apikey={AV_KEY}"
+    )
+    async with httpx.AsyncClient(timeout=15) as c:
+        r = await c.get(url)
+        r.raise_for_status()
+        data = r.json()
+
+    if "Note" in data:
+        raise HTTPException(status_code=429, detail="Límite de API alcanzado, intenta en 1 minuto")
+    if "Error Message" in data:
+        raise HTTPException(status_code=404, detail=f"Ticker '{ticker}' no encontrado")
+    if "Time Series (Daily)" not in data:
+        raise HTTPException(status_code=404, detail=f"No se encontraron datos para {ticker}")
+
+    ts = data["Time Series (Daily)"]
+    dates = sorted(ts.keys())[-90:]
+    candles = [
+        {
+            "date": d,
+            "open":   float(ts[d]["1. open"]),
+            "high":   float(ts[d]["2. high"]),
+            "low":    float(ts[d]["3. low"]),
+            "close":  float(ts[d]["4. close"]),
+            "volume": float(ts[d]["5. volume"]),
+        }
+        for d in dates
+    ]
+    return candles
 
 
 @app.get("/analyze/{ticker}")
 async def analyze(ticker: str):
     ticker = ticker.upper().strip()
 
-    hist = None
-    try:
-        session = get_session()
-        stock = yf.Ticker(ticker, session=session)
-        hist = stock.history(period="90d", interval="1d", auto_adjust=True)
-    except Exception:
-        pass
+    candles = await fetch_prices(ticker)
+    if len(candles) < 5:
+        raise HTTPException(status_code=404, detail=f"Datos insuficientes para {ticker}")
 
-    if hist is None or hist.empty:
-        try:
-            stock = yf.Ticker(ticker)
-            hist = stock.history(period="60d", interval="1d")
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Error obteniendo datos: {str(e)}")
+    closes  = [c["close"]  for c in candles]
+    highs   = [c["high"]   for c in candles]
+    lows    = [c["low"]    for c in candles]
+    volumes = [c["volume"] for c in candles]
 
-    if hist is None or hist.empty or len(hist) < 5:
-        raise HTTPException(status_code=404, detail=f"No se encontraron datos para {ticker}. Verifica que el ticker sea válido.")
-
-    closes = hist["Close"].tolist()
-    volumes = hist["Volume"].tolist()
-    highs = hist["High"].tolist()
-    lows = hist["Low"].tolist()
-    dates = [str(d.date()) for d in hist.index]
-
-    price = round(closes[-1], 2)
+    price      = round(closes[-1], 2)
     prev_close = closes[-2] if len(closes) >= 2 else closes[-1]
-    change = round(((price - prev_close) / prev_close) * 100, 2)
+    change     = round(((price - prev_close) / prev_close) * 100, 2)
 
     ema20 = calc_ema(closes, 20)
     ema50 = calc_ema(closes, 50)
-    rsi = calc_rsi(closes)
-    avg_vol = calc_avg_volume(volumes)
-    last_vol = volumes[-1] or 0
-    vol_ratio = round(last_vol / avg_vol * 100) if avg_vol else 100
+    rsi   = calc_rsi(closes)
 
-    recent_high = max(highs[-20:]) if len(highs) >= 20 else max(highs)
-    recent_low = min(lows[-20:]) if len(lows) >= 20 else min(lows)
-    prices_20d = [round(c, 2) for c in closes[-20:]]
-    last_5_closes = [round(c, 2) for c in closes[-5:]]
+    avg_vol   = sum(volumes[-20:]) / min(20, len(volumes))
+    vol_ratio = round(volumes[-1] / avg_vol * 100) if avg_vol else 100
+
+    recent_high = max(highs[-20:])
+    recent_low  = min(lows[-20:])
+    prices_20d  = [round(c, 2) for c in closes[-20:]]
+    last_5      = [round(c, 2) for c in closes[-5:]]
 
     prompt = f"""Eres un experto en swing trading de acciones USA. Analiza {ticker} con estos datos técnicos reales:
 
@@ -108,7 +114,7 @@ async def analyze(ticker: str):
 - Volumen vs promedio 20d: {vol_ratio}%
 - Máximo 20d: ${round(recent_high, 2)}
 - Mínimo 20d: ${round(recent_low, 2)}
-- Últimos 5 cierres: {last_5_closes}
+- Últimos 5 cierres: {last_5}
 
 Responde SOLO con JSON válido sin markdown:
 {{"signal":"buy|sell|hold","strategy":"pullback|breakout|reversal|neutral","entry":número,"stopLoss":número,"target":número,"trend":"bullish|bearish|sideways","successRate":número entre 40-75,"keyLevel":número,"analysis":"2-3 oraciones en español explicando la señal y qué hacer"}}
@@ -123,51 +129,33 @@ Reglas: entry=precio óptimo hoy, stopLoss=máx 5% de pérdida desde entry, targ
 
     raw = message.content[0].text.strip()
     raw = re.sub(r"```[a-z]*|```", "", raw).strip()
-    ai = json.loads(raw)
+    ai  = json.loads(raw)
 
-    entry = ai.get("entry", price)
-    stop = ai.get("stopLoss", price * 0.97)
-    target = ai.get("target", price * 1.06)
-    rr = round(abs((target - entry) / (entry - stop)), 2) if entry != stop else 0
+    entry  = ai.get("entry",    price)
+    stop   = ai.get("stopLoss", price * 0.97)
+    target = ai.get("target",   price * 1.06)
+    rr     = round(abs((target - entry) / (entry - stop)), 2) if entry != stop else 0
 
     return {
-        "ticker": ticker,
-        "price": price,
-        "change": change,
-        "ema20": ema20,
-        "ema50": ema50,
-        "rsi": rsi,
-        "volRatio": vol_ratio,
-        "prices20d": prices_20d,
-        "signal": ai.get("signal", "hold"),
-        "strategy": ai.get("strategy", "neutral"),
-        "entry": round(entry, 2),
-        "stopLoss": round(stop, 2),
-        "target": round(target, 2),
-        "rr": rr,
-        "trend": ai.get("trend", "sideways"),
+        "ticker":      ticker,
+        "price":       price,
+        "change":      change,
+        "ema20":       ema20,
+        "ema50":       ema50,
+        "rsi":         rsi,
+        "volRatio":    vol_ratio,
+        "prices20d":   prices_20d,
+        "signal":      ai.get("signal",      "hold"),
+        "strategy":    ai.get("strategy",    "neutral"),
+        "entry":       round(entry,  2),
+        "stopLoss":    round(stop,   2),
+        "target":      round(target, 2),
+        "rr":          rr,
+        "trend":       ai.get("trend",       "sideways"),
         "successRate": ai.get("successRate", 50),
-        "keyLevel": ai.get("keyLevel", round(ema20, 2)),
-        "analysis": ai.get("analysis", ""),
+        "keyLevel":    ai.get("keyLevel",    round(ema20, 2)),
+        "analysis":    ai.get("analysis",    ""),
     }
-
-
-@app.get("/search/{query}")
-async def search(query: str):
-    q = query.upper().strip()
-    results = []
-    try:
-        t = yf.Ticker(q)
-        info = t.info
-        if info.get("symbol"):
-            results.append({
-                "ticker": info["symbol"],
-                "name": info.get("longName", info["symbol"]),
-                "exchange": info.get("exchange", ""),
-            })
-    except Exception:
-        pass
-    return {"results": results}
 
 
 @app.get("/health")
