@@ -147,16 +147,34 @@ export default function StockCard({ ticker, onRemove }) {
           <Sparkline prices={data.prices20d} signal={data.signal} />
         </div>
 
-        {/* Entry / SL / Target */}
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:5 }}>
+        {/* Entry / SL */}
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:5 }}>
           {[
-            { label:'Entrada',   val:`$${data.entry?.toFixed(2)}`,   color:C.green  },
-            { label:'Stop-loss', val:`$${data.stopLoss?.toFixed(2)}`, color:C.red    },
-            { label:'Objetivo',  val:`$${data.target?.toFixed(2)}`,  color:C.accent },
+            { label:'Entrada',   val:`$${data.entry?.toFixed(2)}`,    color:C.green },
+            { label:'Stop-loss', val:`$${data.stopLoss?.toFixed(2)}`,  color:C.red   },
           ].map(({ label, val, color }) => (
             <div key={label} style={{ background:C.bg, borderRadius:8, padding:'8px 6px', textAlign:'center' }}>
               <div style={{ fontSize:9, color:C.muted, letterSpacing:'0.07em', marginBottom:3, textTransform:'uppercase' }}>{label}</div>
               <div style={{ fontSize:12, fontWeight:700, color, fontFamily:'monospace' }}>{val}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Salida escalonada */}
+        <div style={{ background:C.bg, borderRadius:8, padding:'8px 10px' }}>
+          <div style={{ fontSize:9, color:C.muted, letterSpacing:'0.07em', marginBottom:6, textTransform:'uppercase' }}>Salida escalonada</div>
+          {[
+            { label:'Breakeven (mover SL)', val:data.breakeven, color:C.amber,  pct:'—'    },
+            { label:'Obj. 1 · vender ⅓',   val:data.target1,   color:C.accent, pct:'1/3'  },
+            { label:'Obj. 2 · vender ⅓',   val:data.target2,   color:C.accent, pct:'1/3'  },
+            { label:'Obj. 3 · vender ⅓',   val:data.target3,   color:C.green,  pct:'1/3'  },
+          ].map(({ label, val, color, pct }) => (
+            <div key={label} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'3px 0', borderBottom:`1px solid ${C.border}` }}>
+              <span style={{ fontSize:11, color:C.muted }}>{label}</span>
+              <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                {pct !== '—' && <span style={{ fontSize:9, color:C.muted, background:`${C.border}`, borderRadius:4, padding:'1px 5px' }}>{pct}</span>}
+                <span style={{ fontSize:12, fontWeight:700, color, fontFamily:'monospace' }}>${val?.toFixed(2) ?? '—'}</span>
+              </div>
             </div>
           ))}
         </div>

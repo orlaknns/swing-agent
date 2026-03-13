@@ -127,18 +127,30 @@ async def analyze(ticker: str):
     prices_20d  = [round(c, 2) for c in closes[-20:]]
     last_5      = [round(c, 2) for c in closes[-5:]]
 
-    prompt = f"""Analiza {ticker} para swing trading. Datos reales:
+    t1_default = round(price * 1.04, 2)
+    t2_default = round(price * 1.08, 2)
+    t3_default = round(price * 1.13, 2)
+    be_default = round(price * 1.02, 2)
+
+    prompt = f"""Analiza {ticker} para swing trading con salida escalonada en 3 niveles. Datos reales:
 Precio: ${price} | Cambio: {change}% | EMA20: ${ema20} | EMA50: ${ema50} | RSI: {rsi} | Vol%: {vol_ratio}
 Max20d: ${round(recent_high,2)} | Min20d: ${round(recent_low,2)} | Ultimos5: {last_5}
 
 Responde UNICAMENTE con este JSON (sin texto antes ni despues, sin markdown):
-{{"signal":"buy","strategy":"pullback","entry":{price},"stopLoss":{round(price*0.97,2)},"target":{round(price*1.06,2)},"trend":"bullish","successRate":60,"keyLevel":{ema20},"analysis":"texto aqui"}}
+{{"signal":"buy","strategy":"pullback","entry":{price},"stopLoss":{round(price*0.97,2)},"breakeven":{be_default},"target1":{t1_default},"target2":{t2_default},"target3":{t3_default},"trend":"bullish","successRate":60,"keyLevel":{ema20},"analysis":"texto aqui"}}
 
-Ajusta los valores segun el analisis. signal=buy/sell/hold, strategy=pullback/breakout/reversal/neutral, trend=bullish/bearish/sideways."""
+Reglas de salida escalonada:
+- entry: precio optimo de entrada
+- stopLoss: max 5% bajo entry, en soporte tecnico real
+- breakeven: nivel donde mover SL a entry (primer objetivo parcial superado, ~R:R 1:1)
+- target1: vender 1/3 posicion, resistencia cercana (~R:R 1.5-2x)
+- target2: vender 1/3 posicion, mover SL a EMA20 (~R:R 2.5-3x)
+- target3: vender ultimo 1/3, resistencia mayor (~R:R 3.5-5x)
+signal=buy/sell/hold, strategy=pullback/breakout/reversal/neutral, trend=bullish/bearish/sideways."""
 
     message = client.messages.create(
         model="claude-haiku-4-5-20251001",
-        max_tokens=400,
+        max_tokens=500,
         messages=[{"role": "user", "content": prompt}]
     )
 
@@ -147,10 +159,13 @@ Ajusta los valores segun el analisis. signal=buy/sell/hold, strategy=pullback/br
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error parseando respuesta IA: {str(e)} | Raw: {message.content[0].text[:200]}")
 
-    entry  = float(ai.get("entry",    price))
-    stop   = float(ai.get("stopLoss", price * 0.97))
-    target = float(ai.get("target",   price * 1.06))
-    rr     = round(abs((target - entry) / (entry - stop)), 2) if abs(entry - stop) > 0.001 else 0
+    entry    = float(ai.get("entry",     price))
+    stop     = float(ai.get("stopLoss",  price * 0.97))
+    breakeven = float(ai.get("breakeven", price * 1.02))
+    target1  = float(ai.get("target1",   t1_default))
+    target2  = float(ai.get("target2",   t2_default))
+    target3  = float(ai.get("target3",   t3_default))
+    rr       = round(abs((target2 - entry) / (entry - stop)), 2) if abs(entry - stop) > 0.001 else 0
 
     return {
         "ticker":      ticker,
@@ -163,9 +178,12 @@ Ajusta los valores segun el analisis. signal=buy/sell/hold, strategy=pullback/br
         "prices20d":   prices_20d,
         "signal":      ai.get("signal",      "hold"),
         "strategy":    ai.get("strategy",    "neutral"),
-        "entry":       round(entry,  2),
-        "stopLoss":    round(stop,   2),
-        "target":      round(target, 2),
+        "entry":       round(entry,    2),
+        "stopLoss":    round(stop,     2),
+        "breakeven":   round(breakeven, 2),
+        "target1":     round(target1,  2),
+        "target2":     round(target2,  2),
+        "target3":     round(target3,  2),
         "rr":          rr,
         "trend":       ai.get("trend",       "sideways"),
         "successRate": int(ai.get("successRate", 50)),
