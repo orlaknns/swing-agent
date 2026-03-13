@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react'
+import { saveTradeToJournal } from './Journal.jsx'
 import { LineChart, Line, ResponsiveContainer, Tooltip } from 'recharts'
 
 const C = {
@@ -302,6 +303,17 @@ export default function StockCard({ ticker, onRemove }) {
             </div>
             {data.analysis}
           </div>
+        )}
+        {/* Save to journal button */}
+        {data && !data.error && !loading && (
+          <button onClick={saveToJournal}
+            style={{ width:'100%', background: journalSaved ? C.green+'22' : 'none',
+              border:`1px solid ${journalSaved ? C.green : C.border}`,
+              borderRadius:7, color: journalSaved ? C.green : C.muted,
+              cursor:'pointer', padding:'7px 10px', fontSize:11,
+              transition:'all 0.2s', display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
+            {journalSaved ? '✓ Guardado en journal' : '📋 Guardar en journal'}
+          </button>
         )}
       </>)}
     </div>
