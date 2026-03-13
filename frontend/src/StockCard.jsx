@@ -66,10 +66,21 @@ function Sparkline({ prices, signal }) {
 async function fetchAnalysis(ticker) {
   const res = await fetch(`/api/analyze/${ticker}`)
   if (!res.ok) {
-    const err = await res.json()
-    throw new Error(err.detail || 'Error al analizar')
+    let msg = `Error ${res.status}`
+    try { const err = await res.json(); msg = err.detail || msg } catch {}
+    throw new Error(msg)
   }
-  return res.json()
+  const text = await res.text()
+  try {
+    return JSON.parse(text)
+  } catch {
+    // Fallback: fix common encoding issues before parsing
+    const fixed = text
+      .replace(/Ã¡/g,'á').replace(/Ã©/g,'é').replace(/Ã­/g,'í').replace(/Ã³/g,'ó').replace(/Ãº/g,'ú')
+      .replace(/Ã±/g,'ñ').replace(/Ã/g,'Á').replace(/Ã‰/g,'É').replace(/Ã"/g,'Ó').replace(/Ãš/g,'Ú')
+      .replace(/Ã€/g,'À').replace(/â€™/g,"'").replace(/â€œ/g,'"').replace(/â€/g,'"')
+    return JSON.parse(fixed)
+  }
 }
 
 export default function StockCard({ ticker, onRemove }) {

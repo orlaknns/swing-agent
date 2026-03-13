@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 import httpx
 import asyncio
 import json
@@ -333,7 +334,7 @@ signal=buy/sell/hold, strategy=pullback/breakout/reversal/neutral, trend=bullish
     entry_mid = round((entry_low + entry_high) / 2, 2)
     rr = round(abs((target2 - entry_mid) / (entry_mid - stop)), 2) if abs(entry_mid - stop) > 0.001 else 0
 
-    return {
+    return JSONResponse(content={
         "ticker":       ticker,
         "price":        price,
         "change":       change,
@@ -361,7 +362,7 @@ signal=buy/sell/hold, strategy=pullback/breakout/reversal/neutral, trend=bullish
         "nextEarnings": next_earnings,
         # Fundamentales
         "fundamentals": fundamentals,
-    }
+    }, media_type="application/json; charset=utf-8")
 
 
 @app.get("/health")
