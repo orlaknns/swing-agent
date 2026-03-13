@@ -18,6 +18,13 @@ app.add_middleware(
 client = Anthropic()
 AV_KEY = os.environ.get("ALPHA_VANTAGE_KEY", "I3ZGIWYTKOVF07TP")
 
+# Alpha Vantage usa estos símbolos para algunos tickers
+TICKER_MAP = {
+    "GOOGL": "GOOGL",
+    "META": "META",
+    "AMZN": "AMZN",
+}
+
 
 def calc_ema(closes: list, period: int) -> float:
     if len(closes) < period:
@@ -41,38 +48,54 @@ def calc_rsi(closes: list, period: int = 14) -> float:
     return round(100 - (100 / (1 + rs)), 1)
 
 
-async def fetch_prices(ticker: str) -> dict:
+async def fetch_prices(ticker: str) -> list:
+    symbol = TICKER_MAP.get(ticker, ticker)
     url = (
         f"https://www.alphavantage.co/query"
-        f"?function=TIME_SERIES_DAILY&symbol={ticker}"
+        f"?function=TIME_SERIES_DAILY&symbol={symbol}"
         f"&outputsize=compact&apikey={AV_KEY}"
     )
-    async with httpx.AsyncClient(timeout=15) as c:
+    async with httpx.AsyncClient(timeout=20) as c:
         r = await c.get(url)
         r.raise_for_status()
         data = r.json()
 
-    if "Note" in data:
-        raise HTTPException(status_code=429, detail="Límite de API alcanzado, intenta en 1 minuto")
+    if "Note" in data or "Information" in data:
+        msg = data.get("Note", data.get("Information", ""))
+        raise HTTPException(status_code=429, detail=f"Límite de API Alpha Vantage: {msg[:100]}")
+
     if "Error Message" in data:
-        raise HTTPException(status_code=404, detail=f"Ticker '{ticker}' no encontrado")
-    if "Time Series (Daily)" not in data:
+        raise HTTPException(status_code=404, detail=f"Ticker '{ticker}' no encontrado en Alpha Vantage")
+
+    ts = data.get("Time Series (Daily)")
+    if not ts:
         raise HTTPException(status_code=404, detail=f"No se encontraron datos para {ticker}")
 
-    ts = data["Time Series (Daily)"]
     dates = sorted(ts.keys())[-90:]
-    candles = [
-        {
-            "date": d,
-            "open":   float(ts[d]["1. open"]),
-            "high":   float(ts[d]["2. high"]),
-            "low":    float(ts[d]["3. low"]),
-            "close":  float(ts[d]["4. close"]),
-            "volume": float(ts[d]["5. volume"]),
-        }
-        for d in dates
-    ]
+    candles = []
+    for d in dates:
+        try:
+            candles.append({
+                "date":   d,
+                "open":   float(ts[d]["1. open"]),
+                "high":   float(ts[d]["2. high"]),
+                "low":    float(ts[d]["3. low"]),
+                "close":  float(ts[d]["4. close"]),
+                "volume": float(ts[d]["5. volume"]),
+            })
+        except Exception:
+            continue
     return candles
+
+
+def extract_json(text: str) -> dict:
+    """Extrae el primer objeto JSON válido del texto."""
+    text = re.sub(r"```[a-z]*|```", "", text).strip()
+    # Busca el primer { ... } completo
+    match = re.search(r'\{[^{}]*\}', text, re.DOTALL)
+    if match:
+        return json.loads(match.group())
+    return json.loads(text)
 
 
 @app.get("/analyze/{ticker}")
@@ -104,37 +127,30 @@ async def analyze(ticker: str):
     prices_20d  = [round(c, 2) for c in closes[-20:]]
     last_5      = [round(c, 2) for c in closes[-5:]]
 
-    prompt = f"""Eres un experto en swing trading de acciones USA. Analiza {ticker} con estos datos técnicos reales:
+    prompt = f"""Analiza {ticker} para swing trading. Datos reales:
+Precio: ${price} | Cambio: {change}% | EMA20: ${ema20} | EMA50: ${ema50} | RSI: {rsi} | Vol%: {vol_ratio}
+Max20d: ${round(recent_high,2)} | Min20d: ${round(recent_low,2)} | Ultimos5: {last_5}
 
-- Precio actual: ${price}
-- Cambio diario: {change}%
-- EMA20: ${ema20}
-- EMA50: ${ema50}
-- RSI(14): {rsi}
-- Volumen vs promedio 20d: {vol_ratio}%
-- Máximo 20d: ${round(recent_high, 2)}
-- Mínimo 20d: ${round(recent_low, 2)}
-- Últimos 5 cierres: {last_5}
+Responde UNICAMENTE con este JSON (sin texto antes ni despues, sin markdown):
+{{"signal":"buy","strategy":"pullback","entry":{price},"stopLoss":{round(price*0.97,2)},"target":{round(price*1.06,2)},"trend":"bullish","successRate":60,"keyLevel":{ema20},"analysis":"texto aqui"}}
 
-Responde SOLO con JSON válido sin markdown:
-{{"signal":"buy|sell|hold","strategy":"pullback|breakout|reversal|neutral","entry":número,"stopLoss":número,"target":número,"trend":"bullish|bearish|sideways","successRate":número entre 40-75,"keyLevel":número,"analysis":"2-3 oraciones en español explicando la señal y qué hacer"}}
-
-Reglas: entry=precio óptimo hoy, stopLoss=máx 5% de pérdida desde entry, target=mínimo ratio R:R 1:2."""
+Ajusta los valores segun el analisis. signal=buy/sell/hold, strategy=pullback/breakout/reversal/neutral, trend=bullish/bearish/sideways."""
 
     message = client.messages.create(
         model="claude-haiku-4-5-20251001",
-        max_tokens=600,
+        max_tokens=400,
         messages=[{"role": "user", "content": prompt}]
     )
 
-    raw = message.content[0].text.strip()
-    raw = re.sub(r"```[a-z]*|```", "", raw).strip()
-    ai  = json.loads(raw)
+    try:
+        ai = extract_json(message.content[0].text)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error parseando respuesta IA: {str(e)} | Raw: {message.content[0].text[:200]}")
 
-    entry  = ai.get("entry",    price)
-    stop   = ai.get("stopLoss", price * 0.97)
-    target = ai.get("target",   price * 1.06)
-    rr     = round(abs((target - entry) / (entry - stop)), 2) if entry != stop else 0
+    entry  = float(ai.get("entry",    price))
+    stop   = float(ai.get("stopLoss", price * 0.97))
+    target = float(ai.get("target",   price * 1.06))
+    rr     = round(abs((target - entry) / (entry - stop)), 2) if abs(entry - stop) > 0.001 else 0
 
     return {
         "ticker":      ticker,
@@ -152,9 +168,9 @@ Reglas: entry=precio óptimo hoy, stopLoss=máx 5% de pérdida desde entry, targ
         "target":      round(target, 2),
         "rr":          rr,
         "trend":       ai.get("trend",       "sideways"),
-        "successRate": ai.get("successRate", 50),
-        "keyLevel":    ai.get("keyLevel",    round(ema20, 2)),
-        "analysis":    ai.get("analysis",    ""),
+        "successRate": int(ai.get("successRate", 50)),
+        "keyLevel":    round(float(ai.get("keyLevel", ema20)), 2),
+        "analysis":    str(ai.get("analysis", "")),
     }
 
 
