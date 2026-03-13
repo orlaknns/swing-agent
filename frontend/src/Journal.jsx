@@ -31,7 +31,7 @@ function exportToCSV(trades) {
     'Stop-loss','Breakeven','Obj.1','Obj.2','Obj.3',
     'R:B','RSI','EMA20','EMA50','SMA200','Mansfield RS',
     'EPS','ROE%','Crecim.EPS%','Crecim.Ventas%','Market Cap','P/E','Próx.Earnings',
-    'Estado','Precio cierre','P&L %','Notas'
+    'Estado','Días abierta','Vigencia setup','Precio cierre','P&L %','Notas'
   ]
 
   const rows = trades.map(t => {
@@ -47,7 +47,10 @@ function exportToCSV(trades) {
       t.rr, t.rsi, t.ema20, t.ema50, t.sma200 || '', t.mansfieldRS || '',
       f.eps || '', f.roe || '', f.epsGrowth || '', f.revenueGrowth || '',
       f.marketCap || '', f.peRatio || '', t.nextEarnings || '',
-      STATUS_LABELS[t.status] || t.status, t.exitPrice || '', pnl, t.notes || ''
+      STATUS_LABELS[t.status] || t.status,
+      t.status !== 'closed' ? calcDaysOpen(t.date) : '',
+      t.status !== 'closed' ? (calcDaysOpen(t.date) <= 3 ? 'Alta' : calcDaysOpen(t.date) <= 7 ? 'Media' : 'Baja') : '',
+      t.exitPrice || '', pnl, t.notes || ''
     ]
   })
 
@@ -178,6 +181,74 @@ function TradeModal({ trade, onSave, onClose }) {
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+// ── Setup Decay: días en posición + recomendación ─────────────────────
+function calcDaysOpen(dateStr) {
+  try {
+    const d = new Date(dateStr + 'T00:00:00')
+    return Math.floor((new Date() - d) / (1000*60*60*24))
+  } catch { return 0 }
+}
+
+function getSetupDecay(trade) {
+  if (trade.status === 'closed') return null
+  const days = calcDaysOpen(trade.date)
+
+  // P&L actual (si tiene entrada real, úsala; si no, usa precio análisis)
+  const entryRef = trade.entryPrice || trade.entryLow || trade.price
+  const currentPnl = trade.exitPrice
+    ? ((trade.exitPrice - entryRef) / entryRef) * 100
+    : null
+
+  // Semáforo
+  let level, label, color, rec
+  if (days <= 3) {
+    level = 'green'; color = '#00e096'
+    label = `Día ${days} — Setup activo`
+    rec = 'Mantener el plan. El setup está dentro de su ventana óptima (1–3 días).'
+  } else if (days <= 7) {
+    level = 'yellow'; color = '#ffb800'
+    label = `Día ${days} — Setup debilitándose`
+    if (currentPnl !== null && currentPnl > 2) {
+      rec = `Llevas ${currentPnl.toFixed(1)}% de ganancia y ${days} días. Considera vender si no avanza hoy — la presión compradora se está agotando.`
+    } else if (currentPnl !== null && currentPnl < -1) {
+      rec = `El precio no está respondiendo (${currentPnl.toFixed(1)}%) y llevas ${days} días. Evalúa salir antes de que alcance el stop-loss.`
+    } else {
+      rec = `El precio lleva ${days} días sin moverse significativamente. La probabilidad del setup baja cada día que pasa sin confirmación.`
+    }
+  } else {
+    level = 'red'; color = '#ff4060'
+    label = `Día ${days} — Alta probabilidad de invalidación`
+    if (currentPnl !== null && currentPnl > 1) {
+      rec = `Llevas ${days} días y aún hay ganancia (${currentPnl.toFixed(1)}%). Salir ahora libera capital para un setup más fresco. El tiempo jugó en tu contra.`
+    } else if (currentPnl !== null && currentPnl >= -2) {
+      rec = `${days} días sin moverse y casi en breakeven. Salir con pérdida mínima es mejor que esperar al stop-loss. Libera el capital.`
+    } else {
+      rec = `El setup lleva ${days} días y no se cumplió. La tesis original probablemente cambió. Revisar si los niveles originales siguen siendo válidos.`
+    }
+  }
+
+  // Barra de vigencia (100% = día 0, 0% = día 10+)
+  const pct = Math.max(0, Math.min(100, ((10 - days) / 10) * 100))
+  return { days, level, color, label, rec, pct }
+}
+
+function SetupDecayBar({ trade }) {
+  const decay = getSetupDecay(trade)
+  if (!decay) return null
+  return (
+    <div style={{ marginTop:8, background:'#070d1a', borderRadius:8, padding:'8px 10px', borderLeft:`3px solid ${decay.color}` }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:5 }}>
+        <span style={{ fontSize:10, color:decay.color, fontWeight:700, letterSpacing:'0.05em' }}>{decay.label}</span>
+        <span style={{ fontSize:10, color:'#4a6080' }}>Vigencia del setup</span>
+      </div>
+      <div style={{ height:4, background:'#1a2d45', borderRadius:2, marginBottom:6, overflow:'hidden' }}>
+        <div style={{ width:`${decay.pct}%`, height:'100%', background:decay.color, borderRadius:2, transition:'width 0.3s' }}/>
+      </div>
+      <div style={{ fontSize:11, color:'#dde6f0', lineHeight:1.6 }}>{decay.rec}</div>
     </div>
   )
 }
@@ -326,6 +397,7 @@ export default function Journal() {
                   {trade.notes}
                 </div>
               )}
+              <SetupDecayBar trade={trade} />
             </div>
           )
         })}
