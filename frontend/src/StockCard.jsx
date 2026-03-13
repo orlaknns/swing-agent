@@ -147,17 +147,18 @@ export default function StockCard({ ticker, onRemove }) {
           <Sparkline prices={data.prices20d} signal={data.signal} />
         </div>
 
-        {/* Entry / SL */}
+        {/* Rango compra / SL */}
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:5 }}>
-          {[
-            { label:'Entrada',   val:`$${data.entry?.toFixed(2)}`,    color:C.green },
-            { label:'Stop-loss', val:`$${data.stopLoss?.toFixed(2)}`,  color:C.red   },
-          ].map(({ label, val, color }) => (
-            <div key={label} style={{ background:C.bg, borderRadius:8, padding:'8px 6px', textAlign:'center' }}>
-              <div style={{ fontSize:9, color:C.muted, letterSpacing:'0.07em', marginBottom:3, textTransform:'uppercase' }}>{label}</div>
-              <div style={{ fontSize:12, fontWeight:700, color, fontFamily:'monospace' }}>{val}</div>
+          <div style={{ background:C.bg, borderRadius:8, padding:'8px 10px' }}>
+            <div style={{ fontSize:9, color:C.muted, letterSpacing:'0.07em', marginBottom:4, textTransform:'uppercase' }}>Rango compra</div>
+            <div style={{ fontSize:11, fontWeight:700, color:C.green, fontFamily:'monospace' }}>
+              ${data.entryLow?.toFixed(2)} – ${data.entryHigh?.toFixed(2)}
             </div>
-          ))}
+          </div>
+          <div style={{ background:C.bg, borderRadius:8, padding:'8px 10px', textAlign:'right' }}>
+            <div style={{ fontSize:9, color:C.muted, letterSpacing:'0.07em', marginBottom:4, textTransform:'uppercase' }}>Stop-loss</div>
+            <div style={{ fontSize:12, fontWeight:700, color:C.red, fontFamily:'monospace' }}>${data.stopLoss?.toFixed(2)}</div>
+          </div>
         </div>
 
         {/* Salida escalonada */}

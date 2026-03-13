@@ -18,7 +18,6 @@ app.add_middleware(
 client = Anthropic()
 AV_KEY = os.environ.get("ALPHA_VANTAGE_KEY", "I3ZGIWYTKOVF07TP")
 
-# Alpha Vantage usa estos símbolos para algunos tickers
 TICKER_MAP = {
     "GOOGL": "GOOGL",
     "META": "META",
@@ -89,9 +88,7 @@ async def fetch_prices(ticker: str) -> list:
 
 
 def extract_json(text: str) -> dict:
-    """Extrae el primer objeto JSON válido del texto."""
     text = re.sub(r"```[a-z]*|```", "", text).strip()
-    # Busca el primer { ... } completo
     match = re.search(r'\{[^{}]*\}', text, re.DOTALL)
     if match:
         return json.loads(match.group())
@@ -119,32 +116,36 @@ async def analyze(ticker: str):
     ema50 = calc_ema(closes, 50)
     rsi   = calc_rsi(closes)
 
-    avg_vol   = sum(volumes[-20:]) / min(20, len(volumes))
-    vol_ratio = round(volumes[-1] / avg_vol * 100) if avg_vol else 100
-
+    avg_vol    = sum(volumes[-20:]) / min(20, len(volumes))
+    vol_ratio  = round(volumes[-1] / avg_vol * 100) if avg_vol else 100
     recent_high = max(highs[-20:])
     recent_low  = min(lows[-20:])
     prices_20d  = [round(c, 2) for c in closes[-20:]]
     last_5      = [round(c, 2) for c in closes[-5:]]
 
-    t1_default = round(price * 1.04, 2)
-    t2_default = round(price * 1.08, 2)
-    t3_default = round(price * 1.13, 2)
-    be_default = round(price * 1.02, 2)
+    # defaults
+    el_default = round(price * 0.995, 2)
+    eh_default = round(price * 1.010, 2)
+    t1_default = round(price * 1.04,  2)
+    t2_default = round(price * 1.08,  2)
+    t3_default = round(price * 1.13,  2)
+    be_default = round(price * 1.02,  2)
+    sl_default = round(price * 0.97,  2)
 
-    prompt = f"""Analiza {ticker} para swing trading con salida escalonada en 3 niveles. Datos reales:
+    prompt = f"""Analiza {ticker} para swing trading. Datos reales:
 Precio: ${price} | Cambio: {change}% | EMA20: ${ema20} | EMA50: ${ema50} | RSI: {rsi} | Vol%: {vol_ratio}
 Max20d: ${round(recent_high,2)} | Min20d: ${round(recent_low,2)} | Ultimos5: {last_5}
 
 Responde UNICAMENTE con este JSON (sin texto antes ni despues, sin markdown):
-{{"signal":"buy","strategy":"pullback","entry":{price},"stopLoss":{round(price*0.97,2)},"breakeven":{be_default},"target1":{t1_default},"target2":{t2_default},"target3":{t3_default},"trend":"bullish","successRate":60,"keyLevel":{ema20},"analysis":"texto aqui"}}
+{{"signal":"buy","strategy":"pullback","entryLow":{el_default},"entryHigh":{eh_default},"stopLoss":{sl_default},"breakeven":{be_default},"target1":{t1_default},"target2":{t2_default},"target3":{t3_default},"trend":"bullish","successRate":60,"keyLevel":{ema20},"analysis":"texto aqui"}}
 
-Reglas de salida escalonada:
-- entry: precio optimo de entrada
-- stopLoss: max 5% bajo entry, en soporte tecnico real
-- breakeven: nivel donde mover SL a entry (primer objetivo parcial superado, ~R:R 1:1)
-- target1: vender 1/3 posicion, resistencia cercana (~R:R 1.5-2x)
-- target2: vender 1/3 posicion, mover SL a EMA20 (~R:R 2.5-3x)
+Reglas:
+- entryLow: limite inferior del rango de compra (soporte cercano, precio actual -0.5% a -1.5%)
+- entryHigh: limite superior del rango de compra (resistencia menor, precio actual +0.5% a +1.5%)
+- stopLoss: max 5% bajo entryLow, en soporte tecnico real
+- breakeven: nivel donde mover SL a entryLow (~R:R 1:1)
+- target1: vender 1/3, resistencia cercana (~R:R 1.5-2x)
+- target2: vender 1/3, mover SL a EMA20 (~R:R 2.5-3x)
 - target3: vender ultimo 1/3, resistencia mayor (~R:R 3.5-5x)
 signal=buy/sell/hold, strategy=pullback/breakout/reversal/neutral, trend=bullish/bearish/sideways."""
 
@@ -159,13 +160,16 @@ signal=buy/sell/hold, strategy=pullback/breakout/reversal/neutral, trend=bullish
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error parseando respuesta IA: {str(e)} | Raw: {message.content[0].text[:200]}")
 
-    entry    = float(ai.get("entry",     price))
-    stop     = float(ai.get("stopLoss",  price * 0.97))
-    breakeven = float(ai.get("breakeven", price * 1.02))
-    target1  = float(ai.get("target1",   t1_default))
-    target2  = float(ai.get("target2",   t2_default))
-    target3  = float(ai.get("target3",   t3_default))
-    rr       = round(abs((target2 - entry) / (entry - stop)), 2) if abs(entry - stop) > 0.001 else 0
+    entry_low  = float(ai.get("entryLow",  el_default))
+    entry_high = float(ai.get("entryHigh", eh_default))
+    stop       = float(ai.get("stopLoss",  sl_default))
+    breakeven  = float(ai.get("breakeven", be_default))
+    target1    = float(ai.get("target1",   t1_default))
+    target2    = float(ai.get("target2",   t2_default))
+    target3    = float(ai.get("target3",   t3_default))
+
+    entry_mid = round((entry_low + entry_high) / 2, 2)
+    rr = round(abs((target2 - entry_mid) / (entry_mid - stop)), 2) if abs(entry_mid - stop) > 0.001 else 0
 
     return {
         "ticker":      ticker,
@@ -178,12 +182,13 @@ signal=buy/sell/hold, strategy=pullback/breakout/reversal/neutral, trend=bullish
         "prices20d":   prices_20d,
         "signal":      ai.get("signal",      "hold"),
         "strategy":    ai.get("strategy",    "neutral"),
-        "entry":       round(entry,    2),
-        "stopLoss":    round(stop,     2),
-        "breakeven":   round(breakeven, 2),
-        "target1":     round(target1,  2),
-        "target2":     round(target2,  2),
-        "target3":     round(target3,  2),
+        "entryLow":    round(entry_low,  2),
+        "entryHigh":   round(entry_high, 2),
+        "stopLoss":    round(stop,       2),
+        "breakeven":   round(breakeven,  2),
+        "target1":     round(target1,    2),
+        "target2":     round(target2,    2),
+        "target3":     round(target3,    2),
         "rr":          rr,
         "trend":       ai.get("trend",       "sideways"),
         "successRate": int(ai.get("successRate", 50)),
