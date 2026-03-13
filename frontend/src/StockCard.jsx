@@ -142,10 +142,18 @@ function FundamentalsBlock({ f, nextEarnings }) {
 }
 
 export default function StockCard({ ticker, onRemove }) {
-  const [data,     setData]     = useState(null)
-  const [loading,  setLoading]  = useState(false)
-  const [expanded, setExpanded] = useState(false)
-  const [ready,    setReady]    = useState(false)
+  const [data,         setData]         = useState(null)
+  const [loading,      setLoading]      = useState(false)
+  const [expanded,     setExpanded]     = useState(false)
+  const [ready,        setReady]        = useState(false)
+  const [journalSaved, setJournalSaved] = useState(false)
+
+  const saveToJournal = () => {
+    if (!data || data.error) return
+    saveTradeToJournal(data)
+    setJournalSaved(true)
+    setTimeout(() => setJournalSaved(false), 2000)
+  }
 
   const run = useCallback(async () => {
     setLoading(true); setData(null); setExpanded(false)
@@ -332,7 +340,7 @@ export default function StockCard({ ticker, onRemove }) {
         )}
         {/* Save to journal button */}
         {data && !data.error && !loading && (
-          <button onClick={saveTradeToJournal}
+          <button onClick={saveToJournal}
             style={{ width:'100%', background: journalSaved ? C.green+'22' : 'none',
               border:`1px solid ${journalSaved ? C.green : C.border}`,
               borderRadius:7, color: journalSaved ? C.green : C.muted,
