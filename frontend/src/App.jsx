@@ -1,10 +1,30 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Component } from 'react'
+import { supabase } from './supabase.js'
+import Auth from './Auth.jsx'
 import StockCard from './StockCard.jsx'
 import Journal from './Journal.jsx'
 
+class ErrorBoundary extends Component {
+  constructor(props) { super(props); this.state = { error: null } }
+  static getDerivedStateFromError(e) { return { error: e.message || 'Error desconocido' } }
+  componentDidCatch(e, info) { console.error('React crash:', e, info) }
+  render() {
+    if (this.state.error) return (
+      <div style={{ padding:40, textAlign:'center', color:'#ff4060', fontFamily:'Arial' }}>
+        <div style={{ fontSize:32, marginBottom:12 }}>!</div>
+        <div style={{ fontSize:16, marginBottom:8 }}>Algo salió mal</div>
+        <div style={{ fontSize:12, color:'#4a6080', marginBottom:20 }}>{this.state.error}</div>
+        <button onClick={() => this.setState({ error: null })}
+          style={{ background:'#00d4ff', border:'none', borderRadius:8, padding:'10px 20px', fontWeight:700, cursor:'pointer' }}>
+          Reintentar
+        </button>
+      </div>
+    )
+    return this.props.children
+  }
+}
+
 const DEFAULT_WATCHLIST = ['AAPL','MSFT','NVDA','TSLA','AMZN','GOOGL','META','JPM','NFLX','AMD']
-const LS_KEY = 'swing_agent_watchlist'
-const LS_JOURNAL = 'swing_agent_journal'
 
 const C = {
   bg:'#070d1a', card:'#0f1929', border:'#1a2d45',
@@ -12,66 +32,96 @@ const C = {
   amber:'#ffb800', text:'#dde6f0', muted:'#4a6080',
 }
 
-function loadWatchlist() {
-  try {
-    const saved = localStorage.getItem(LS_KEY)
-    if (saved) { const p = JSON.parse(saved); if (Array.isArray(p) && p.length > 0) return p }
-  } catch {}
-  return DEFAULT_WATCHLIST
-}
-
 export default function App() {
-  const [tab, setTab]             = useState('watchlist')
-  const [watchlist, setWatchlist] = useState(loadWatchlist)
-  const [search, setSearch]       = useState('')
+  const [session,    setSession]    = useState(null)
+  const [loading,    setLoading]    = useState(true)
+  const [tab,        setTab]        = useState('watchlist')
+  const [watchlist,  setWatchlist]  = useState(DEFAULT_WATCHLIST)
+  const [search,     setSearch]     = useState('')
   const [refreshKey, setRefreshKey] = useState(0)
-  const [saved, setSaved]         = useState(false)
+  const [saved,      setSaved]      = useState(false)
   const [journalCount, setJournalCount] = useState(0)
 
+  // Auth listener
   useEffect(() => {
-    try { localStorage.setItem(LS_KEY, JSON.stringify(watchlist)); setSaved(true); const t = setTimeout(() => setSaved(false), 1500); return () => clearTimeout(t) }
-    catch {}
-  }, [watchlist])
-
-  // Count journal entries for badge
-  useEffect(() => {
-    const update = () => {
-      try { const j = JSON.parse(localStorage.getItem(LS_JOURNAL) || '[]'); setJournalCount(j.length) }
-      catch {}
-    }
-    update()
-    window.addEventListener('storage', update)
-    // Poll every 2s to catch saves from StockCard
-    const interval = setInterval(update, 2000)
-    return () => { window.removeEventListener('storage', update); clearInterval(interval) }
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session); setLoading(false)
+    })
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session)
+    })
+    return () => subscription.unsubscribe()
   }, [])
+
+  // Load watchlist from Supabase when session changes
+  useEffect(() => {
+    if (!session) return
+    supabase.from('watchlist').select('tickers').eq('user_id', session.user.id).single()
+      .then(({ data }) => {
+        if (data?.tickers?.length) setWatchlist(data.tickers)
+      })
+  }, [session])
+
+  // Save watchlist to Supabase
+  useEffect(() => {
+    if (!session) return
+    const save = async () => {
+      await supabase.from('watchlist').upsert({
+        user_id: session.user.id,
+        tickers: watchlist,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'user_id' })
+      setSaved(true)
+      setTimeout(() => setSaved(false), 1500)
+    }
+    const t = setTimeout(save, 800) // debounce
+    return () => clearTimeout(t)
+  }, [watchlist, session])
+
+  // Journal count
+  useEffect(() => {
+    if (!session) return
+    supabase.from('journal').select('id', { count:'exact' }).eq('user_id', session.user.id)
+      .then(({ count }) => setJournalCount(count || 0))
+    const interval = setInterval(() => {
+      supabase.from('journal').select('id', { count:'exact' }).eq('user_id', session.user.id)
+        .then(({ count }) => setJournalCount(count || 0))
+    }, 3000)
+    return () => clearInterval(interval)
+  }, [session])
 
   const add = () => {
     const t = search.trim().toUpperCase().replace(/[^A-Z.]/g, '')
     if (t && !watchlist.includes(t)) { setWatchlist(p => [t, ...p]); setSearch('') }
   }
 
-  const reset = () => {
-    if (confirm('¿Restaurar la lista por defecto?')) setWatchlist(DEFAULT_WATCHLIST)
-  }
+  const signOut = async () => { await supabase.auth.signOut() }
+
+  if (loading) return (
+    <div style={{ minHeight:'100vh', background:C.bg, display:'flex', alignItems:'center', justifyContent:'center' }}>
+      <div style={{ color:C.muted, fontSize:14 }}>Cargando...</div>
+    </div>
+  )
+
+  if (!session) return <Auth />
 
   return (
-    <div style={{ paddingBottom: 48 }}>
+    <div style={{ paddingBottom:48 }}>
       {/* Header */}
-      <div style={{ background:'linear-gradient(180deg,#0c1828 0%,#070d1a 100%)', padding:'22px 20px 0', borderBottom:`1px solid ${C.border}`, marginBottom:0 }}>
+      <div style={{ background:'linear-gradient(180deg,#0c1828 0%,#070d1a 100%)', padding:'22px 20px 0', borderBottom:`1px solid ${C.border}` }}>
         <div style={{ maxWidth:960, margin:'0 auto' }}>
           <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:5 }}>
             <div style={{ display:'flex', alignItems:'center', gap:7 }}>
-              <div style={{ width:7, height:7, borderRadius:'50%', background:C.green, animation:'glow 2s ease-in-out infinite' }}/>
+              <div style={{ width:7, height:7, borderRadius:'50%', background:C.green }}/>
               <span style={{ fontSize:10, color:C.green, letterSpacing:'0.12em' }}>LIVE · DATOS REALES DE MERCADO</span>
             </div>
             <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-              {saved && tab==='watchlist' && <span style={{ fontSize:10, color:C.green }}>✓ Lista guardada</span>}
-              {tab==='watchlist' && (
-                <button onClick={reset} style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:6, color:C.muted, padding:'3px 9px', cursor:'pointer', fontSize:10 }}>
-                  Restaurar default
-                </button>
-              )}
+              {saved && <span style={{ fontSize:10, color:C.green }}>✓ Guardado</span>}
+              <span style={{ fontSize:11, color:C.muted }}>{session.user.email}</span>
+              <button onClick={signOut}
+                style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:6, color:C.muted, padding:'3px 9px', cursor:'pointer', fontSize:10 }}>
+                Salir
+              </button>
             </div>
           </div>
 
@@ -80,7 +130,6 @@ export default function App() {
             <span style={{ fontSize:11, color:C.muted }}>NYSE / NASDAQ</span>
           </div>
 
-          {/* Search bar — only on watchlist tab */}
           {tab === 'watchlist' && (
             <div style={{ display:'flex', gap:7, marginBottom:14 }}>
               <input value={search} onChange={e => setSearch(e.target.value.toUpperCase())}
@@ -90,24 +139,23 @@ export default function App() {
                 onFocus={e => e.target.style.borderColor=C.accent}
                 onBlur={e  => e.target.style.borderColor=C.border}
               />
-              <button onClick={add} style={{ background:C.accent, border:'none', borderRadius:9, color:'#000', fontWeight:700, padding:'10px 16px', cursor:'pointer', fontSize:13, whiteSpace:'nowrap' }}>
+              <button onClick={add}
+                style={{ background:C.accent, border:'none', borderRadius:9, color:'#000', fontWeight:700, padding:'10px 16px', cursor:'pointer', fontSize:13 }}>
                 + Agregar
               </button>
-              <button onClick={() => setRefreshKey(k=>k+1)} style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:9, color:C.muted, padding:'10px 13px', cursor:'pointer', fontSize:13 }} title="Reiniciar">
+              <button onClick={() => setRefreshKey(k=>k+1)}
+                style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:9, color:C.muted, padding:'10px 13px', cursor:'pointer', fontSize:13 }}>
                 ↻
               </button>
             </div>
           )}
 
           {/* Tabs */}
-          <div style={{ display:'flex', gap:0, borderTop:`1px solid ${C.border}`, marginTop: tab==='journal' ? 10 : 0 }}>
-            {[
-              { key:'watchlist', label:`Watchlist · ${watchlist.length}` },
-              { key:'journal',   label:`Journal · ${journalCount}` },
-            ].map(({ key, label }) => (
+          <div style={{ display:'flex', borderTop:`1px solid ${C.border}` }}>
+            {[['watchlist',`Watchlist · ${watchlist.length}`], ['journal',`Journal · ${journalCount}`]].map(([key, label]) => (
               <button key={key} onClick={() => setTab(key)}
                 style={{ background:'none', border:'none', borderBottom: tab===key ? `2px solid ${C.accent}` : '2px solid transparent',
-                  color: tab===key ? C.accent : C.muted, padding:'10px 18px', cursor:'pointer', fontSize:12, fontWeight: tab===key ? 700 : 400, transition:'all 0.15s' }}>
+                  color: tab===key ? C.accent : C.muted, padding:'10px 18px', cursor:'pointer', fontSize:12, fontWeight: tab===key ? 700 : 400 }}>
                 {label}
               </button>
             ))}
@@ -121,7 +169,9 @@ export default function App() {
           <div style={{ maxWidth:960, margin:'0 auto', padding:'0 20px' }}>
             <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(268px, 1fr))', gap:11 }}>
               {watchlist.map(t => (
-                <StockCard key={`${t}-${refreshKey}`} ticker={t} onRemove={x => setWatchlist(p => p.filter(v=>v!==x))} />
+                <ErrorBoundary key={`${t}-${refreshKey}`}>
+                  <StockCard ticker={t} session={session} onRemove={x => setWatchlist(p => p.filter(v=>v!==x))} />
+                </ErrorBoundary>
               ))}
             </div>
             {watchlist.length === 0 && (
@@ -129,13 +179,16 @@ export default function App() {
                 Agrega tickers con el buscador de arriba
               </div>
             )}
-            <div style={{ marginTop:18, padding:'12px 14px', background:C.card, borderRadius:9, border:`1px solid ${C.border}`, fontSize:11, color:C.muted, lineHeight:1.7 }}>
-              <b style={{ color:C.amber }}>Aviso:</b> Análisis orientativo. No constituye asesoría financiera. Confirma siempre los niveles en tu broker antes de operar.
+            <div style={{ marginTop:18, padding:'12px 14px', background:C.card, borderRadius:9, border:`1px solid ${C.border}`, fontSize:11, color:C.muted }}>
+              <b style={{ color:C.amber }}>Aviso:</b> Análisis orientativo. No constituye asesoría financiera.
             </div>
           </div>
         )}
-
-        {tab === 'journal' && <Journal />}
+        {tab === 'journal' && (
+          <ErrorBoundary>
+            <Journal session={session} />
+          </ErrorBoundary>
+        )}
       </div>
     </div>
   )

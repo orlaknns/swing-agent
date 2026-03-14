@@ -141,16 +141,16 @@ function FundamentalsBlock({ f, nextEarnings }) {
   )
 }
 
-export default function StockCard({ ticker, onRemove }) {
+export default function StockCard({ ticker, onRemove, session }) {
   const [data,         setData]         = useState(null)
   const [loading,      setLoading]      = useState(false)
   const [expanded,     setExpanded]     = useState(false)
   const [ready,        setReady]        = useState(false)
   const [journalSaved, setJournalSaved] = useState(false)
 
-  const saveToJournal = () => {
-    if (!data || data.error) return
-    saveTradeToJournal(data)
+  const saveToJournal = async () => {
+    if (!data || data.error || !session) return
+    await saveTradeToJournal(data, session.user.id)
     setJournalSaved(true)
     setTimeout(() => setJournalSaved(false), 2000)
   }
