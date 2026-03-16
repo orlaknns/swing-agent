@@ -57,13 +57,19 @@ export default function Discover({ watchlist, onAdd }) {
         <h2 style={{ fontSize:18, fontWeight:700, color:C.text, margin:0 }}>Descubrir acciones</h2>
         <p style={{ fontSize:11, color:C.muted, margin:'4px 0 0' }}>
           Candidatas para swing trading set-and-forget · Filtradas por EMA, RSI y volumen
-          {screenerDate && (
-            <span style={{ marginLeft:8, color: screenerDate === new Date().toISOString().slice(0,10) ? C.green : C.amber }}>
-              · Datos del {screenerDate}
-              {source === 'curated' && ' (lista curada — Finviz no disponible)'}
-            </span>
-          )}
         </p>
+        {screenerDate && (
+          <div style={{ marginTop:4, fontSize:11 }}>
+            <span style={{ color: screenerDate === new Date().toISOString().slice(0,10) ? C.green : C.amber }}>
+              Actualizado: {screenerDate}
+            </span>
+            {source === 'curated' && (
+              <span style={{ color:C.muted, marginLeft:6 }}>
+                · Lista curada (Finviz no disponible desde este servidor)
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Criterios */}

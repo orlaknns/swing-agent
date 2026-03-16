@@ -599,89 +599,74 @@ _screener_cache: dict = {"data": [], "ts": 0, "date": ""}
 
 async def fetch_finviz_screener() -> list:
     """
-    Consulta el screener de Finviz con filtros para set-and-forget:
-    - EMA20 > EMA50 (tendencia alcista)
-    - RSI entre 30 y 60 (pullback)
-    - Precio > $20
-    - Volumen promedio > 500k
-    - Mercado: NYSE + NASDAQ
+    Screener para set-and-forget. Intenta Finviz scraping HTML,
+    si falla usa lista curada con filtros aplicados via Alpha Vantage.
     """
     import time, csv
     from datetime import date
     global _screener_cache
 
-    # Caché diario — se renueva una vez al día
+    # Caché diario
     today = str(date.today())
     if _screener_cache["data"] and _screener_cache["date"] == today:
         return _screener_cache["data"]
 
-    # Finviz screener URL con filtros técnicos
-    # f= filtros: exch=nasd|nyse, sh_price_o20, sh_avgvol_o500, ta_rsi_30to60, ta_ema_20gt50cross
+    # Intentar Finviz screener HTML (más confiable que el CSV export)
     url = (
-        "https://finviz.com/export.ashx?v=152&f="
+        "https://finviz.com/screener.ashx?v=111&f="
         "exch_nasd|nyse,"
         "sh_avgvol_o500,"
         "sh_price_o20,"
         "ta_rsi_30to60,"
-        "ta_ema20_cross50a"  # EMA20 cruzó arriba de EMA50 recientemente
-        "&o=-volume"  # ordenar por volumen descendente
-        "&auth=freeaccount"
+        "ta_ema20_cross50a"
+        "&o=-volume&r=1"
     )
-
     headers = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Referer": "https://finviz.com/screener.ashx",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": "https://finviz.com/",
+        "Cache-Control": "no-cache",
     }
 
+    results = []
     try:
-        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as c:
+        async with httpx.AsyncClient(timeout=20, follow_redirects=True) as c:
             r = await c.get(url, headers=headers)
-            r.raise_for_status()
-            text = r.text.strip()
+            if r.status_code == 200:
+                text = r.text
+                # Extraer tickers de la tabla HTML con regex
+                import re as re2
+                # Finviz pone los tickers en links como: screener.ashx?...&t=AAPL
+                tickers_found = re2.findall(r'quote\.ashx\?t=([A-Z]{1,5})"', text)
+                # También buscar en tabla de resultados
+                tickers_found += re2.findall(r'"ticker">([A-Z]{1,5})<', text)
+                tickers_found = list(dict.fromkeys(tickers_found))[:60]  # dedup
 
-        if not text or "No results" in text:
-            # Fallback: lista curada de acciones líquidas del S&P500
-            return _curated_fallback()
-
-        lines = text.splitlines()
-        reader = csv.DictReader(lines)
-        results = []
-        for row in reader:
-            try:
-                ticker  = row.get("Ticker", "").strip()
-                company = row.get("Company", "").strip()
-                sector  = row.get("Sector", "").strip()
-                price   = float(row.get("Price", 0) or 0)
-                volume  = float(row.get("Volume", 0) or 0)
-                mktcap  = row.get("Market Cap", "").strip()
-                country = row.get("Country", "").strip()
-
-                if not ticker or price < 20 or volume < 300000 or country != "USA":
-                    continue
-
-                results.append({
-                    "ticker":  ticker,
-                    "company": company,
-                    "sector":  sector,
-                    "price":   round(price, 2),
-                    "volume":  int(volume),
-                    "mktCap":  mktcap,
-                })
-            except Exception:
-                continue
-
-        if not results:
-            return _curated_fallback()
-
-        _screener_cache["data"] = results[:60]
-        _screener_cache["ts"]   = time.time()
-        _screener_cache["date"] = str(date.today())
-        return results[:60]
-
+                if tickers_found:
+                    for t in tickers_found:
+                        results.append({
+                            "ticker": t, "company": "", "sector": "",
+                            "price": 0, "volume": 0, "mktCap": "",
+                        })
     except Exception as e:
-        print(f"Finviz error: {e}")
-        return _curated_fallback()
+        print(f"Finviz HTML error: {e}")
+
+    # Si Finviz funcionó, guardar y retornar
+    if results:
+        _screener_cache["data"] = results
+        _screener_cache["ts"]   = time.time()
+        _screener_cache["date"] = today
+        print(f"Screener Finviz: {len(results)} candidatos")
+        return results
+
+    # Fallback: lista curada
+    print("Screener usando lista curada (fallback)")
+    results = _curated_fallback()
+    _screener_cache["data"] = results
+    _screener_cache["ts"]   = time.time()
+    _screener_cache["date"] = today
+    return results
 
 
 def _curated_fallback() -> list:
