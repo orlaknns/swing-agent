@@ -27,6 +27,7 @@ export default function Discover({ watchlist, onAdd }) {
   const [filter, setFilter]         = useState('all')
   const [screenerDate, setScreenerDate] = useState(null)
   const [source, setSource]         = useState(null)
+  const [updatedAt, setUpdatedAt]   = useState(null)
 
   const load = async () => {
     setLoading(true); setError(null)
@@ -37,6 +38,7 @@ export default function Discover({ watchlist, onAdd }) {
       setCandidates(data.candidates || [])
       setScreenerDate(data.date || null)
       setSource(data.source || null)
+      setUpdatedAt(data.updatedAt || null)
     } catch (e) {
       setError('No se pudo conectar con el screener.')
     }
@@ -58,18 +60,17 @@ export default function Discover({ watchlist, onAdd }) {
         <p style={{ fontSize:11, color:C.muted, margin:'4px 0 0' }}>
           Candidatas para swing trading set-and-forget · Filtradas por EMA, RSI y volumen
         </p>
-        {screenerDate && (
-          <div style={{ marginTop:4, fontSize:11 }}>
-            <span style={{ color: screenerDate === new Date().toISOString().slice(0,10) ? C.green : C.amber }}>
-              Actualizado: {screenerDate}
+        <div style={{ marginTop:4, fontSize:11 }}>
+          {source === 'curated' ? (
+            <span style={{ color:C.muted }}>
+              Lista de referencia · 40 acciones líquidas S&P500
             </span>
-            {source === 'curated' && (
-              <span style={{ color:C.muted, marginLeft:6 }}>
-                · Lista curada (Finviz no disponible desde este servidor)
-              </span>
-            )}
-          </div>
-        )}
+          ) : (
+            <span style={{ color: screenerDate === new Date().toISOString().slice(0,10) ? C.green : C.amber }}>
+              Screener actualizado: {updatedAt || screenerDate}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Criterios */}

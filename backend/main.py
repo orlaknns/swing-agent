@@ -595,7 +595,7 @@ def health():
 
 
 # ── Screener Finviz ────────────────────────────────────────────────────────
-_screener_cache: dict = {"data": [], "ts": 0, "date": ""}
+_screener_cache: dict = {"data": [], "ts": 0, "date": "", "updatedAt": ""}
 
 async def fetch_finviz_screener() -> list:
     """
@@ -654,18 +654,28 @@ async def fetch_finviz_screener() -> list:
 
     # Si Finviz funcionó, guardar y retornar
     if results:
-        _screener_cache["data"] = results
-        _screener_cache["ts"]   = time.time()
-        _screener_cache["date"] = today
-        print(f"Screener Finviz: {len(results)} candidatos")
+        from datetime import datetime
+        import pytz
+        et = pytz.timezone("America/New_York")
+        updated_at = datetime.now(et).strftime("%Y-%m-%d %H:%M ET")
+        _screener_cache["data"]      = results
+        _screener_cache["ts"]        = time.time()
+        _screener_cache["date"]      = today
+        _screener_cache["updatedAt"] = updated_at
+        print(f"Screener Finviz: {len(results)} candidatos — {updated_at}")
         return results
 
     # Fallback: lista curada
     print("Screener usando lista curada (fallback)")
     results = _curated_fallback()
-    _screener_cache["data"] = results
-    _screener_cache["ts"]   = time.time()
-    _screener_cache["date"] = today
+    from datetime import datetime
+    import pytz
+    et = pytz.timezone("America/New_York")
+    updated_at = datetime.now(et).strftime("%Y-%m-%d %H:%M ET")
+    _screener_cache["data"]      = results
+    _screener_cache["ts"]        = time.time()
+    _screener_cache["date"]      = today
+    _screener_cache["updatedAt"] = updated_at
     return results
 
 
@@ -705,6 +715,7 @@ async def screener():
             "candidates": candidates,
             "count": len(candidates),
             "date": _screener_cache.get("date", ""),
+            "updatedAt": _screener_cache.get("updatedAt", ""),
             "source": "finviz" if candidates and candidates[0].get("price", 0) > 0 else "curated"
         },
         media_type="application/json; charset=utf-8"
