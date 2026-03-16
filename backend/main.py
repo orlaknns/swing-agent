@@ -553,3 +553,127 @@ async def analyze(ticker: str):
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+# ── Screener Finviz ────────────────────────────────────────────────────────
+_screener_cache: dict = {"data": [], "ts": 0}
+
+async def fetch_finviz_screener() -> list:
+    """
+    Consulta el screener de Finviz con filtros para set-and-forget:
+    - EMA20 > EMA50 (tendencia alcista)
+    - RSI entre 30 y 60 (pullback)
+    - Precio > $20
+    - Volumen promedio > 500k
+    - Mercado: NYSE + NASDAQ
+    """
+    import time, csv
+    global _screener_cache
+
+    # Caché de 2 horas
+    if _screener_cache["data"] and (time.time() - _screener_cache["ts"]) < 7200:
+        return _screener_cache["data"]
+
+    # Finviz screener URL con filtros técnicos
+    # f= filtros: exch=nasd|nyse, sh_price_o20, sh_avgvol_o500, ta_rsi_30to60, ta_ema_20gt50cross
+    url = (
+        "https://finviz.com/export.ashx?v=152&f="
+        "exch_nasd|nyse,"
+        "sh_avgvol_o500,"
+        "sh_price_o20,"
+        "ta_rsi_30to60,"
+        "ta_ema20_cross50a"  # EMA20 cruzó arriba de EMA50 recientemente
+        "&o=-volume"  # ordenar por volumen descendente
+        "&auth=freeaccount"
+    )
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Referer": "https://finviz.com/screener.ashx",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as c:
+            r = await c.get(url, headers=headers)
+            r.raise_for_status()
+            text = r.text.strip()
+
+        if not text or "No results" in text:
+            # Fallback: lista curada de acciones líquidas del S&P500
+            return _curated_fallback()
+
+        lines = text.splitlines()
+        reader = csv.DictReader(lines)
+        results = []
+        for row in reader:
+            try:
+                ticker  = row.get("Ticker", "").strip()
+                company = row.get("Company", "").strip()
+                sector  = row.get("Sector", "").strip()
+                price   = float(row.get("Price", 0) or 0)
+                volume  = float(row.get("Volume", 0) or 0)
+                mktcap  = row.get("Market Cap", "").strip()
+                country = row.get("Country", "").strip()
+
+                if not ticker or price < 20 or volume < 300000 or country != "USA":
+                    continue
+
+                results.append({
+                    "ticker":  ticker,
+                    "company": company,
+                    "sector":  sector,
+                    "price":   round(price, 2),
+                    "volume":  int(volume),
+                    "mktCap":  mktcap,
+                })
+            except Exception:
+                continue
+
+        if not results:
+            return _curated_fallback()
+
+        _screener_cache["data"] = results[:60]
+        _screener_cache["ts"]   = time.time()
+        return results[:60]
+
+    except Exception as e:
+        print(f"Finviz error: {e}")
+        return _curated_fallback()
+
+
+def _curated_fallback() -> list:
+    """Lista curada de 40 acciones líquidas — fallback si Finviz no responde."""
+    tickers = [
+        ("AAPL","Apple Inc","Technology"),("MSFT","Microsoft Corp","Technology"),
+        ("NVDA","NVIDIA Corp","Technology"),("GOOGL","Alphabet Inc","Technology"),
+        ("META","Meta Platforms","Technology"),("AMZN","Amazon.com","Consumer Cyclical"),
+        ("TSLA","Tesla Inc","Consumer Cyclical"),("JPM","JPMorgan Chase","Financial"),
+        ("V","Visa Inc","Financial"),("MA","Mastercard","Financial"),
+        ("UNH","UnitedHealth Group","Healthcare"),("JNJ","Johnson & Johnson","Healthcare"),
+        ("PG","Procter & Gamble","Consumer Defensive"),("HD","Home Depot","Consumer Cyclical"),
+        ("AVGO","Broadcom Inc","Technology"),("CRM","Salesforce","Technology"),
+        ("AMD","Advanced Micro Devices","Technology"),("ORCL","Oracle Corp","Technology"),
+        ("NFLX","Netflix Inc","Communication"),("DIS","Walt Disney","Communication"),
+        ("PYPL","PayPal Holdings","Financial"),("SQ","Block Inc","Financial"),
+        ("SHOP","Shopify Inc","Technology"),("SNOW","Snowflake Inc","Technology"),
+        ("PLTR","Palantir Technologies","Technology"),("COIN","Coinbase Global","Financial"),
+        ("UBER","Uber Technologies","Technology"),("LYFT","Lyft Inc","Technology"),
+        ("ABNB","Airbnb Inc","Consumer Cyclical"),("DASH","DoorDash Inc","Consumer Cyclical"),
+        ("ZM","Zoom Video","Technology"),("DDOG","Datadog Inc","Technology"),
+        ("NET","Cloudflare Inc","Technology"),("CRWD","CrowdStrike","Technology"),
+        ("PANW","Palo Alto Networks","Technology"),("SMCI","Super Micro Computer","Technology"),
+        ("ARM","Arm Holdings","Technology"),("MU","Micron Technology","Technology"),
+        ("INTC","Intel Corp","Technology"),("QCOM","Qualcomm Inc","Technology"),
+    ]
+    return [{"ticker":t,"company":c,"sector":s,"price":0,"volume":0,"mktCap":""} for t,c,s in tickers]
+
+
+@app.get("/screener")
+async def screener():
+    """Devuelve acciones candidatas para swing trading set-and-forget."""
+    candidates = await fetch_finviz_screener()
+    return JSONResponse(
+        content={"candidates": candidates, "count": len(candidates)},
+        media_type="application/json; charset=utf-8"
+    )

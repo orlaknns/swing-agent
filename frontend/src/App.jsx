@@ -3,6 +3,7 @@ import { supabase } from './supabase.js'
 import Auth from './Auth.jsx'
 import StockCard from './StockCard.jsx'
 import Journal from './Journal.jsx'
+import Discover from './Discover.jsx'
 
 class ErrorBoundary extends Component {
   constructor(props) { super(props); this.state = { error: null } }
@@ -152,7 +153,7 @@ export default function App() {
 
           {/* Tabs */}
           <div style={{ display:'flex', borderTop:`1px solid ${C.border}` }}>
-            {[['watchlist',`Watchlist · ${watchlist.length}`], ['journal',`Journal · ${journalCount}`]].map(([key, label]) => (
+            {[['watchlist',`Watchlist · ${watchlist.length}`], ['discover','Descubrir'], ['journal',`Journal · ${journalCount}`]].map(([key, label]) => (
               <button key={key} onClick={() => setTab(key)}
                 style={{ background:'none', border:'none', borderBottom: tab===key ? `2px solid ${C.accent}` : '2px solid transparent',
                   color: tab===key ? C.accent : C.muted, padding:'10px 18px', cursor:'pointer', fontSize:12, fontWeight: tab===key ? 700 : 400 }}>
@@ -183,6 +184,19 @@ export default function App() {
               <b style={{ color:C.amber }}>Aviso:</b> Análisis orientativo. No constituye asesoría financiera.
             </div>
           </div>
+        )}
+        {tab === 'discover' && (
+          <ErrorBoundary>
+            <Discover
+              watchlist={watchlist}
+              onAdd={ticker => {
+                if (!watchlist.includes(ticker)) {
+                  setWatchlist(p => [ticker, ...p])
+                  setTab('watchlist')
+                }
+              }}
+            />
+          </ErrorBoundary>
         )}
         {tab === 'journal' && (
           <ErrorBoundary>
