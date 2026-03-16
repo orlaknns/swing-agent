@@ -225,29 +225,44 @@ export default function StockCard({ ticker, onRemove, session }) {
           <Sparkline prices={data.prices20d} signal={data.signal} />
         </div>
 
-        {/* Rango compra / SL */}
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:5 }}>
-          <div style={{ background:C.bg, borderRadius:8, padding:'8px 10px' }}>
-            <div style={{ fontSize:9, color:C.muted, letterSpacing:'0.07em', marginBottom:4, textTransform:'uppercase' }}>Rango compra</div>
-            <div style={{ fontSize:11, fontWeight:700, color:C.green, fontFamily:'monospace' }}>
-              ${data.entryLow?.toFixed(2)} – ${data.entryHigh?.toFixed(2)}
+        {/* Rango entrada / SL — etiquetas según señal */}
+        {(() => {
+          const isSell = data.signal === 'sell'
+          const rangoLabel = isSell ? 'Rango venta' : 'Rango compra'
+          const rangoColor = isSell ? C.red : C.green
+          const slLabel    = isSell ? 'Stop-loss (al alza)' : 'Stop-loss'
+          return (
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:5 }}>
+              <div style={{ background:C.bg, borderRadius:8, padding:'8px 10px' }}>
+                <div style={{ fontSize:9, color:C.muted, letterSpacing:'0.07em', marginBottom:4, textTransform:'uppercase' }}>{rangoLabel}</div>
+                <div style={{ fontSize:11, fontWeight:700, color:rangoColor, fontFamily:'monospace' }}>
+                  ${data.entryLow?.toFixed(2)} – ${data.entryHigh?.toFixed(2)}
+                </div>
+              </div>
+              <div style={{ background:C.bg, borderRadius:8, padding:'8px 10px', textAlign:'right' }}>
+                <div style={{ fontSize:9, color:C.muted, letterSpacing:'0.07em', marginBottom:4, textTransform:'uppercase' }}>{slLabel}</div>
+                <div style={{ fontSize:12, fontWeight:700, color:C.red, fontFamily:'monospace' }}>${data.stopLoss?.toFixed(2)}</div>
+              </div>
             </div>
-          </div>
-          <div style={{ background:C.bg, borderRadius:8, padding:'8px 10px', textAlign:'right' }}>
-            <div style={{ fontSize:9, color:C.muted, letterSpacing:'0.07em', marginBottom:4, textTransform:'uppercase' }}>Stop-loss</div>
-            <div style={{ fontSize:12, fontWeight:700, color:C.red, fontFamily:'monospace' }}>${data.stopLoss?.toFixed(2)}</div>
-          </div>
-        </div>
+          )
+        })()}
 
         {/* Salida escalonada */}
         <div style={{ background:C.bg, borderRadius:8, padding:'8px 10px' }}>
-          <div style={{ fontSize:9, color:C.muted, letterSpacing:'0.07em', marginBottom:6, textTransform:'uppercase' }}>Salida escalonada</div>
-          {[
-            { label:'Breakeven (mover SL)', val:data.breakeven, color:C.amber,  pct:'—'    },
-            { label:'Obj. 1 · vender ⅓',   val:data.target1,   color:C.accent, pct:'1/3'  },
-            { label:'Obj. 2 · vender ⅓',   val:data.target2,   color:C.accent, pct:'1/3'  },
-            { label:'Obj. 3 · vender ⅓',   val:data.target3,   color:C.green,  pct:'1/3'  },
-          ].map(({ label, val, color, pct }) => (
+          {(() => {
+            const isSell = data.signal === 'sell'
+            const seccionLabel = isSell ? 'Cobertura escalonada' : 'Salida escalonada'
+            const obj1Label = isSell ? 'Obj. 1 · cubrir ⅓' : 'Obj. 1 · vender ⅓'
+            const obj2Label = isSell ? 'Obj. 2 · cubrir ⅓' : 'Obj. 2 · vender ⅓'
+            const obj3Label = isSell ? 'Obj. 3 · cubrir ⅓' : 'Obj. 3 · vender ⅓'
+            return (<>
+              <div style={{ fontSize:9, color:C.muted, letterSpacing:'0.07em', marginBottom:6, textTransform:'uppercase' }}>{seccionLabel}</div>
+              {[
+                { label:'Breakeven (mover SL)', val:data.breakeven, color:C.amber,  pct:'—'   },
+                { label:obj1Label,              val:data.target1,   color:C.accent, pct:'1/3' },
+                { label:obj2Label,              val:data.target2,   color:C.accent, pct:'1/3' },
+                { label:obj3Label,              val:data.target3,   color:C.green,  pct:'1/3' },
+              ].map(({ label, val, color, pct }) => (
             <div key={label} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'3px 0', borderBottom:`1px solid ${C.border}` }}>
               <span style={{ fontSize:11, color:C.muted }}>{label}</span>
               <div style={{ display:'flex', gap:8, alignItems:'center' }}>
@@ -256,6 +271,8 @@ export default function StockCard({ ticker, onRemove, session }) {
               </div>
             </div>
           ))}
+            </>)
+          })()}
         </div>
 
         {/* Indicators */}
