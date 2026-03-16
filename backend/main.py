@@ -7,6 +7,8 @@ import json
 import re
 import os
 from anthropic import Anthropic
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 
 app = FastAPI()
 
@@ -16,6 +18,43 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+scheduler = AsyncIOScheduler(timezone="America/New_York")
+
+@app.on_event("startup")
+async def startup():
+    """Al iniciar el servidor: carga el screener y programa actualización diaria."""
+    # Cargar inmediatamente al arrancar
+    async with httpx.AsyncClient(timeout=15, follow_redirects=True) as http:
+        try:
+            await fetch_finviz_screener()
+            print("Screener cargado al iniciar")
+        except Exception as e:
+            print(f"Screener startup error: {e}")
+
+    # Programar actualización diaria a las 9:30am ET (apertura NYSE)
+    scheduler.add_job(
+        refresh_screener,
+        CronTrigger(hour=9, minute=30, timezone="America/New_York"),
+        id="daily_screener",
+        replace_existing=True,
+    )
+    scheduler.start()
+    print("Scheduler iniciado — screener se actualiza cada día a las 9:30am ET")
+
+@app.on_event("shutdown")
+async def shutdown():
+    scheduler.shutdown()
+
+async def refresh_screener():
+    """Job diario: actualiza el caché del screener."""
+    global _screener_cache
+    _screener_cache["date"] = ""  # forzar refresh
+    try:
+        await fetch_finviz_screener()
+        print(f"Screener actualizado automáticamente: {len(_screener_cache['data'])} candidatos")
+    except Exception as e:
+        print(f"Error actualizando screener: {e}")
 
 client = Anthropic()
 AV_KEY = os.environ.get("ALPHA_VANTAGE_KEY", "I3ZGIWYTKOVF07TP")
@@ -556,7 +595,7 @@ def health():
 
 
 # ── Screener Finviz ────────────────────────────────────────────────────────
-_screener_cache: dict = {"data": [], "ts": 0}
+_screener_cache: dict = {"data": [], "ts": 0, "date": ""}
 
 async def fetch_finviz_screener() -> list:
     """
@@ -568,10 +607,12 @@ async def fetch_finviz_screener() -> list:
     - Mercado: NYSE + NASDAQ
     """
     import time, csv
+    from datetime import date
     global _screener_cache
 
-    # Caché de 2 horas
-    if _screener_cache["data"] and (time.time() - _screener_cache["ts"]) < 7200:
+    # Caché diario — se renueva una vez al día
+    today = str(date.today())
+    if _screener_cache["data"] and _screener_cache["date"] == today:
         return _screener_cache["data"]
 
     # Finviz screener URL con filtros técnicos
@@ -635,6 +676,7 @@ async def fetch_finviz_screener() -> list:
 
         _screener_cache["data"] = results[:60]
         _screener_cache["ts"]   = time.time()
+        _screener_cache["date"] = str(date.today())
         return results[:60]
 
     except Exception as e:
@@ -674,6 +716,11 @@ async def screener():
     """Devuelve acciones candidatas para swing trading set-and-forget."""
     candidates = await fetch_finviz_screener()
     return JSONResponse(
-        content={"candidates": candidates, "count": len(candidates)},
+        content={
+            "candidates": candidates,
+            "count": len(candidates),
+            "date": _screener_cache.get("date", ""),
+            "source": "finviz" if candidates and candidates[0].get("price", 0) > 0 else "curated"
+        },
         media_type="application/json; charset=utf-8"
     )

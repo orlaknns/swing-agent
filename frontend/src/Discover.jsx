@@ -25,7 +25,8 @@ export default function Discover({ watchlist, onAdd }) {
   const [loading, setLoading]       = useState(false)
   const [error, setError]           = useState(null)
   const [filter, setFilter]         = useState('all')
-  const [lastUpdated, setLastUpdated] = useState(null)
+  const [screenerDate, setScreenerDate] = useState(null)
+  const [source, setSource]         = useState(null)
 
   const load = async () => {
     setLoading(true); setError(null)
@@ -34,9 +35,10 @@ export default function Discover({ watchlist, onAdd }) {
       if (!res.ok) throw new Error(`Error ${res.status}`)
       const data = await res.json()
       setCandidates(data.candidates || [])
-      setLastUpdated(new Date().toLocaleTimeString('es-CL', {hour:'2-digit', minute:'2-digit'}))
+      setScreenerDate(data.date || null)
+      setSource(data.source || null)
     } catch (e) {
-      setError('No se pudo conectar con el screener. Intenta de nuevo.')
+      setError('No se pudo conectar con el screener.')
     }
     setLoading(false)
   }
@@ -51,20 +53,17 @@ export default function Discover({ watchlist, onAdd }) {
     <div style={{ maxWidth:960, margin:'0 auto', padding:'0 20px 48px' }}>
 
       {/* Header */}
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:16, flexWrap:'wrap', gap:10 }}>
-        <div>
-          <h2 style={{ fontSize:18, fontWeight:700, color:C.text, margin:0 }}>Descubrir acciones</h2>
-          <p style={{ fontSize:11, color:C.muted, margin:'4px 0 0' }}>
-            Candidatas para swing trading set-and-forget · Filtradas por EMA, RSI y volumen
-            {lastUpdated && <span style={{ marginLeft:8 }}>· Actualizado {lastUpdated}</span>}
-          </p>
-        </div>
-        <button onClick={load} disabled={loading}
-          style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:8, color:C.muted,
-            padding:'8px 14px', cursor:loading?'not-allowed':'pointer', fontSize:12, display:'flex', alignItems:'center', gap:6 }}>
-          <span style={{ display:'inline-block', animation:loading?'spin 0.7s linear infinite':'' }}>↻</span>
-          {loading ? 'Buscando...' : 'Actualizar'}
-        </button>
+      <div style={{ marginBottom:16 }}>
+        <h2 style={{ fontSize:18, fontWeight:700, color:C.text, margin:0 }}>Descubrir acciones</h2>
+        <p style={{ fontSize:11, color:C.muted, margin:'4px 0 0' }}>
+          Candidatas para swing trading set-and-forget · Filtradas por EMA, RSI y volumen
+          {screenerDate && (
+            <span style={{ marginLeft:8, color: screenerDate === new Date().toISOString().slice(0,10) ? C.green : C.amber }}>
+              · Datos del {screenerDate}
+              {source === 'curated' && ' (lista curada — Finviz no disponible)'}
+            </span>
+          )}
+        </p>
       </div>
 
       {/* Criterios */}
