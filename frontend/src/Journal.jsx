@@ -70,7 +70,7 @@ function exportToCSV(trades) {
     const days = t.status !== 'closed' ? calcDaysOpen(t.date) : ''
     const vigor = t.status !== 'closed' ? (calcDaysOpen(t.date) <= 3 ? 'Alta' : calcDaysOpen(t.date) <= 7 ? 'Media' : 'Baja') : ''
     return [t.date, t.ticker, t.signal, t.strategy, t.trend, t.price, t.entryPrice||'', t.positionSize||'',
-      t.entryLow, t.entryHigh, t.stopLoss, t.breakeven, t.target1, t.target2, t.target3, t.rr,
+      t.entryLow, t.entryHigh, t.stopLoss, t.target, t.rr,
       t.rsi, t.ema20, t.ema50, t.sma200||'', t.mansfieldRS||'',
       f.eps||'', f.roe||'', f.epsGrowth||'', f.revenueGrowth||'', f.marketCap||'', f.peRatio||'', t.nextEarnings||'',
       STATUS_LABELS[t.status]||t.status, days, vigor, t.exitPrice||'', pnl, t.notes||'']
@@ -106,8 +106,7 @@ function TradeModal({ trade, onSave, onClose }) {
           <div style={{ color:C.muted, fontSize:9, marginBottom:8, textTransform:'uppercase', letterSpacing:'0.07em' }}>Análisis al momento de entrada</div>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6 }}>
             {[['Precio',fmt(trade.price)],['RSI',trade.rsi],['Rango',`${fmt(trade.entryLow)}–${fmt(trade.entryHigh)}`],
-              ['Stop-loss',fmt(trade.stopLoss)],['Breakeven',fmt(trade.breakeven)],['Obj.1',fmt(trade.target1)],
-              ['Obj.2',fmt(trade.target2)],['Obj.3',fmt(trade.target3)],['R:B',trade.rr?`${trade.rr}x`:'—'],
+              ['Stop-loss',fmt(trade.stopLoss)],['Objetivo',fmt(trade.target)],['R:B',trade.rr?`${trade.rr}x`:'—'],
               ['Mansfield RS',trade.mansfieldRS??'—'],['EMA20',fmt(trade.ema20)],['SMA200',trade.sma200?fmt(trade.sma200):'—'],
             ].map(([l,v]) => <div key={l}><span style={{color:C.muted}}>{l}: </span><span style={{color:C.text,fontFamily:'monospace'}}>{v}</span></div>)}
           </div>
@@ -268,9 +267,7 @@ export default function Journal({ session }) {
                 <span><span style={{color:C.muted}}>Precio: </span><span style={{color:C.text,fontFamily:'monospace'}}>{fmt(trade.price)}</span></span>
                 {trade.entryPrice && <span><span style={{color:C.muted}}>Entrada: </span><span style={{color:C.green,fontFamily:'monospace'}}>{fmt(trade.entryPrice)}</span></span>}
                 <span><span style={{color:C.muted}}>SL: </span><span style={{color:C.red,fontFamily:'monospace'}}>{fmt(trade.stopLoss)}</span></span>
-                <span><span style={{color:C.muted}}>T1: </span><span style={{color:C.accent,fontFamily:'monospace'}}>{fmt(trade.target1)}</span></span>
-                <span><span style={{color:C.muted}}>T2: </span><span style={{color:C.accent,fontFamily:'monospace'}}>{fmt(trade.target2)}</span></span>
-                <span><span style={{color:C.muted}}>T3: </span><span style={{color:C.green,fontFamily:'monospace'}}>{fmt(trade.target3)}</span></span>
+                <span><span style={{color:C.muted}}>Objetivo: </span><span style={{color:C.green,fontFamily:'monospace'}}>{fmt(trade.target)}</span></span>
                 <span><span style={{color:C.muted}}>R:B: </span><span style={{color:trade.rr>=2?C.green:C.amber,fontFamily:'monospace'}}>{trade.rr}x</span></span>
                 {trade.nextEarnings && <span><span style={{color:C.muted}}>Earnings: </span><span style={{color:C.amber,fontFamily:'monospace'}}>{trade.nextEarnings}</span></span>}
               </div>
@@ -291,7 +288,7 @@ function tradeToDb(t, userId) {
     id: t.id, user_id: userId, date: t.date, ticker: t.ticker,
     signal: t.signal, strategy: t.strategy, trend: t.trend, price: t.price,
     entry_low: t.entryLow, entry_high: t.entryHigh, stop_loss: t.stopLoss,
-    breakeven: t.breakeven, target1: t.target1, target2: t.target2, target3: t.target3,
+    target: t.target,
     rr: t.rr, rsi: t.rsi, ema20: t.ema20, ema50: t.ema50, sma200: t.sma200,
     mansfield_rs: t.mansfieldRS, next_earnings: t.nextEarnings,
     fundamentals: t.fundamentals, analysis: t.analysis,
@@ -305,7 +302,7 @@ function dbToTrade(r) {
     id: r.id, date: r.date, ticker: r.ticker,
     signal: r.signal, strategy: r.strategy, trend: r.trend, price: r.price,
     entryLow: r.entry_low, entryHigh: r.entry_high, stopLoss: r.stop_loss,
-    breakeven: r.breakeven, target1: r.target1, target2: r.target2, target3: r.target3,
+    target: r.target,
     rr: r.rr, rsi: r.rsi, ema20: r.ema20, ema50: r.ema50, sma200: r.sma200,
     mansfieldRS: r.mansfield_rs, nextEarnings: r.next_earnings,
     fundamentals: r.fundamentals, analysis: r.analysis,
@@ -320,8 +317,8 @@ export async function saveTradeToJournal(data, userId) {
     id: Date.now().toString(), date: new Date().toISOString().slice(0,10),
     ticker: data.ticker, signal: data.signal, strategy: data.strategy, trend: data.trend,
     price: data.price, entryLow: data.entryLow, entryHigh: data.entryHigh,
-    stopLoss: data.stopLoss, breakeven: data.breakeven,
-    target1: data.target1, target2: data.target2, target3: data.target3,
+    stopLoss: data.stopLoss,
+    target: data.target,
     rr: data.rr, rsi: data.rsi, ema20: data.ema20, ema50: data.ema50,
     sma200: data.sma200, mansfieldRS: data.mansfieldRS, nextEarnings: data.nextEarnings,
     fundamentals: data.fundamentals, analysis: data.analysis,

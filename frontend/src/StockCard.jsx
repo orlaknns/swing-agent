@@ -247,32 +247,27 @@ export default function StockCard({ ticker, onRemove, session }) {
           )
         })()}
 
-        {/* Salida escalonada */}
-        <div style={{ background:C.bg, borderRadius:8, padding:'8px 10px' }}>
-          {(() => {
-            const isSell = data.signal === 'sell'
-            const seccionLabel = isSell ? 'Cobertura escalonada' : 'Salida escalonada'
-            const obj1Label = isSell ? 'Obj. 1 · cubrir ⅓' : 'Obj. 1 · vender ⅓'
-            const obj2Label = isSell ? 'Obj. 2 · cubrir ⅓' : 'Obj. 2 · vender ⅓'
-            const obj3Label = isSell ? 'Obj. 3 · cubrir ⅓' : 'Obj. 3 · vender ⅓'
-            return (<>
-              <div style={{ fontSize:9, color:C.muted, letterSpacing:'0.07em', marginBottom:6, textTransform:'uppercase' }}>{seccionLabel}</div>
-              {[
-                { label:'Breakeven (mover SL)', val:data.breakeven, color:C.amber,  pct:'—'   },
-                { label:obj1Label,              val:data.target1,   color:C.accent, pct:'1/3' },
-                { label:obj2Label,              val:data.target2,   color:C.accent, pct:'1/3' },
-                { label:obj3Label,              val:data.target3,   color:C.green,  pct:'1/3' },
-              ].map(({ label, val, color, pct }) => (
-            <div key={label} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'3px 0', borderBottom:`1px solid ${C.border}` }}>
-              <span style={{ fontSize:11, color:C.muted }}>{label}</span>
-              <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-                {pct !== '—' && <span style={{ fontSize:9, color:C.muted, background:`${C.border}`, borderRadius:4, padding:'1px 5px' }}>{pct}</span>}
-                <span style={{ fontSize:12, fontWeight:700, color, fontFamily:'monospace' }}>${val?.toFixed(2) ?? '—'}</span>
+        {/* Objetivo fijo set-and-forget */}
+        <div style={{ background:C.bg, borderRadius:8, padding:'10px 12px' }}>
+          <div style={{ fontSize:9, color:C.muted, letterSpacing:'0.07em', marginBottom:6, textTransform:'uppercase' }}>
+            {data.signal === 'sell' ? 'Objetivo (cubrir posición)' : 'Objetivo (toma de ganancia)'}
+          </div>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+            <div>
+              <div style={{ fontSize:18, fontWeight:700, color:C.green, fontFamily:'monospace' }}>
+                ${data.target?.toFixed(2) ?? '—'}
+              </div>
+              <div style={{ fontSize:10, color:C.muted, marginTop:2 }}>
+                {data.target && data.entryLow
+                  ? `${(((data.target - ((data.entryLow + data.entryHigh)/2)) / ((data.entryLow + data.entryHigh)/2)) * 100).toFixed(1)}% desde entrada`
+                  : ''}
               </div>
             </div>
-          ))}
-            </>)
-          })()}
+            <div style={{ textAlign:'right' }}>
+              <div style={{ fontSize:10, color:C.muted, marginBottom:2 }}>Plazo máximo</div>
+              <div style={{ fontSize:13, fontWeight:700, color:C.amber }}>20 días</div>
+            </div>
+          </div>
         </div>
 
         {/* Indicators */}

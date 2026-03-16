@@ -286,31 +286,29 @@ async def analyze(ticker: str):
     prices_20d  = [round(c, 2) for c in closes[-20:]]
     last_5      = [round(c, 2) for c in closes[-5:]]
 
-    # defaults
+    # defaults set-and-forget
     el_default = round(price * 0.995, 2)
     eh_default = round(price * 1.010, 2)
-    t1_default = round(price * 1.04,  2)
-    t2_default = round(price * 1.08,  2)
-    t3_default = round(price * 1.13,  2)
-    be_default = round(price * 1.02,  2)
-    sl_default = round(price * 0.97,  2)
+    sl_default = round(price * 0.95,  2)
+    tg_default = round(price * 1.125, 2)
 
-    prompt = f"""Analiza {ticker} para swing trading. Datos reales:
-Precio: ${price} | Cambio: {change}% | EMA20: ${ema20} | EMA50: ${ema50} | RSI: {rsi} | Vol%: {vol_ratio}
-Max20d: ${round(recent_high,2)} | Min20d: ${round(recent_low,2)} | SMA200: ${sma200 or "N/A"} | Ultimos5: {last_5}
+    prompt = (
+        f"Analiza {ticker} para swing trading set-and-forget (sin gestion activa). Datos reales:\n"
+        f"Precio: ${price} | Cambio: {change}% | EMA20: ${ema20} | EMA50: ${ema50} | RSI: {rsi} | Vol%: {vol_ratio}\n"
+        f"Max20d: ${round(recent_high,2)} | Min20d: ${round(recent_low,2)} | SMA200: ${sma200 or 'N/A'} | Ultimos5: {last_5}\n"
+        "\nEstrategia: entrada unica, stop-loss fijo, objetivo unico fijo. Sin ajustes manuales. Plazo maximo 20 dias.\n"
+        "\nResponde UNICAMENTE con este JSON (sin texto antes ni despues, sin markdown):\n"
+        + '{' + f'"signal":"buy","strategy":"pullback","entryLow":{el_default},"entryHigh":{eh_default},"stopLoss":{sl_default},"target":{tg_default},"trend":"bullish","successRate":60,"keyLevel":{ema20},"analysis":"texto aqui"' + '}'
+        + "\n\nReglas:\n"
+        "- entryLow: limite inferior del rango de entrada (soporte tecnico, precio -0.5% a -1.5%)\n"
+        "- entryHigh: limite superior del rango de entrada (resistencia menor, precio +0.5% a +1.5%)\n"
+        "- stopLoss: FIJO entre 5% y 7% bajo entryLow, en soporte tecnico real. NO se mueve.\n"
+        "- target: objetivo UNICO fijo con R:B minimo 2.5x. En resistencia tecnica real.\n"
+        "- successRate: probabilidad de llegar al objetivo antes del stop en 20 dias (0-100)\n"
+        "- signal=buy/sell/hold, strategy=pullback/breakout/reversal/neutral, trend=bullish/bearish/sideways\n"
+        "- Para sell: entryLow/entryHigh es rango venta corta, stopLoss es proteccion al alza, target es objetivo a la baja."
+    )
 
-Responde UNICAMENTE con este JSON (sin texto antes ni despues, sin markdown):
-{{"signal":"buy","strategy":"pullback","entryLow":{el_default},"entryHigh":{eh_default},"stopLoss":{sl_default},"breakeven":{be_default},"target1":{t1_default},"target2":{t2_default},"target3":{t3_default},"trend":"bullish","successRate":60,"keyLevel":{ema20},"analysis":"texto aqui"}}
-
-Reglas:
-- entryLow: limite inferior del rango de compra (soporte cercano, precio actual -0.5% a -1.5%)
-- entryHigh: limite superior del rango de compra (resistencia menor, precio actual +0.5% a +1.5%)
-- stopLoss: max 5% bajo entryLow, en soporte tecnico real
-- breakeven: nivel donde mover SL a entryLow (~R:R 1:1)
-- target1: vender 1/3, resistencia cercana (~R:R 1.5-2x)
-- target2: vender 1/3, mover SL a EMA20 (~R:R 2.5-3x)
-- target3: vender ultimo 1/3, resistencia mayor (~R:R 3.5-5x)
-signal=buy/sell/hold, strategy=pullback/breakout/reversal/neutral, trend=bullish/bearish/sideways."""
 
     message = client.messages.create(
         model="claude-haiku-4-5-20251001",
@@ -326,13 +324,10 @@ signal=buy/sell/hold, strategy=pullback/breakout/reversal/neutral, trend=bullish
     entry_low  = float(ai.get("entryLow",  el_default))
     entry_high = float(ai.get("entryHigh", eh_default))
     stop       = float(ai.get("stopLoss",  sl_default))
-    breakeven  = float(ai.get("breakeven", be_default))
-    target1    = float(ai.get("target1",   t1_default))
-    target2    = float(ai.get("target2",   t2_default))
-    target3    = float(ai.get("target3",   t3_default))
+    target     = float(ai.get("target",    tg_default))
 
     entry_mid = round((entry_low + entry_high) / 2, 2)
-    rr = round(abs((target2 - entry_mid) / (entry_mid - stop)), 2) if abs(entry_mid - stop) > 0.001 else 0
+    rr = round(abs((target - entry_mid) / (entry_mid - stop)), 2) if abs(entry_mid - stop) > 0.001 else 0
 
     return JSONResponse(content={
         "ticker":       ticker,
@@ -348,10 +343,7 @@ signal=buy/sell/hold, strategy=pullback/breakout/reversal/neutral, trend=bullish
         "entryLow":     round(entry_low,  2),
         "entryHigh":    round(entry_high, 2),
         "stopLoss":     round(stop,       2),
-        "breakeven":    round(breakeven,  2),
-        "target1":      round(target1,    2),
-        "target2":      round(target2,    2),
-        "target3":      round(target3,    2),
+        "target":       round(target,     2),
         "rr":           rr,
         "trend":        ai.get("trend",       "sideways"),
         "successRate":  int(ai.get("successRate", 50)),
@@ -360,7 +352,6 @@ signal=buy/sell/hold, strategy=pullback/breakout/reversal/neutral, trend=bullish
         "mansfieldRS":  mansfield_rs,
         "sma200":       sma200,
         "nextEarnings": next_earnings,
-        # Fundamentales
         "fundamentals": fundamentals,
     }, media_type="application/json; charset=utf-8")
 
