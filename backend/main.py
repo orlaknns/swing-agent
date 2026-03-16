@@ -240,6 +240,174 @@ def calc_mansfield_rs(stock_closes: list, spy_closes: list) -> float | None:
         return None
 
 
+def calc_atr(highs: list, lows: list, closes: list, period: int = 14) -> float:
+    """Average True Range — volatilidad diaria promedio."""
+    if len(closes) < period + 1:
+        return 0.0
+    trs = []
+    for i in range(1, len(closes)):
+        tr = max(highs[i] - lows[i], abs(highs[i] - closes[i-1]), abs(lows[i] - closes[i-1]))
+        trs.append(tr)
+    return round(sum(trs[-period:]) / period, 4)
+
+
+def calc_momentum_4w(closes: list) -> float | None:
+    """Cambio porcentual en las últimas 4 semanas (~20 días de trading)."""
+    if len(closes) < 21:
+        return None
+    return round(((closes[-1] - closes[-21]) / closes[-21]) * 100, 2)
+
+
+def calc_score(rsi, ema20, ema50, sma200, price, vol_ratio, mansfield_rs,
+               next_earnings, fundamentals, rr) -> dict:
+    """
+    Score de probabilidad calculado matemáticamente (0-100).
+    Retorna score, desglose y lista de contradicciones/alertas.
+    """
+    score = 50  # base neutral
+    breakdown = {}
+    alerts = []
+    contradictions = []
+
+    # RSI
+    if 40 <= rsi <= 60:
+        score += 15; breakdown['rsi'] = +15
+    elif rsi < 30:
+        score += 8; breakdown['rsi'] = +8
+    elif rsi > 75:
+        score -= 15; breakdown['rsi'] = -15
+        alerts.append(f"RSI {rsi} — sobrecompra extrema, alta probabilidad de corrección")
+    elif rsi > 65:
+        score -= 8; breakdown['rsi'] = -8
+    else:
+        breakdown['rsi'] = 0
+
+    # Tendencia EMA
+    if ema20 > ema50:
+        score += 15; breakdown['ema_trend'] = +15
+    else:
+        score -= 15; breakdown['ema_trend'] = -15
+        alerts.append("EMA20 < EMA50 — tendencia bajista de corto plazo")
+
+    # SMA200
+    if sma200:
+        if price > sma200:
+            score += 10; breakdown['sma200'] = +10
+        else:
+            score -= 10; breakdown['sma200'] = -10
+            alerts.append(f"Precio bajo SMA200 (${sma200}) — tendencia bajista estructural")
+
+    # Mansfield RS
+    if mansfield_rs is not None:
+        if mansfield_rs > 2:
+            score += 12; breakdown['mansfield'] = +12
+        elif mansfield_rs > 0:
+            score += 6; breakdown['mansfield'] = +6
+        elif mansfield_rs < -2:
+            score -= 15; breakdown['mansfield'] = -15
+            alerts.append(f"Mansfield RS {mansfield_rs} — acción muy rezagada vs S&P500")
+        else:
+            score -= 6; breakdown['mansfield'] = -6
+
+    # Volumen
+    if vol_ratio >= 100:
+        score += 8; breakdown['volume'] = +8
+    elif vol_ratio >= 80:
+        score += 4; breakdown['volume'] = +4
+    elif vol_ratio < 60:
+        score -= 10; breakdown['volume'] = -10
+        alerts.append(f"Volumen muy bajo ({vol_ratio}% del promedio) — baja participación institucional")
+    else:
+        breakdown['volume'] = 0
+
+    # Earnings
+    if next_earnings:
+        try:
+            from datetime import date
+            days_to_earn = (date.fromisoformat(next_earnings) - date.today()).days
+            if days_to_earn < 7:
+                score -= 25; breakdown['earnings'] = -25
+                alerts.append(f"Earnings en {days_to_earn} días — riesgo muy alto de movimiento inesperado")
+            elif days_to_earn < 14:
+                score -= 15; breakdown['earnings'] = -15
+                alerts.append(f"Earnings en {days_to_earn} días — evitar abrir posición nueva")
+            else:
+                breakdown['earnings'] = 0
+        except Exception:
+            breakdown['earnings'] = 0
+
+    # R:B
+    if rr >= 3:
+        score += 10; breakdown['rr'] = +10
+    elif rr >= 2.5:
+        score += 6; breakdown['rr'] = +6
+    elif rr < 2:
+        score -= 10; breakdown['rr'] = -10
+    else:
+        breakdown['rr'] = 0
+
+    # Detectar contradicciones técnico vs fundamental
+    f = fundamentals or {}
+    eps_growth = f.get('epsGrowth')
+    rev_growth = f.get('revenueGrowth')
+    analyst_target = f.get('analystTarget')
+
+    tech_bullish = ema20 > ema50 and (sma200 is None or price > sma200)
+    tech_bearish = ema20 < ema50 or (sma200 and price < sma200)
+    fund_strong = (eps_growth and eps_growth > 15) or (rev_growth and rev_growth > 15)
+    fund_weak = (eps_growth and eps_growth < -10) or (rev_growth and rev_growth < -5)
+
+    if tech_bearish and fund_strong:
+        contradictions.append(
+            f"Contradicción: señal técnica bajista pero fundamentales fuertes "
+            f"(EPS +{eps_growth}%, ventas +{rev_growth}%). "
+            "Señal SELL de menor confianza — el negocio va bien pero el precio está bajo presión."
+        )
+        score -= 8
+
+    if tech_bullish and fund_weak:
+        contradictions.append(
+            f"Contradicción: señal técnica alcista pero fundamentales débiles "
+            f"(EPS {eps_growth}%, ventas {rev_growth}%). "
+            "Señal BUY de menor confianza — el precio sube pero los resultados no acompañan."
+        )
+        score -= 8
+
+    if analyst_target and price > 0:
+        analyst_upside = ((analyst_target - price) / price) * 100
+        if analyst_upside < -10:
+            contradictions.append(
+                f"Precio objetivo de analistas ${analyst_target} está {abs(analyst_upside):.0f}% "
+                "por debajo del precio actual — consenso institucional bajista."
+            )
+            score -= 5
+        elif analyst_upside > 30:
+            score += 5  # analistas ven mucho upside
+
+    # Señal EVITAR
+    avoid = False
+    avoid_reason = None
+    if score < 30:
+        avoid = True
+        avoid_reason = "Condiciones desfavorables en múltiples dimensiones. No es buen momento para operar."
+    elif len(alerts) >= 3:
+        avoid = True
+        avoid_reason = "Demasiadas señales de alerta simultáneas. Esperar mejores condiciones."
+    elif len(contradictions) >= 2:
+        avoid = True
+        avoid_reason = "Señales técnicas y fundamentales fuertemente contradictorias. Difícil estimar dirección."
+
+    score = max(0, min(100, score))
+    return {
+        'score': score,
+        'breakdown': breakdown,
+        'alerts': alerts,
+        'contradictions': contradictions,
+        'avoid': avoid,
+        'avoidReason': avoid_reason,
+    }
+
+
 def extract_json(text: str) -> dict:
     text = re.sub(r"```[a-z]*|```", "", text).strip()
     match = re.search(r'\{[^{}]*\}', text, re.DOTALL)
@@ -281,10 +449,21 @@ async def analyze(ticker: str):
     vol_ratio   = round(volumes[-1] / avg_vol * 100) if avg_vol else 100
     mansfield_rs = calc_mansfield_rs(closes, spy_closes)
 
+    atr          = calc_atr(highs, lows, closes)
+    momentum_4w  = calc_momentum_4w(closes)
+
     recent_high = max(highs[-20:])
     recent_low  = min(lows[-20:])
     prices_20d  = [round(c, 2) for c in closes[-20:]]
     last_5      = [round(c, 2) for c in closes[-5:]]
+
+    # defaults set-and-forget
+
+    # Plazo dinámico basado en ATR y distancia al objetivo
+    avg_daily_move = (atr / price * 100) if price > 0 else 1.5  # % diario promedio
+    dist_to_target_pct = 12.5  # objetivo base ~12.5%
+    estimated_days = round(dist_to_target_pct / avg_daily_move * 1.5) if avg_daily_move > 0 else 20
+    max_days = max(10, min(30, estimated_days))  # entre 10 y 30 días
 
     # defaults set-and-forget
     el_default = round(price * 0.995, 2)
@@ -295,8 +474,8 @@ async def analyze(ticker: str):
     prompt = (
         f"Analiza {ticker} para swing trading set-and-forget (sin gestion activa). Datos reales:\n"
         f"Precio: ${price} | Cambio: {change}% | EMA20: ${ema20} | EMA50: ${ema50} | RSI: {rsi} | Vol%: {vol_ratio}\n"
-        f"Max20d: ${round(recent_high,2)} | Min20d: ${round(recent_low,2)} | SMA200: ${sma200 or 'N/A'} | Ultimos5: {last_5}\n"
-        "\nEstrategia: entrada unica, stop-loss fijo, objetivo unico fijo. Sin ajustes manuales. Plazo maximo 20 dias.\n"
+        f"Max20d: ${round(recent_high,2)} | Min20d: ${round(recent_low,2)} | SMA200: ${sma200 or 'N/A'} | ATR: ${round(atr,2)} | Mom4w: {momentum_4w}% | Ultimos5: {last_5}\n"
+        f"\nEstrategia: entrada unica, stop-loss fijo, objetivo unico fijo. Sin ajustes manuales. Plazo maximo estimado: {max_days} dias (calculado por volatilidad ATR).\n"
         "\nResponde UNICAMENTE con este JSON (sin texto antes ni despues, sin markdown):\n"
         + '{' + f'"signal":"buy","strategy":"pullback","entryLow":{el_default},"entryHigh":{eh_default},"stopLoss":{sl_default},"target":{tg_default},"trend":"bullish","successRate":60,"keyLevel":{ema20},"analysis":"texto aqui"' + '}'
         + "\n\nReglas:\n"
@@ -329,6 +508,15 @@ async def analyze(ticker: str):
     entry_mid = round((entry_low + entry_high) / 2, 2)
     rr = round(abs((target - entry_mid) / (entry_mid - stop)), 2) if abs(entry_mid - stop) > 0.001 else 0
 
+    # Score calculado matemáticamente
+    score_data = calc_score(
+        rsi=rsi, ema20=ema20, ema50=ema50, sma200=sma200, price=price,
+        vol_ratio=vol_ratio, mansfield_rs=mansfield_rs,
+        next_earnings=next_earnings, fundamentals=fundamentals, rr=rr
+    )
+    # Si debe evitarse, sobreescribir señal
+    final_signal = "avoid" if score_data['avoid'] else ai.get("signal", "hold")
+
     return JSONResponse(content={
         "ticker":       ticker,
         "price":        price,
@@ -338,7 +526,7 @@ async def analyze(ticker: str):
         "rsi":          rsi,
         "volRatio":     vol_ratio,
         "prices20d":    prices_20d,
-        "signal":       ai.get("signal",      "hold"),
+        "signal":       final_signal,
         "strategy":     ai.get("strategy",    "neutral"),
         "entryLow":     round(entry_low,  2),
         "entryHigh":    round(entry_high, 2),
@@ -346,7 +534,13 @@ async def analyze(ticker: str):
         "target":       round(target,     2),
         "rr":           rr,
         "trend":        ai.get("trend",       "sideways"),
-        "successRate":  int(ai.get("successRate", 50)),
+        "successRate":  score_data['score'],
+        "scoreBreakdown": score_data['breakdown'],
+        "alerts":         score_data['alerts'],
+        "contradictions": score_data['contradictions'],
+        "avoidReason":    score_data['avoidReason'],
+        "momentum4w":     momentum_4w,
+        "maxDays":        max_days,
         "keyLevel":     round(float(ai.get("keyLevel", ema20)), 2),
         "analysis":     str(ai.get("analysis", "")),
         "mansfieldRS":  mansfield_rs,

@@ -12,6 +12,7 @@ const BADGE = {
   buy:      { bg:'#00e09618', text:'#00e096', label:'COMPRAR' },
   sell:     { bg:'#ff406018', text:'#ff4060', label:'VENDER'  },
   hold:     { bg:'#ffb80018', text:'#ffb800', label:'ESPERAR' },
+  avoid:    { bg:'#88888818', text:'#888888', label:'EVITAR'  },
   pullback: { bg:'#00d4ff18', text:'#00d4ff', label:'Pullback' },
   breakout: { bg:'#a78bfa18', text:'#a78bfa', label:'Ruptura'  },
   reversal: { bg:'#fb923c18', text:'#fb923c', label:'Reversión'},
@@ -265,7 +266,7 @@ export default function StockCard({ ticker, onRemove, session }) {
             </div>
             <div style={{ textAlign:'right' }}>
               <div style={{ fontSize:10, color:C.muted, marginBottom:2 }}>Plazo máximo</div>
-              <div style={{ fontSize:13, fontWeight:700, color:C.amber }}>20 días</div>
+              <div style={{ fontSize:13, fontWeight:700, color:C.amber }}>{data.maxDays ?? 20} días</div>
             </div>
           </div>
         </div>
@@ -299,6 +300,14 @@ export default function StockCard({ ticker, onRemove, session }) {
             <span style={{ color:C.muted }}>Volumen vs avg</span>
             <span style={{ color:data.volRatio > 120 ? C.green : C.text, fontFamily:'monospace' }}>{data.volRatio}%</span>
           </div>
+          {data.momentum4w != null && (
+            <div style={{ display:'flex', justifyContent:'space-between' }}>
+              <span style={{ color:C.muted }}>Momentum 4 sem.</span>
+              <span style={{ color: data.momentum4w > 15 ? C.red : data.momentum4w > 0 ? C.green : C.red, fontFamily:'monospace', fontWeight:600 }}>
+                {data.momentum4w > 0 ? '+' : ''}{data.momentum4w?.toFixed(1)}%
+              </span>
+            </div>
+          )}
           <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:8 }}>
             <span style={{ color:C.muted, flexShrink:0 }}>R:B</span>
             <div style={{ flex:1 }}><RRBar rr={data.rr} /></div>
@@ -338,14 +347,56 @@ export default function StockCard({ ticker, onRemove, session }) {
           <span>Análisis detallado</span><span>{expanded ? '▲' : '▼'}</span>
         </button>
 
+        {/* Score de probabilidad */}
+        {data.successRate != null && (
+          <div style={{ background:C.bg, borderRadius:8, padding:'10px 12px' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
+              <span style={{ fontSize:10, color:C.muted, textTransform:'uppercase', letterSpacing:'0.07em' }}>Probabilidad de éxito</span>
+              <span style={{ fontSize:16, fontWeight:700, fontFamily:'monospace',
+                color: data.successRate >= 65 ? C.green : data.successRate >= 45 ? C.amber : C.red }}>
+                {data.successRate}%
+              </span>
+            </div>
+            <div style={{ height:5, background:C.border, borderRadius:3, overflow:'hidden' }}>
+              <div style={{ width:`${data.successRate}%`, height:'100%', borderRadius:3,
+                background: data.successRate >= 65 ? C.green : data.successRate >= 45 ? C.amber : C.red }}/>
+            </div>
+            <div style={{ fontSize:9, color:C.muted, marginTop:4 }}>
+              Calculado en base a RSI, tendencia, volumen, Mansfield RS, earnings y R:B
+            </div>
+          </div>
+        )}
+
+        {/* Alertas y contradicciones */}
+        {((data.alerts && data.alerts.length > 0) || (data.contradictions && data.contradictions.length > 0) || data.avoidReason) && (
+          <div style={{ background:'#1a0a0a', border:`1px solid ${C.red}44`, borderRadius:8, padding:'10px 12px' }}>
+            <div style={{ fontSize:9, color:C.red, letterSpacing:'0.07em', marginBottom:6, textTransform:'uppercase', fontWeight:700 }}>
+              Alertas y advertencias
+            </div>
+            {data.avoidReason && (
+              <div style={{ fontSize:11, color:C.red, marginBottom:6, fontWeight:600 }}>
+                ⊘ {data.avoidReason}
+              </div>
+            )}
+            {data.contradictions && data.contradictions.map((c, i) => (
+              <div key={i} style={{ fontSize:11, color:C.amber, marginBottom:4, paddingLeft:8, borderLeft:`2px solid ${C.amber}` }}>
+                {c}
+              </div>
+            ))}
+            {data.alerts && data.alerts.map((a, i) => (
+              <div key={i} style={{ fontSize:11, color:C.muted, marginBottom:3, paddingLeft:8, borderLeft:`2px solid ${C.border}` }}>
+                {a}
+              </div>
+            ))}
+          </div>
+        )}
+
         {expanded && (
           <div style={{ background:C.bg, borderRadius:8, padding:'12px 14px', fontSize:12, color:C.text, lineHeight:1.8, borderLeft:`3px solid ${signalColor}` }}>
             <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:8, alignItems:'center' }}>
               <span style={{ fontSize:10, color:C.muted }}>Tendencia:</span><Badge type={data.trend} />
               <span style={{ fontSize:10, color:C.muted, marginLeft:6 }}>Nivel clave:</span>
               <span style={{ fontSize:10, color:C.amber, fontFamily:'monospace', fontWeight:700 }}>${data.keyLevel}</span>
-              <span style={{ fontSize:10, color:C.muted, marginLeft:6 }}>Éxito est.:</span>
-              <span style={{ fontSize:10, color:C.amber, fontFamily:'monospace', fontWeight:700 }}>{data.successRate}%</span>
             </div>
             {data.analysis}
           </div>
