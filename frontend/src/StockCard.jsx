@@ -158,7 +158,7 @@ function FundamentalsBlock({ f, nextEarnings }) {
   )
 }
 
-export default function StockCard({ ticker, onRemove, session, onMonitor }) {
+export default function StockCard({ ticker, onRemove, session, onMonitor, onAnalysed, cachedData, isInMonitorTab }) {
   const [data,         setData]         = useState(null)
   const [loading,      setLoading]      = useState(false)
   const [expanded,     setExpanded]     = useState(false)
@@ -177,6 +177,7 @@ export default function StockCard({ ticker, onRemove, session, onMonitor }) {
     try   {
       const json = await fetchAnalysis(ticker)
       setData(json)
+      if (onAnalysed) onAnalysed(ticker, json)
     }
     catch (e) { setData({ error: e.message }) }
     setLoading(false)
@@ -310,10 +311,11 @@ export default function StockCard({ ticker, onRemove, session, onMonitor }) {
               Condiciones técnicas favorables (score {data.successRate}%). Revisar cuando el evento se resuelva.
             </div>
             {onMonitor && (
-              <button onClick={() => onMonitor(ticker, true)}
-                style={{ width:'100%', background:'#00aaff22', border:'1px solid #00aaff55', borderRadius:6,
+              <button onClick={() => onMonitor(ticker, !isInMonitorTab)}
+                style={{ width:'100%', background: isInMonitorTab ? '#00aaff11' : '#00aaff22',
+                  border:'1px solid #00aaff55', borderRadius:6,
                   color:'#00aaff', fontSize:11, fontWeight:700, padding:'6px', cursor:'pointer' }}>
-                + Mover a En Seguimiento
+                {isInMonitorTab ? '← Volver a Watchlist activa' : '+ Mover a En Seguimiento'}
               </button>
             )}
           </div>

@@ -35,95 +35,136 @@ const C = {
 
 export default function App() {
   const [session,        setSession]        = useState(null)
-  const [loading,        setLoading]        = useState(true)
+  const [appLoading,     setAppLoading]     = useState(true)
   const [tab,            setTab]            = useState('watchlist')
-  // FIX: null = not yet loaded from DB, prevents premature save
+
+  // null = not yet loaded from DB
   const [watchlist,      setWatchlist]      = useState(null)
-  const [monitorTickers, setMonitorTickers] = useState([])
+  const [monitorTickers, setMonitorTickers] = useState(null)
+
+  // Centralised analysis cache: { AAPL: {...data}, MSFT: {...data} }
+  const [analysisCache,  setAnalysisCache]  = useState({})
+
   const [search,         setSearch]         = useState('')
   const [refreshKey,     setRefreshKey]     = useState(0)
   const [saved,          setSaved]          = useState(false)
   const [journalCount,   setJournalCount]   = useState(0)
+  const saveTimer = useRef(null)
 
-  // Auth listener
+  // ── Auth ──────────────────────────────────────────────────────────────
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session); setLoading(false)
+      setSession(session)
+      setAppLoading(false)
     })
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session)
-      setWatchlist(null) // reset on session change — will reload from DB
+      if (!session) {
+        setWatchlist(null)
+        setMonitorTickers(null)
+        setAnalysisCache({})
+      }
     })
     return () => subscription.unsubscribe()
   }, [])
 
-  // Load watchlist from Supabase — sets watchlist (possibly to DEFAULT if no data)
+  // ── Load from Supabase (single source of truth) ───────────────────────
   useEffect(() => {
     if (!session) return
-    supabase.from('watchlist').select('tickers').eq('user_id', session.user.id).single()
+    supabase.from('watchlist')
+      .select('tickers, monitor_tickers')
+      .eq('user_id', session.user.id)
+      .single()
       .then(({ data }) => {
-        setWatchlist(data?.tickers?.length ? data.tickers : DEFAULT_WATCHLIST)
+        setWatchlist(data?.tickers?.length     ? data.tickers         : DEFAULT_WATCHLIST)
+        setMonitorTickers(data?.monitor_tickers?.length ? data.monitor_tickers : [])
       })
       .catch(() => {
         setWatchlist(DEFAULT_WATCHLIST)
+        setMonitorTickers([])
       })
   }, [session])
 
-  // Save watchlist — only when watchlist is non-null (i.e. loaded from DB)
-  useEffect(() => {
-    if (!session || watchlist === null) return
-    const save = async () => {
+  // ── Save to Supabase — debounced, only when both are loaded ───────────
+  const saveToSupabase = (tickers, monitorList) => {
+    if (!session || tickers === null || monitorList === null) return
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+    saveTimer.current = setTimeout(async () => {
       await supabase.from('watchlist').upsert({
-        user_id: session.user.id,
-        tickers: watchlist,
-        updated_at: new Date().toISOString()
+        user_id:         session.user.id,
+        tickers,
+        monitor_tickers: monitorList,
+        updated_at:      new Date().toISOString()
       }, { onConflict: 'user_id' })
       setSaved(true)
       setTimeout(() => setSaved(false), 1500)
-    }
-    const t = setTimeout(save, 800)
-    return () => clearTimeout(t)
-  }, [watchlist, session])
+    }, 800)
+  }
 
-  // Journal count
+  // Trigger save when either list changes (but only after both loaded)
+  useEffect(() => {
+    if (watchlist === null || monitorTickers === null) return
+    saveToSupabase(watchlist, monitorTickers)
+  }, [watchlist, monitorTickers, session]) // eslint-disable-line
+
+  // ── Journal count ─────────────────────────────────────────────────────
   useEffect(() => {
     if (!session) return
-    const fetchCount = () => {
+    const fetchCount = () =>
       supabase.from('journal').select('id', { count:'exact' }).eq('user_id', session.user.id)
         .then(({ count }) => setJournalCount(count || 0))
-    }
     fetchCount()
-    const interval = setInterval(fetchCount, 3000)
-    return () => clearInterval(interval)
+    const iv = setInterval(fetchCount, 5000)
+    return () => clearInterval(iv)
   }, [session])
 
-  const activeWatchlist  = (watchlist || []).filter(t => !monitorTickers.includes(t))
-  const monitorWatchlist = (watchlist || []).filter(t => monitorTickers.includes(t))
+  // ── Helpers ───────────────────────────────────────────────────────────
+  const wl      = watchlist      || []
+  const monitor = monitorTickers || []
+
+  const activeWatchlist  = wl.filter(t => !monitor.includes(t))
+  const monitorWatchlist = wl.filter(t =>  monitor.includes(t))
 
   const add = () => {
     const t = search.trim().toUpperCase().replace(/[^A-Z.]/g, '')
-    if (t && watchlist && !watchlist.includes(t)) {
-      setWatchlist(p => [t, ...p]); setSearch('')
-    }
+    if (t && !wl.includes(t)) { setWatchlist(p => [t, ...(p||[])]); setSearch('') }
+  }
+
+  const removeFromAll = (ticker) => {
+    setWatchlist(p => (p||[]).filter(v => v !== ticker))
+    setMonitorTickers(p => (p||[]).filter(v => v !== ticker))
+  }
+
+  const moveToMonitor = (ticker) => {
+    if (!monitor.includes(ticker)) setMonitorTickers(p => [...(p||[]), ticker])
+  }
+
+  const removeFromMonitor = (ticker) => {
+    setMonitorTickers(p => (p||[]).filter(v => v !== ticker))
+  }
+
+  // Cache analysis data from StockCard
+  const cacheAnalysis = (ticker, data) => {
+    setAnalysisCache(prev => ({ ...prev, [ticker]: data }))
   }
 
   const signOut = async () => { await supabase.auth.signOut() }
 
-  if (loading) return (
+  if (appLoading) return (
     <div style={{ minHeight:'100vh', background:C.bg, display:'flex', alignItems:'center', justifyContent:'center' }}>
       <div style={{ color:C.muted, fontSize:14 }}>Cargando...</div>
     </div>
   )
-
   if (!session) return <Auth />
 
-  // Tabs: Watchlist · En Seguimiento · Descubrir · Journal
   const tabs = [
-    ['watchlist', `Watchlist · ${(watchlist||[]).length}`],
-    ...(monitorTickers.length > 0 ? [['monitor', `En Seguimiento · ${monitorTickers.length}`]] : []),
-    ['discover', 'Descubrir'],
-    ['journal',  `Journal · ${journalCount}`],
+    ['watchlist', `Watchlist · ${wl.length}`],
+    ['monitor',   monitor.length > 0 ? `En Seguimiento · ${monitor.length}` : 'En Seguimiento'],
+    ['discover',  'Descubrir'],
+    ['journal',   `Journal · ${journalCount}`],
   ]
+
+  const isLoaded = watchlist !== null && monitorTickers !== null
 
   return (
     <div style={{ paddingBottom:48 }}>
@@ -163,7 +204,7 @@ export default function App() {
                 style={{ background:C.accent, border:'none', borderRadius:9, color:'#000', fontWeight:700, padding:'10px 16px', cursor:'pointer', fontSize:13 }}>
                 + Agregar
               </button>
-              <button onClick={() => setRefreshKey(k=>k+1)}
+              <button onClick={() => { setAnalysisCache({}); setRefreshKey(k=>k+1) }}
                 style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:9, color:C.muted, padding:'10px 13px', cursor:'pointer', fontSize:13 }}>
                 ↻
               </button>
@@ -179,7 +220,8 @@ export default function App() {
                   color: tab===key ? (key==='monitor' ? '#00aaff' : C.accent) : C.muted,
                   padding:'10px 18px', cursor:'pointer', fontSize:12, fontWeight: tab===key ? 700 : 400,
                   display:'flex', alignItems:'center', gap:5 }}>
-                {key === 'monitor' && <span style={{ width:6, height:6, borderRadius:'50%', background:'#00aaff', display:'inline-block' }}/>}
+                {key === 'monitor' && monitor.length > 0 &&
+                  <span style={{ width:6, height:6, borderRadius:'50%', background:'#00aaff', display:'inline-block' }}/>}
                 {label}
               </button>
             ))}
@@ -190,29 +232,28 @@ export default function App() {
       {/* Content */}
       <div style={{ marginTop:20 }}>
 
-        {/* Watchlist activa */}
+        {/* Watchlist activa — display:none para preservar estado */}
         <div style={{ display: tab === 'watchlist' ? 'block' : 'none' }}>
           <div style={{ maxWidth:960, margin:'0 auto', padding:'0 20px' }}>
-            {watchlist === null ? (
+            {!isLoaded ? (
               <div style={{ textAlign:'center', padding:'60px', color:C.muted, fontSize:13 }}>Cargando watchlist...</div>
             ) : (
               <>
                 <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(268px, 1fr))', gap:11 }}>
                   {activeWatchlist.map(t => (
                     <ErrorBoundary key={`${t}-${refreshKey}`}>
-                      <StockCard ticker={t} session={session}
-                        onRemove={x => setWatchlist(p => p.filter(v=>v!==x))}
-                        onMonitor={(ticker, isMonitor) => {
-                          // FIX 1: usuario decide manualmente si mover a seguimiento
-                          // onMonitor solo se llama desde botón explícito en StockCard
-                          if (isMonitor) setMonitorTickers(p => p.includes(ticker) ? p : [...p, ticker])
-                          else setMonitorTickers(p => p.filter(v => v !== ticker))
-                        }}
+                      <StockCard
+                        ticker={t}
+                        session={session}
+                        cachedData={analysisCache[t] || null}
+                        onAnalysed={cacheAnalysis}
+                        onRemove={removeFromAll}
+                        onMonitor={moveToMonitor}
                       />
                     </ErrorBoundary>
                   ))}
                 </div>
-                {activeWatchlist.length === 0 && watchlist.length === 0 && (
+                {activeWatchlist.length === 0 && wl.length === 0 && (
                   <div style={{ textAlign:'center', padding:'60px', color:C.muted, fontSize:14 }}>
                     Agrega tickers con el buscador de arriba
                   </div>
@@ -225,28 +266,38 @@ export default function App() {
           </div>
         </div>
 
-        {/* En Seguimiento */}
+        {/* En Seguimiento — display:none para preservar estado */}
         <div style={{ display: tab === 'monitor' ? 'block' : 'none' }}>
           <div style={{ maxWidth:960, margin:'0 auto', padding:'0 20px' }}>
-            <div style={{ marginBottom:14, padding:'10px 14px', background:'#001a2a', border:'1px solid #00aaff33', borderRadius:9, fontSize:11, color:'#4a8080' }}>
-              Acciones con buenas condiciones técnicas que estás esperando para entrar. Re-analiza después del evento para ver si la señal cambió.
-            </div>
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(268px, 1fr))', gap:11 }}>
-              {monitorWatchlist.map(t => (
-                <ErrorBoundary key={`${t}-${refreshKey}`}>
-                  <StockCard ticker={t} session={session}
-                    onRemove={x => { setWatchlist(p => p.filter(v=>v!==x)); setMonitorTickers(p => p.filter(v=>v!==x)) }}
-                    onMonitor={(ticker, isMonitor) => {
-                      if (!isMonitor) setMonitorTickers(p => p.filter(v => v !== ticker))
-                    }}
-                  />
-                </ErrorBoundary>
-              ))}
-            </div>
-            {monitorWatchlist.length === 0 && (
-              <div style={{ textAlign:'center', padding:'60px', color:C.muted, fontSize:14 }}>
-                No hay acciones en seguimiento
+            {!isLoaded ? (
+              <div style={{ textAlign:'center', padding:'60px', color:C.muted, fontSize:13 }}>Cargando...</div>
+            ) : monitor.length === 0 ? (
+              <div style={{ textAlign:'center', padding:'60px', color:C.muted }}>
+                <div style={{ fontSize:28, marginBottom:12 }}>👁</div>
+                <div style={{ fontSize:14, marginBottom:6 }}>No hay acciones en seguimiento</div>
+                <div style={{ fontSize:11 }}>Cuando una acción tenga buenas condiciones pero no sea el momento de entrar, aparecerá aquí.</div>
               </div>
+            ) : (
+              <>
+                <div style={{ marginBottom:14, padding:'10px 14px', background:'#001a2a', border:'1px solid #00aaff33', borderRadius:9, fontSize:11, color:'#4a8080' }}>
+                  Acciones con buenas condiciones técnicas esperando el momento de entrada. Re-analiza después del evento.
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(268px, 1fr))', gap:11 }}>
+                  {monitorWatchlist.map(t => (
+                    <ErrorBoundary key={`${t}-${refreshKey}`}>
+                      <StockCard
+                        ticker={t}
+                        session={session}
+                        cachedData={analysisCache[t] || null}
+                        onAnalysed={cacheAnalysis}
+                        onRemove={removeFromAll}
+                        onMonitor={removeFromMonitor}
+                        isInMonitorTab={true}
+                      />
+                    </ErrorBoundary>
+                  ))}
+                </div>
+              </>
             )}
           </div>
         </div>
@@ -255,11 +306,9 @@ export default function App() {
         <div style={{ display: tab === 'discover' ? 'block' : 'none' }}>
           <ErrorBoundary>
             <Discover
-              watchlist={watchlist || []}
+              watchlist={wl}
               onAdd={ticker => {
-                if (watchlist && !watchlist.includes(ticker)) {
-                  setWatchlist(p => [ticker, ...p])
-                }
+                if (!wl.includes(ticker)) setWatchlist(p => [ticker, ...(p||[])])
               }}
             />
           </ErrorBoundary>
