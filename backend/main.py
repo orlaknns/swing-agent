@@ -591,9 +591,12 @@ async def analyze(ticker: str):
     # defaults set-and-forget
 
     # Plazo dinámico basado en ATR y distancia al objetivo
-    avg_daily_move = (atr / price * 100) if price > 0 else 1.5  # % diario promedio
+    # ATR como % del precio = movimiento diario real
+    avg_daily_move = (atr / price * 100) if price > 0 else 1.5
     dist_to_target_pct = 12.5  # objetivo base ~12.5%
-    estimated_days = round(dist_to_target_pct / avg_daily_move * 1.5) if avg_daily_move > 0 else 20
+    # Factor 2.5: el precio no se mueve linealmente hacia el objetivo
+    # En la práctica toma 2-3x más días que el movimiento puro sugiere
+    estimated_days = round(dist_to_target_pct / avg_daily_move * 2.5) if avg_daily_move > 0 else 20
     max_days = max(10, min(30, estimated_days))  # entre 10 y 30 días
 
     # defaults set-and-forget

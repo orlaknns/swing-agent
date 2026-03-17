@@ -20,26 +20,35 @@ function calcDaysOpen(dateStr) {
 
 function getSetupDecay(trade) {
   if (trade.status === 'closed') return null
-  const days = calcDaysOpen(trade.date)
+  const days    = calcDaysOpen(trade.date)
+  const maxDays = trade.maxDays || 20
   const entryRef = trade.entryPrice || trade.entryLow || trade.price
   const pnl = trade.exitPrice ? ((trade.exitPrice - entryRef) / entryRef) * 100 : null
+
+  // Umbrales proporcionales al plazo real de la acción
+  const greenLimit  = Math.round(maxDays * 0.30)  // primero 30%
+  const yellowLimit = Math.round(maxDays * 0.70)  // hasta 70%
+
   let color, label, rec
-  if (days <= 3) {
-    color = C.green; label = `Día ${days} — Setup activo`
-    rec = 'Mantener el plan. El setup está dentro de su ventana óptima (1–3 días).'
-  } else if (days <= 7) {
-    color = C.amber; label = `Día ${days} — Setup debilitándose`
-    if (pnl !== null && pnl > 2) rec = `Llevas ${pnl.toFixed(1)}% de ganancia y ${days} días. Considera vender si no avanza hoy.`
+  if (days <= greenLimit) {
+    color = C.green; label = `Día ${days} de ${maxDays} — Setup activo`
+    rec = `Mantener el plan. El setup está dentro de su ventana óptima (días 1–${greenLimit} de ${maxDays}).`
+  } else if (days <= yellowLimit) {
+    color = C.amber; label = `Día ${days} de ${maxDays} — Setup debilitándose`
+    if (pnl !== null && pnl > 2) rec = `Llevas ${pnl.toFixed(1)}% de ganancia y ${days} días. Considera vender si no avanza pronto.`
     else if (pnl !== null && pnl < -1) rec = `El precio no responde (${pnl.toFixed(1)}%) y llevas ${days} días. Evalúa salir antes del stop-loss.`
-    else rec = `El precio lleva ${days} días sin moverse. La probabilidad del setup baja cada día sin confirmación.`
+    else rec = `El precio lleva ${days} días sin moverse significativamente. La probabilidad del setup baja cada día sin confirmación.`
+  } else if (days < maxDays) {
+    color = C.red; label = `Día ${days} de ${maxDays} — Alta probabilidad de invalidación`
+    if (pnl !== null && pnl > 1) rec = `Llevas ${days} días con ganancia (${pnl.toFixed(1)}%). Salir ahora libera capital para un setup más fresco.`
+    else if (pnl !== null && pnl >= -2) rec = `${days} días sin resolverse y casi en breakeven. Salir con pérdida mínima es mejor que esperar al stop-loss.`
+    else rec = `El setup lleva ${days} días y no se cumplió. Revisar si la tesis original sigue siendo válida.`
   } else {
-    color = C.red; label = `Día ${days} — Alta probabilidad de invalidación`
-    if (pnl !== null && pnl > 1) rec = `Llevas ${days} días con ganancia (${pnl.toFixed(1)}%). Salir libera capital para un setup más fresco.`
-    else if (pnl !== null && pnl >= -2) rec = `${days} días sin moverse y casi en breakeven. Salir con pérdida mínima es mejor que esperar al stop-loss.`
-    else rec = `El setup lleva ${days} días y no se cumplió. Revisar si la tesis original sigue válida.`
+    color = C.red; label = `Día ${days} — Plazo máximo vencido`
+    rec = `Han pasado ${days} días (plazo máximo: ${maxDays}). Cerrar la posición independiente del P&L y liberar el capital.`
   }
-  const pct = Math.max(0, Math.min(100, ((10 - days) / 10) * 100))
-  return { days, color, label, rec, pct }
+  const pct = Math.max(0, Math.min(100, ((maxDays - days) / maxDays) * 100))
+  return { days, maxDays, color, label, rec, pct }
 }
 
 function SetupDecayBar({ trade }) {
@@ -289,6 +298,7 @@ function tradeToDb(t, userId) {
     signal: t.signal, strategy: t.strategy, trend: t.trend, price: t.price,
     entry_low: t.entryLow, entry_high: t.entryHigh, stop_loss: t.stopLoss,
     target: t.target,
+    max_days: t.maxDays || 20,
     rr: t.rr, rsi: t.rsi, ema20: t.ema20, ema50: t.ema50, sma200: t.sma200,
     mansfield_rs: t.mansfieldRS, next_earnings: t.nextEarnings,
     fundamentals: t.fundamentals, analysis: t.analysis,
@@ -303,6 +313,7 @@ function dbToTrade(r) {
     signal: r.signal, strategy: r.strategy, trend: r.trend, price: r.price,
     entryLow: r.entry_low, entryHigh: r.entry_high, stopLoss: r.stop_loss,
     target: r.target,
+    maxDays: r.max_days || 20,
     rr: r.rr, rsi: r.rsi, ema20: r.ema20, ema50: r.ema50, sma200: r.sma200,
     mansfieldRS: r.mansfield_rs, nextEarnings: r.next_earnings,
     fundamentals: r.fundamentals, analysis: r.analysis,

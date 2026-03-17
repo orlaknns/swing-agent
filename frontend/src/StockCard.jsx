@@ -259,6 +259,11 @@ export default function StockCard({ ticker, onRemove, session }) {
               <div style={{ background:C.bg, borderRadius:8, padding:'8px 10px', textAlign:'right' }}>
                 <div style={{ fontSize:9, color:C.muted, letterSpacing:'0.07em', marginBottom:4, textTransform:'uppercase' }}>{slLabel}</div>
                 <div style={{ fontSize:12, fontWeight:700, color:C.red, fontFamily:'monospace' }}>${data.stopLoss?.toFixed(2)}</div>
+                <div style={{ fontSize:10, color:C.red, marginTop:2, opacity:0.8 }}>
+                  {data.stopLoss && data.entryLow
+                    ? `${(((data.stopLoss - ((data.entryLow + data.entryHigh)/2)) / ((data.entryLow + data.entryHigh)/2)) * 100).toFixed(1)}% desde entrada`
+                    : ''}
+                </div>
               </div>
             </div>
           )
@@ -384,28 +389,38 @@ export default function StockCard({ ticker, onRemove, session }) {
         )}
 
         {/* Alertas y contradicciones */}
-        {((data.alerts && data.alerts.length > 0) || (data.contradictions && data.contradictions.length > 0) || data.avoidReason) && (
-          <div style={{ background:'#1a0a0a', border:`1px solid ${C.red}44`, borderRadius:8, padding:'10px 12px' }}>
-            <div style={{ fontSize:9, color:C.red, letterSpacing:'0.07em', marginBottom:6, textTransform:'uppercase', fontWeight:700 }}>
-              Alertas y advertencias
+        {((data.alerts && data.alerts.length > 0) || (data.contradictions && data.contradictions.length > 0) || data.signalJustification || data.avoidReason) && (() => {
+          const isHighConf = data.confidenceStars === 3
+          const isAvoid    = data.signal === 'avoid'
+          const bgColor    = isHighConf ? '#0a1a0a' : '#1a0a0a'
+          const borderColor= isHighConf ? C.green+'44' : C.red+'44'
+          const titleColor = isHighConf ? C.green : C.red
+          const titleLabel = isHighConf ? 'Información adicional' : 'Alertas y advertencias'
+          const justColor  = isAvoid ? C.red : isHighConf ? C.green : C.amber
+          const justIcon   = isAvoid ? '⊘ ' : isHighConf ? '✓ ' : 'ℹ '
+          return (
+            <div style={{ background:bgColor, border:`1px solid ${borderColor}`, borderRadius:8, padding:'10px 12px' }}>
+              <div style={{ fontSize:9, color:titleColor, letterSpacing:'0.07em', marginBottom:6, textTransform:'uppercase', fontWeight:700 }}>
+                {titleLabel}
+              </div>
+              {(data.signalJustification || data.avoidReason) && (
+                <div style={{ fontSize:11, color:justColor, marginBottom:6, fontWeight:600 }}>
+                  {justIcon}{data.signalJustification || data.avoidReason}
+                </div>
+              )}
+              {data.contradictions && data.contradictions.map((c, i) => (
+                <div key={i} style={{ fontSize:11, color: isHighConf ? C.muted : C.amber, marginBottom:4, paddingLeft:8, borderLeft:`2px solid ${isHighConf ? C.border : C.amber}` }}>
+                  {c}
+                </div>
+              ))}
+              {data.alerts && data.alerts.map((a, i) => (
+                <div key={i} style={{ fontSize:11, color:C.muted, marginBottom:3, paddingLeft:8, borderLeft:`2px solid ${C.border}` }}>
+                  {a}
+                </div>
+              ))}
             </div>
-            {(data.signalJustification || data.avoidReason) && (
-              <div style={{ fontSize:11, color: data.signal === 'avoid' ? C.red : C.amber, marginBottom:6, fontWeight:600 }}>
-                {data.signal === 'avoid' ? '⊘ ' : 'ℹ '}{data.signalJustification || data.avoidReason}
-              </div>
-            )}
-            {data.contradictions && data.contradictions.map((c, i) => (
-              <div key={i} style={{ fontSize:11, color:C.amber, marginBottom:4, paddingLeft:8, borderLeft:`2px solid ${C.amber}` }}>
-                {c}
-              </div>
-            ))}
-            {data.alerts && data.alerts.map((a, i) => (
-              <div key={i} style={{ fontSize:11, color:C.muted, marginBottom:3, paddingLeft:8, borderLeft:`2px solid ${C.border}` }}>
-                {a}
-              </div>
-            ))}
-          </div>
-        )}
+          )
+        })()}
 
         {expanded && (
           <div style={{ background:C.bg, borderRadius:8, padding:'12px 14px', fontSize:12, color:C.text, lineHeight:1.8, borderLeft:`3px solid ${signalColor}` }}>
