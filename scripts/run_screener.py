@@ -51,6 +51,19 @@ async def fetch_finviz():
                 # Debug: primeros 300 chars
                 preview = html[:300].replace('\n', ' ').replace('\r', '')
                 print(f"  Preview: {preview}")
+                # Buscar contexto alrededor de tickers conocidos
+                for test_t in ['AAPL', 'MSFT', 'NVDA', 'TSLA']:
+                    idx = html.find(f'>{test_t}<')
+                    if idx < 0:
+                        idx = html.find(f'">{test_t}"')
+                    if idx < 0:
+                        idx = html.find(f't={test_t}"')
+                    if idx > 0:
+                        ctx = html[max(0,idx-100):idx+100].replace('\n',' ').replace('\r','')
+                        print(f"  Context {test_t} (pos {idx}): {ctx}")
+                        break
+                else:
+                    print(f"  No known ticker found in HTML")
 
                 # Multiples patrones para encontrar tickers
                 found = re.findall(r'quote\.ashx\?t=([A-Z]{1,5})"', html)
