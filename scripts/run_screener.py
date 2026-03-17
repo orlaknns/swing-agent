@@ -30,67 +30,59 @@ HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
     "Connection": "keep-alive",
     "Referer": "https://finviz.com/",
-    "Cache-Control": "no-cache",
     "Upgrade-Insecure-Requests": "1",
 }
 
 async def fetch_finviz():
-    """Scraping HTML de Finviz para obtener tickers filtrados."""
     tickers = []
-    
     async with httpx.AsyncClient(timeout=30, follow_redirects=True) as c:
         for page_start in [1, 21, 41, 61, 81]:
             url = FINVIZ_URL + f"&r={page_start}"
             try:
                 r = await c.get(url, headers=HEADERS)
-                # Decodificar explícitamente — evita problemas con compresión
-                try:
-                    html = r.content.decode('utf-8', errors='ignore')
-                except Exception:
-                    html = r.text
+                # Decodificar explicitamente para evitar problemas con compresion
+                html = r.content.decode('utf-8', errors='ignore')
                 print(f"Page {page_start}: status={r.status_code} len={len(html)}")
-                
+
                 if r.status_code != 200:
-                    print(f"  Non-200 response, stopping")
+                    print(f"  Non-200, stopping")
                     break
 
-                # Debug: primeros 500 chars
-                preview = html[:500].replace('\n', ' ').replace('\r', '')
+                # Debug: primeros 300 chars
+                preview = html[:300].replace('\n', ' ').replace('\r', '')
                 print(f"  Preview: {preview}")
 
-                # Intentar múltiples patrones
+                # Multiples patrones para encontrar tickers
                 found = re.findall(r'quote\.ashx\?t=([A-Z]{1,5})"', html)
                 if not found:
-                    if not found:
                     found = re.findall(r'"ticker"\s*:\s*"([A-Z]{1,5})"', html)
                 if not found:
                     found = re.findall(r'data-ticker="([A-Z]{1,5})"', html)
                 if not found:
-                    # Finviz nuevo formato — buscar en tabla
                     found = re.findall(r'class="screener-link-primary"[^>]*>([A-Z]{1,5})<', html)
                 if not found:
                     found = re.findall(r'href="/quote\.ashx\?t=([A-Z]{1,5})', html)
 
                 found = list(dict.fromkeys(found))
-                print(f"  Tickers encontrados: {found[:10]}")
-                
+                print(f"  Tickers: {found[:10]}")
+
                 if not found:
-                    print(f"  Sin tickers con ningún patrón — deteniendo")
+                    print(f"  Sin tickers, deteniendo")
                     break
-                    
+
                 new_tickers = [t for t in found if t not in tickers]
                 tickers.extend(new_tickers)
                 print(f"  {len(new_tickers)} nuevos. Total: {len(tickers)}")
-                
+
                 if len(found) < 15:
                     break
-                    
+
                 await asyncio.sleep(2)
-                
+
             except Exception as e:
                 print(f"  Error: {e}")
                 break
-    
+
     return tickers
 
 
@@ -104,15 +96,13 @@ def load_existing():
 
 async def main():
     os.makedirs("data", exist_ok=True)
-    
     now_utc = datetime.now(timezone.utc)
     now_str = now_utc.strftime("%Y-%m-%d %H:%M UTC")
     date_str = now_utc.strftime("%Y-%m-%d")
-    
     print(f"Starting screener at {now_str}")
-    
+
     tickers = await fetch_finviz()
-    
+
     if tickers:
         result = {
             "tickers": tickers[:80],
@@ -128,14 +118,14 @@ async def main():
                 "ema": "EMA20 recently crossed above EMA50"
             }
         }
-        print(f"\nSuccess: {len(tickers[:80])} tickers")
+        print(f"Success: {len(tickers[:80])} tickers")
     else:
         existing = load_existing()
         if existing and existing.get("source") == "finviz":
             existing["source"] = "cached"
             existing["fetchError"] = "Finviz no disponible — usando resultados anteriores"
             result = existing
-            print(f"\nFallback: datos previos de {existing.get('date')}")
+            print(f"Fallback: datos previos de {existing.get('date')}")
         else:
             result = {
                 "tickers": [
@@ -150,12 +140,12 @@ async def main():
                 "source": "curated",
                 "fetchError": "Finviz no disponible — usando lista curada"
             }
-            print("\nFallback: lista curada")
-    
+            print("Fallback: lista curada")
+
     with open("data/screener.json", "w") as f:
         json.dump(result, f, indent=2)
-    
-    print(f"Guardado en data/screener.json — source: {result['source']}")
+
+    print(f"Guardado — source: {result['source']}")
 
 
 if __name__ == "__main__":
