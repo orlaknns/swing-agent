@@ -159,7 +159,7 @@ function FundamentalsBlock({ f, nextEarnings }) {
 }
 
 export default function StockCard({ ticker, onRemove, session, onMonitor, onAnalysed, cachedData, isInMonitorTab }) {
-  const [data,         setData]         = useState(null)
+  const [data,         setData]         = useState(cachedData || null)
   const [loading,      setLoading]      = useState(false)
   const [expanded,     setExpanded]     = useState(false)
   const [ready,        setReady]        = useState(false)
