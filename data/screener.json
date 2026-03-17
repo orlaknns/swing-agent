@@ -43,14 +43,7 @@
   ],
   "count": 40,
   "date": "2026-03-17",
-  "updatedAt": "2026-03-17 14:30 UTC",
-  "source": "cached",
-  "criteria": {
-    "exchange": "NYSE, NASDAQ",
-    "avgVolume": "> 500k",
-    "price": "> $20",
-    "rsi": "30-60 (pullback zone)",
-    "ema": "EMA20 recently crossed above EMA50"
-  },
-  "fetchError": "Finviz scraping failed \u2014 using previous results"
+  "updatedAt": "2026-03-17 23:35 UTC",
+  "source": "curated",
+  "fetchError": "Finviz no disponible \u2014 usando lista curada"
 }
