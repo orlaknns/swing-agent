@@ -1,4 +1,4 @@
-import { useState, useEffect, Component } from 'react'
+import { useState, useEffect, useRef, Component } from 'react'
 import { supabase } from './supabase.js'
 import Auth from './Auth.jsx'
 import StockCard from './StockCard.jsx'
@@ -34,14 +34,17 @@ const C = {
 }
 
 export default function App() {
-  const [session,    setSession]    = useState(null)
-  const [loading,    setLoading]    = useState(true)
-  const [tab,        setTab]        = useState('watchlist')
-  const [watchlist,  setWatchlist]  = useState(DEFAULT_WATCHLIST)
-  const [search,     setSearch]     = useState('')
-  const [refreshKey, setRefreshKey] = useState(0)
-  const [saved,      setSaved]      = useState(false)
+  const [session,      setSession]      = useState(null)
+  const [loading,      setLoading]      = useState(true)
+  const [tab,          setTab]          = useState('watchlist')
+  const [watchlist,    setWatchlist]    = useState(DEFAULT_WATCHLIST)
+  const [search,       setSearch]       = useState('')
+  const [refreshKey,   setRefreshKey]   = useState(0)
+  const [saved,        setSaved]        = useState(false)
   const [journalCount, setJournalCount] = useState(0)
+
+  // FIX #3: flag para no guardar hasta que hayamos cargado de Supabase
+  const loadedFromDB = useRef(false)
 
   // Auth listener
   useEffect(() => {
@@ -50,22 +53,30 @@ export default function App() {
     })
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session)
+      // Reset flag on session change so we reload
+      loadedFromDB.current = false
     })
     return () => subscription.unsubscribe()
   }, [])
 
-  // Load watchlist from Supabase when session changes
+  // Load watchlist from Supabase
   useEffect(() => {
     if (!session) return
     supabase.from('watchlist').select('tickers').eq('user_id', session.user.id).single()
       .then(({ data }) => {
         if (data?.tickers?.length) setWatchlist(data.tickers)
+        // Mark as loaded regardless — even if no data, don't overwrite with default
+        loadedFromDB.current = true
+      })
+      .catch(() => {
+        // Error loading — still mark as loaded to allow future saves
+        loadedFromDB.current = true
       })
   }, [session])
 
-  // Save watchlist to Supabase
+  // Save watchlist — only after loading from DB
   useEffect(() => {
-    if (!session) return
+    if (!session || !loadedFromDB.current) return
     const save = async () => {
       await supabase.from('watchlist').upsert({
         user_id: session.user.id,
@@ -75,19 +86,19 @@ export default function App() {
       setSaved(true)
       setTimeout(() => setSaved(false), 1500)
     }
-    const t = setTimeout(save, 800) // debounce
+    const t = setTimeout(save, 800)
     return () => clearTimeout(t)
   }, [watchlist, session])
 
   // Journal count
   useEffect(() => {
     if (!session) return
-    supabase.from('journal').select('id', { count:'exact' }).eq('user_id', session.user.id)
-      .then(({ count }) => setJournalCount(count || 0))
-    const interval = setInterval(() => {
+    const fetchCount = () => {
       supabase.from('journal').select('id', { count:'exact' }).eq('user_id', session.user.id)
         .then(({ count }) => setJournalCount(count || 0))
-    }, 3000)
+    }
+    fetchCount()
+    const interval = setInterval(fetchCount, 3000)
     return () => clearInterval(interval)
   }, [session])
 
@@ -164,9 +175,11 @@ export default function App() {
         </div>
       </div>
 
-      {/* Content */}
+      {/* Content — FIX #2: usar display:none en vez de desmontar */}
       <div style={{ marginTop:20 }}>
-        {tab === 'watchlist' && (
+
+        {/* Watchlist — siempre montada, solo se oculta */}
+        <div style={{ display: tab === 'watchlist' ? 'block' : 'none' }}>
           <div style={{ maxWidth:960, margin:'0 auto', padding:'0 20px' }}>
             <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(268px, 1fr))', gap:11 }}>
               {watchlist.map(t => (
@@ -184,20 +197,24 @@ export default function App() {
               <b style={{ color:C.amber }}>Aviso:</b> Análisis orientativo. No constituye asesoría financiera.
             </div>
           </div>
-        )}
-        {tab === 'discover' && (
+        </div>
+
+        {/* Descubrir — FIX #1: no redirige al agregar */}
+        <div style={{ display: tab === 'discover' ? 'block' : 'none' }}>
           <ErrorBoundary>
             <Discover
               watchlist={watchlist}
               onAdd={ticker => {
                 if (!watchlist.includes(ticker)) {
                   setWatchlist(p => [ticker, ...p])
-                  setTab('watchlist')
+                  // FIX #1: no cambia de pestaña — el usuario sigue en Descubrir
                 }
               }}
             />
           </ErrorBoundary>
-        )}
+        </div>
+
+        {/* Journal */}
         {tab === 'journal' && (
           <ErrorBoundary>
             <Journal session={session} />
