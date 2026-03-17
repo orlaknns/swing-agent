@@ -10,15 +10,6 @@ import re
 import os
 from datetime import datetime, timezone
 
-# Filtros Finviz para swing trading set-and-forget:
-# exch_nasd|nyse     = NYSE y NASDAQ
-# sh_avgvol_o500     = volumen promedio > 500k
-# sh_price_o20       = precio > $20
-# ta_rsi_30to60      = RSI entre 30 y 60 (zona pullback)
-# ta_ema20_cross50a  = EMA20 cruzó sobre EMA50 recientemente
-# sh_instown_o30     = > 30% institucional (calidad)
-# fa_eps_pos         = EPS positivo
-
 FINVIZ_URL = (
     "https://finviz.com/screener.ashx?v=111&f="
     "exch_nasd|nyse,"
@@ -48,7 +39,6 @@ async def fetch_finviz():
     tickers = []
     
     async with httpx.AsyncClient(timeout=30, follow_redirects=True) as c:
-        # Paginar — Finviz muestra 20 por página, queremos hasta 100
         for page_start in [1, 21, 41, 61, 81]:
             url = FINVIZ_URL + f"&r={page_start}"
             try:
@@ -56,36 +46,49 @@ async def fetch_finviz():
                 print(f"Page {page_start}: status={r.status_code} len={len(r.text)}")
                 
                 if r.status_code != 200:
-                    print(f"  Non-200 response, stopping pagination")
+                    print(f"  Non-200 response, stopping")
                     break
-                
-                # Extraer tickers del HTML
+
+                # Debug: primeros 500 chars para entender el HTML
+                preview = r.text[:500].replace('\n', ' ').replace('\r', '')
+                print(f"  Preview: {preview}")
+
+                # Intentar múltiples patrones
                 found = re.findall(r'quote\.ashx\?t=([A-Z]{1,5})"', r.text)
-                found = list(dict.fromkeys(found))  # dedup manteniendo orden
+                if not found:
+                    found = re.findall(r'"ticker"\s*:\s*"([A-Z]{1,5})"', r.text)
+                if not found:
+                    found = re.findall(r'data-ticker="([A-Z]{1,5})"', r.text)
+                if not found:
+                    # Finviz nuevo formato — buscar en tabla
+                    found = re.findall(r'class="screener-link-primary"[^>]*>([A-Z]{1,5})<', r.text)
+                if not found:
+                    found = re.findall(r'href="/quote\.ashx\?t=([A-Z]{1,5})', r.text)
+
+                found = list(dict.fromkeys(found))
+                print(f"  Tickers encontrados: {found[:10]}")
                 
                 if not found:
-                    print(f"  No tickers found, stopping pagination")
+                    print(f"  Sin tickers con ningún patrón — deteniendo")
                     break
                     
                 new_tickers = [t for t in found if t not in tickers]
                 tickers.extend(new_tickers)
-                print(f"  Found {len(found)} tickers, {len(new_tickers)} new. Total: {len(tickers)}")
+                print(f"  {len(new_tickers)} nuevos. Total: {len(tickers)}")
                 
-                # Si encontramos menos de 20, es la última página
                 if len(found) < 15:
                     break
                     
-                await asyncio.sleep(2)  # respetar rate limit
+                await asyncio.sleep(2)
                 
             except Exception as e:
-                print(f"  Error on page {page_start}: {e}")
+                print(f"  Error: {e}")
                 break
     
     return tickers
 
 
 def load_existing():
-    """Cargar screener.json existente como fallback."""
     path = "data/screener.json"
     if os.path.exists(path):
         with open(path) as f:
@@ -106,7 +109,7 @@ async def main():
     
     if tickers:
         result = {
-            "tickers": tickers[:80],  # máximo 80 candidatas
+            "tickers": tickers[:80],
             "count": len(tickers[:80]),
             "date": date_str,
             "updatedAt": now_str,
@@ -119,17 +122,15 @@ async def main():
                 "ema": "EMA20 recently crossed above EMA50"
             }
         }
-        print(f"\nSuccess: {len(tickers[:80])} tickers found")
+        print(f"\nSuccess: {len(tickers[:80])} tickers")
     else:
-        # Fallback: usar resultado anterior si existe
         existing = load_existing()
-        if existing:
+        if existing and existing.get("source") == "finviz":
             existing["source"] = "cached"
-            existing["fetchError"] = "Finviz scraping failed — using previous results"
+            existing["fetchError"] = "Finviz no disponible — usando resultados anteriores"
             result = existing
-            print(f"\nFallback: using existing data from {existing.get('date', 'unknown')}")
+            print(f"\nFallback: datos previos de {existing.get('date')}")
         else:
-            # Último recurso: lista curada
             result = {
                 "tickers": [
                     "AAPL","MSFT","NVDA","GOOGL","META","AMZN","TSLA","JPM","V","MA",
@@ -141,16 +142,14 @@ async def main():
                 "date": date_str,
                 "updatedAt": now_str,
                 "source": "curated",
-                "fetchError": "Finviz scraping failed — using curated fallback"
+                "fetchError": "Finviz no disponible — usando lista curada"
             }
-            print("\nFallback: using curated list")
+            print("\nFallback: lista curada")
     
     with open("data/screener.json", "w") as f:
         json.dump(result, f, indent=2)
     
-    print(f"Saved to data/screener.json")
-    print(f"Source: {result['source']}")
-    print(f"Tickers: {result['tickers'][:10]}...")
+    print(f"Guardado en data/screener.json — source: {result['source']}")
 
 
 if __name__ == "__main__":
