@@ -28,10 +28,10 @@ HEADERS = {
     ),
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
-    "Accept-Encoding": "gzip, deflate, br",
     "Connection": "keep-alive",
     "Referer": "https://finviz.com/",
     "Cache-Control": "no-cache",
+    "Upgrade-Insecure-Requests": "1",
 }
 
 async def fetch_finviz():
@@ -43,27 +43,33 @@ async def fetch_finviz():
             url = FINVIZ_URL + f"&r={page_start}"
             try:
                 r = await c.get(url, headers=HEADERS)
-                print(f"Page {page_start}: status={r.status_code} len={len(r.text)}")
+                # Decodificar explícitamente — evita problemas con compresión
+                try:
+                    html = r.content.decode('utf-8', errors='ignore')
+                except Exception:
+                    html = r.text
+                print(f"Page {page_start}: status={r.status_code} len={len(html)}")
                 
                 if r.status_code != 200:
                     print(f"  Non-200 response, stopping")
                     break
 
-                # Debug: primeros 500 chars para entender el HTML
-                preview = r.text[:500].replace('\n', ' ').replace('\r', '')
+                # Debug: primeros 500 chars
+                preview = html[:500].replace('\n', ' ').replace('\r', '')
                 print(f"  Preview: {preview}")
 
                 # Intentar múltiples patrones
-                found = re.findall(r'quote\.ashx\?t=([A-Z]{1,5})"', r.text)
+                found = re.findall(r'quote\.ashx\?t=([A-Z]{1,5})"', html)
                 if not found:
-                    found = re.findall(r'"ticker"\s*:\s*"([A-Z]{1,5})"', r.text)
+                    if not found:
+                    found = re.findall(r'"ticker"\s*:\s*"([A-Z]{1,5})"', html)
                 if not found:
-                    found = re.findall(r'data-ticker="([A-Z]{1,5})"', r.text)
+                    found = re.findall(r'data-ticker="([A-Z]{1,5})"', html)
                 if not found:
                     # Finviz nuevo formato — buscar en tabla
-                    found = re.findall(r'class="screener-link-primary"[^>]*>([A-Z]{1,5})<', r.text)
+                    found = re.findall(r'class="screener-link-primary"[^>]*>([A-Z]{1,5})<', html)
                 if not found:
-                    found = re.findall(r'href="/quote\.ashx\?t=([A-Z]{1,5})', r.text)
+                    found = re.findall(r'href="/quote\.ashx\?t=([A-Z]{1,5})', html)
 
                 found = list(dict.fromkeys(found))
                 print(f"  Tickers encontrados: {found[:10]}")
