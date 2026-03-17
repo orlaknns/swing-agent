@@ -40,6 +40,7 @@ export default function App() {
   const [watchlist,    setWatchlist]    = useState(DEFAULT_WATCHLIST)
   const [search,       setSearch]       = useState('')
   const [refreshKey,   setRefreshKey]   = useState(0)
+  const [monitorTickers, setMonitorTickers] = useState([])
   const [saved,        setSaved]        = useState(false)
   const [journalCount, setJournalCount] = useState(0)
 
@@ -181,13 +182,47 @@ export default function App() {
         {/* Watchlist — siempre montada, solo se oculta */}
         <div style={{ display: tab === 'watchlist' ? 'block' : 'none' }}>
           <div style={{ maxWidth:960, margin:'0 auto', padding:'0 20px' }}>
+
+            {/* Tarjetas activas */}
             <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(268px, 1fr))', gap:11 }}>
-              {watchlist.map(t => (
+              {watchlist.filter(t => !monitorTickers.includes(t)).map(t => (
                 <ErrorBoundary key={`${t}-${refreshKey}`}>
-                  <StockCard ticker={t} session={session} onRemove={x => setWatchlist(p => p.filter(v=>v!==x))} />
+                  <StockCard ticker={t} session={session}
+                    onRemove={x => setWatchlist(p => p.filter(v=>v!==x))}
+                    onSignal={(ticker, signal) => {
+                      if (signal === 'monitor') setMonitorTickers(p => p.includes(ticker) ? p : [...p, ticker])
+                      else setMonitorTickers(p => p.filter(v => v !== ticker))
+                    }}
+                  />
                 </ErrorBoundary>
               ))}
             </div>
+
+            {/* Sección En seguimiento */}
+            {monitorTickers.length > 0 && (
+              <div style={{ marginTop:24 }}>
+                <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:12 }}>
+                  <div style={{ width:8, height:8, borderRadius:'50%', background:'#00aaff', animation:'pulse 2s infinite' }}/>
+                  <span style={{ fontSize:12, fontWeight:700, color:'#00aaff', letterSpacing:'0.08em' }}>
+                    EN SEGUIMIENTO — {monitorTickers.length} acción{monitorTickers.length !== 1 ? 'es' : ''}
+                  </span>
+                  <span style={{ fontSize:10, color:C.muted }}>· Buenas condiciones técnicas, esperando el momento de entrada</span>
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(268px, 1fr))', gap:11 }}>
+                  {monitorTickers.map(t => (
+                    <ErrorBoundary key={`${t}-${refreshKey}`}>
+                      <StockCard ticker={t} session={session}
+                        onRemove={x => { setWatchlist(p => p.filter(v=>v!==x)); setMonitorTickers(p => p.filter(v=>v!==x)) }}
+                        onSignal={(ticker, signal) => {
+                          if (signal !== 'monitor') setMonitorTickers(p => p.filter(v => v !== ticker))
+                        }}
+                      />
+                    </ErrorBoundary>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {watchlist.length === 0 && (
               <div style={{ textAlign:'center', padding:'60px', color:C.muted, fontSize:14 }}>
                 Agrega tickers con el buscador de arriba

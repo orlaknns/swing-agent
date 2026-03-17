@@ -447,15 +447,52 @@ def calc_score(rsi, ema20, ema50, sma200, price, vol_ratio, mansfield_rs,
     }
 
 
-def determine_final_signal(score: int, tech_signal: str, contradictions: list) -> dict:
+def determine_final_signal(score: int, tech_signal: str, contradictions: list,
+                           alerts: list = None, next_earnings: str = None,
+                           rsi: float = 50) -> dict:
     """
     Determina la señal final y nivel de confianza basado en:
     - Score matemático
     - Señal técnica de Claude
     - Contradicciones detectadas
+    - Alertas (earnings inminentes, RSI extremo, etc.)
     """
+    from datetime import date
     has_contradiction = len(contradictions) > 0
     is_directional = tech_signal in ("buy", "sell")
+    alerts = alerts or []
+
+    # MONITOREAR — condiciones buenas pero evento temporal impide entrar
+    if score >= 50 and is_directional:
+        monitor_reason = None
+
+        # Earnings en menos de 7 días con buenas condiciones
+        if next_earnings:
+            try:
+                days_to_earn = (date.fromisoformat(next_earnings) - date.today()).days
+                if days_to_earn <= 7:
+                    monitor_reason = (
+                        f"Earnings en {days_to_earn} día{'s' if days_to_earn != 1 else ''} — "
+                        "las condiciones técnicas son buenas pero el reporte puede cambiar la dirección. "
+                        "Esperar el resultado antes de entrar."
+                    )
+            except Exception:
+                pass
+
+        # RSI muy alto pero score bueno (cerca de sobrecompra)
+        if not monitor_reason and rsi >= 68:
+            monitor_reason = (
+                f"RSI en {rsi} — cerca de sobrecompra. "
+                "Las condiciones son buenas pero esperar un pullback a zona 55–60 mejora la entrada."
+            )
+
+        if monitor_reason:
+            return {
+                "signal": "monitor",
+                "confidence": None,
+                "confidenceStars": 0,
+                "justification": monitor_reason
+            }
 
     # EVITAR
     if score < 30:
@@ -652,7 +689,10 @@ async def analyze(ticker: str):
     signal_result = determine_final_signal(
         score=score_data['score'],
         tech_signal=ai.get("signal", "hold"),
-        contradictions=score_data['contradictions']
+        contradictions=score_data['contradictions'],
+        alerts=score_data['alerts'],
+        next_earnings=next_earnings,
+        rsi=rsi
     )
 
     return JSONResponse(content={

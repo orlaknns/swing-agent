@@ -13,6 +13,7 @@ const BADGE = {
   sell:     { bg:'#ff406018', text:'#ff4060', label:'VENDER'  },
   hold:     { bg:'#ffb80018', text:'#ffb800', label:'ESPERAR' },
   avoid:    { bg:'#88888818', text:'#888888', label:'EVITAR'  },
+  monitor:  { bg:'#00aaff18', text:'#00aaff', label:'MONITOREAR' },
   pullback: { bg:'#00d4ff18', text:'#00d4ff', label:'Pullback' },
   breakout: { bg:'#a78bfa18', text:'#a78bfa', label:'Ruptura'  },
   reversal: { bg:'#fb923c18', text:'#fb923c', label:'Reversión'},
@@ -157,7 +158,7 @@ function FundamentalsBlock({ f, nextEarnings }) {
   )
 }
 
-export default function StockCard({ ticker, onRemove, session }) {
+export default function StockCard({ ticker, onRemove, session, onSignal }) {
   const [data,         setData]         = useState(null)
   const [loading,      setLoading]      = useState(false)
   const [expanded,     setExpanded]     = useState(false)
@@ -173,15 +174,20 @@ export default function StockCard({ ticker, onRemove, session }) {
 
   const run = useCallback(async () => {
     setLoading(true); setData(null); setExpanded(false)
-    try   { setData(await fetchAnalysis(ticker)) }
+    try   {
+      const json = await fetchAnalysis(ticker)
+      setData(json)
+      if (onSignal) onSignal(ticker, json.signal)
+    }
     catch (e) { setData({ error: e.message }) }
     setLoading(false)
   }, [ticker])
 
-  const signalColor = data?.signal === 'buy' ? C.green : data?.signal === 'sell' ? C.red : C.amber
+  const signalColor = data?.signal === 'buy' ? C.green : data?.signal === 'sell' ? C.red : data?.signal === 'monitor' ? '#00aaff' : C.amber
   const cardBorder  = !data || data.error ? C.border
     : data.signal === 'buy'  ? `${C.green}55`
     : data.signal === 'sell' ? `${C.red}55`
+    : data.signal === 'monitor' ? '#00aaff33'
     : C.border
 
   /* ── Not yet triggered ── */
@@ -291,6 +297,21 @@ export default function StockCard({ ticker, onRemove, session }) {
             </div>
           </div>
         </div>
+
+        {/* MONITOREAR — razón y condición de espera */}
+        {data.signal === 'monitor' && (
+          <div style={{ background:'#001a2a', border:'1px solid #00aaff44', borderRadius:8, padding:'10px 12px' }}>
+            <div style={{ fontSize:9, color:'#00aaff', letterSpacing:'0.07em', marginBottom:6, textTransform:'uppercase', fontWeight:700 }}>
+              Por qué monitorear
+            </div>
+            <div style={{ fontSize:11, color:'#00aaff', fontWeight:600, marginBottom:8 }}>
+              ℹ {data.signalJustification}
+            </div>
+            <div style={{ fontSize:10, color:'#4a8080', borderTop:'1px solid #00aaff22', paddingTop:6 }}>
+              Las condiciones técnicas son favorables (score {data.successRate}%). Revisar cuando el evento se resuelva.
+            </div>
+          </div>
+        )}
 
         {/* Indicators */}
         <div style={{ display:'flex', flexDirection:'column', gap:7, fontSize:11 }}>
