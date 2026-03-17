@@ -23,38 +23,14 @@ scheduler = AsyncIOScheduler(timezone="America/New_York")
 
 @app.on_event("startup")
 async def startup():
-    """Al iniciar el servidor: carga el screener y programa actualización diaria."""
-    # Cargar inmediatamente al arrancar
-    async with httpx.AsyncClient(timeout=15, follow_redirects=True) as http:
-        try:
-            await fetch_finviz_screener()
-            print("Screener cargado al iniciar")
-        except Exception as e:
-            print(f"Screener startup error: {e}")
-
-    # Programar actualización diaria a las 9:30am ET (apertura NYSE)
-    scheduler.add_job(
-        refresh_screener,
-        CronTrigger(hour=9, minute=30, timezone="America/New_York"),
-        id="daily_screener",
-        replace_existing=True,
-    )
+    """Al iniciar el servidor: log del screener disponible."""
+    data = _load_screener_json()
+    print(f"Screener listo: {data.get('count', 0)} candidatas | source={data.get('source')} | date={data.get('date')}")
     scheduler.start()
-    print("Scheduler iniciado — screener se actualiza cada día a las 9:30am ET")
 
 @app.on_event("shutdown")
 async def shutdown():
     scheduler.shutdown()
-
-async def refresh_screener():
-    """Job diario: actualiza el caché del screener."""
-    global _screener_cache
-    _screener_cache["date"] = ""  # forzar refresh
-    try:
-        await fetch_finviz_screener()
-        print(f"Screener actualizado automáticamente: {len(_screener_cache['data'])} candidatos")
-    except Exception as e:
-        print(f"Error actualizando screener: {e}")
 
 client = Anthropic()
 AV_KEY = os.environ.get("ALPHA_VANTAGE_KEY", "I3ZGIWYTKOVF07TP")
@@ -736,129 +712,48 @@ def health():
     return {"status": "ok"}
 
 
-# ── Screener Finviz ────────────────────────────────────────────────────────
-_screener_cache: dict = {"data": [], "ts": 0, "date": "", "updatedAt": ""}
+# ── Screener — lee data/screener.json generado por GitHub Actions ─────────
+import pathlib, time as _time
 
-async def fetch_finviz_screener() -> list:
-    """
-    Screener para set-and-forget. Intenta Finviz scraping HTML,
-    si falla usa lista curada con filtros aplicados via Alpha Vantage.
-    """
-    import time, csv
-    from datetime import date
-    global _screener_cache
+_SCREENER_JSON = pathlib.Path(__file__).parent.parent / "data" / "screener.json"
 
-    # Caché diario
-    today = str(date.today())
-    if _screener_cache["data"] and _screener_cache["date"] == today:
-        return _screener_cache["data"]
+# Metadata from AV for tickers in the screener
+_ticker_meta: dict = {}
+_meta_ts: float = 0
 
-    # Intentar Finviz screener HTML (más confiable que el CSV export)
-    url = (
-        "https://finviz.com/screener.ashx?v=111&f="
-        "exch_nasd|nyse,"
-        "sh_avgvol_o500,"
-        "sh_price_o20,"
-        "ta_rsi_30to60,"
-        "ta_ema20_cross50a"
-        "&o=-volume&r=1"
-    )
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Referer": "https://finviz.com/",
-        "Cache-Control": "no-cache",
-    }
-
-    results = []
+def _load_screener_json() -> dict:
+    """Lee el JSON generado por GitHub Actions."""
     try:
-        async with httpx.AsyncClient(timeout=20, follow_redirects=True) as c:
-            r = await c.get(url, headers=headers)
-            if r.status_code == 200:
-                text = r.text
-                # Extraer tickers de la tabla HTML con regex
-                import re as re2
-                # Finviz pone los tickers en links como: screener.ashx?...&t=AAPL
-                tickers_found = re2.findall(r'quote\.ashx\?t=([A-Z]{1,5})"', text)
-                # También buscar en tabla de resultados
-                tickers_found += re2.findall(r'"ticker">([A-Z]{1,5})<', text)
-                tickers_found = list(dict.fromkeys(tickers_found))[:60]  # dedup
-
-                if tickers_found:
-                    for t in tickers_found:
-                        results.append({
-                            "ticker": t, "company": "", "sector": "",
-                            "price": 0, "volume": 0, "mktCap": "",
-                        })
+        if _SCREENER_JSON.exists():
+            with open(_SCREENER_JSON) as f:
+                return json.load(f)
     except Exception as e:
-        print(f"Finviz HTML error: {e}")
-
-    # Si Finviz funcionó, guardar y retornar
-    if results:
-        from datetime import datetime
-        import pytz
-        et = pytz.timezone("America/New_York")
-        updated_at = datetime.now(et).strftime("%Y-%m-%d %H:%M ET")
-        _screener_cache["data"]      = results
-        _screener_cache["ts"]        = time.time()
-        _screener_cache["date"]      = today
-        _screener_cache["updatedAt"] = updated_at
-        print(f"Screener Finviz: {len(results)} candidatos — {updated_at}")
-        return results
-
-    # Fallback: lista curada
-    print("Screener usando lista curada (fallback)")
-    results = _curated_fallback()
-    from datetime import datetime
-    import pytz
-    et = pytz.timezone("America/New_York")
-    updated_at = datetime.now(et).strftime("%Y-%m-%d %H:%M ET")
-    _screener_cache["data"]      = results
-    _screener_cache["ts"]        = time.time()
-    _screener_cache["date"]      = today
-    _screener_cache["updatedAt"] = updated_at
-    return results
-
-
-def _curated_fallback() -> list:
-    """Lista curada de 40 acciones líquidas — fallback si Finviz no responde."""
-    tickers = [
-        ("AAPL","Apple Inc","Technology"),("MSFT","Microsoft Corp","Technology"),
-        ("NVDA","NVIDIA Corp","Technology"),("GOOGL","Alphabet Inc","Technology"),
-        ("META","Meta Platforms","Technology"),("AMZN","Amazon.com","Consumer Cyclical"),
-        ("TSLA","Tesla Inc","Consumer Cyclical"),("JPM","JPMorgan Chase","Financial"),
-        ("V","Visa Inc","Financial"),("MA","Mastercard","Financial"),
-        ("UNH","UnitedHealth Group","Healthcare"),("JNJ","Johnson & Johnson","Healthcare"),
-        ("PG","Procter & Gamble","Consumer Defensive"),("HD","Home Depot","Consumer Cyclical"),
-        ("AVGO","Broadcom Inc","Technology"),("CRM","Salesforce","Technology"),
-        ("AMD","Advanced Micro Devices","Technology"),("ORCL","Oracle Corp","Technology"),
-        ("NFLX","Netflix Inc","Communication"),("DIS","Walt Disney","Communication"),
-        ("PYPL","PayPal Holdings","Financial"),("SQ","Block Inc","Financial"),
-        ("SHOP","Shopify Inc","Technology"),("SNOW","Snowflake Inc","Technology"),
-        ("PLTR","Palantir Technologies","Technology"),("COIN","Coinbase Global","Financial"),
-        ("UBER","Uber Technologies","Technology"),("LYFT","Lyft Inc","Technology"),
-        ("ABNB","Airbnb Inc","Consumer Cyclical"),("DASH","DoorDash Inc","Consumer Cyclical"),
-        ("ZM","Zoom Video","Technology"),("DDOG","Datadog Inc","Technology"),
-        ("NET","Cloudflare Inc","Technology"),("CRWD","CrowdStrike","Technology"),
-        ("PANW","Palo Alto Networks","Technology"),("SMCI","Super Micro Computer","Technology"),
-        ("ARM","Arm Holdings","Technology"),("MU","Micron Technology","Technology"),
-        ("INTC","Intel Corp","Technology"),("QCOM","Qualcomm Inc","Technology"),
-    ]
-    return [{"ticker":t,"company":c,"sector":s,"price":0,"volume":0,"mktCap":""} for t,c,s in tickers]
-
+        print(f"Error reading screener.json: {e}")
+    return {
+        "tickers": ["AAPL","MSFT","NVDA","GOOGL","META","AMZN","TSLA","JPM","V","MA",
+                    "UNH","JNJ","PG","HD","AVGO","CRM","AMD","ORCL","NFLX","DIS",
+                    "PYPL","SHOP","SNOW","PLTR","COIN","UBER","ABNB","DDOG","NET","CRWD"],
+        "count": 30,
+        "date": "",
+        "updatedAt": "",
+        "source": "curated",
+    }
 
 @app.get("/screener")
 async def screener():
-    """Devuelve acciones candidatas para swing trading set-and-forget."""
-    candidates = await fetch_finviz_screener()
+    """Devuelve candidatas desde data/screener.json (generado por GitHub Actions)."""
+    data = _load_screener_json()
+    tickers = data.get("tickers", [])
+    # Convertir lista de tickers a formato de candidatas
+    candidates = [{"ticker": t, "company": "", "sector": ""} for t in tickers]
     return JSONResponse(
         content={
             "candidates": candidates,
             "count": len(candidates),
-            "date": _screener_cache.get("date", ""),
-            "updatedAt": _screener_cache.get("updatedAt", ""),
-            "source": "finviz" if candidates and candidates[0].get("price", 0) > 0 else "curated"
+            "date": data.get("date", ""),
+            "updatedAt": data.get("updatedAt", ""),
+            "source": data.get("source", "curated"),
+            "criteria": data.get("criteria", {}),
         },
         media_type="application/json; charset=utf-8"
     )

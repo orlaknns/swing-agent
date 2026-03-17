@@ -1,0 +1,19 @@
+{
+  "tickers": [
+    "AAPL","MSFT","NVDA","GOOGL","META","AMZN","TSLA","JPM","V","MA",
+    "UNH","JNJ","PG","HD","AVGO","CRM","AMD","ORCL","NFLX","DIS",
+    "PYPL","SHOP","SNOW","PLTR","COIN","UBER","ABNB","DDOG","NET","CRWD",
+    "PANW","SMCI","ARM","MU","INTC","QCOM","XOM","CVX","BAC","GS"
+  ],
+  "count": 40,
+  "date": "2026-03-17",
+  "updatedAt": "2026-03-17 14:30 UTC",
+  "source": "curated",
+  "criteria": {
+    "exchange": "NYSE, NASDAQ",
+    "avgVolume": "> 500k",
+    "price": "> $20",
+    "rsi": "30-60 (pullback zone)",
+    "ema": "EMA20 recently crossed above EMA50"
+  }
+}
