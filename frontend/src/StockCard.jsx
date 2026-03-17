@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { saveTradeToJournal } from './Journal.jsx'
 import { LineChart, Line, ResponsiveContainer, Tooltip } from 'recharts'
 
