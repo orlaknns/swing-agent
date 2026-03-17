@@ -162,8 +162,16 @@ export default function StockCard({ ticker, onRemove, session, onMonitor, onAnal
   const [data,         setData]         = useState(cachedData || null)
   const [loading,      setLoading]      = useState(false)
   const [expanded,     setExpanded]     = useState(false)
-  const [ready,        setReady]        = useState(false)
+  const [ready,        setReady]        = useState(!!cachedData)
   const [journalSaved, setJournalSaved] = useState(false)
+
+  // Sync with cache when prop updates (e.g. moving to En Seguimiento)
+  useEffect(() => {
+    if (cachedData && !data) {
+      setData(cachedData)
+      setReady(true)
+    }
+  }, [cachedData])
 
   const saveToJournal = async () => {
     if (!data || data.error || !session) return
