@@ -31,6 +31,21 @@ function Badge({ type }) {
   )
 }
 
+function ConfidenceBadge({ signal, stars }) {
+  if (!stars || stars === 0) return null
+  const isBuy  = signal === 'buy'
+  const isSell = signal === 'sell'
+  if (!isBuy && !isSell) return null
+  const color = stars === 3 ? C.green : stars === 2 ? C.amber : '#ff8c00'
+  const filled = '★'.repeat(stars)
+  const empty  = '☆'.repeat(3 - stars)
+  return (
+    <span style={{ fontSize:11, color, fontWeight:700, letterSpacing:'0.05em' }}>
+      {filled}{empty}
+    </span>
+  )
+}
+
 function RRBar({ rr }) {
   const pct   = Math.min(((rr || 0) / 4) * 100, 100)
   const color = rr >= 2 ? C.green : rr >= 1 ? C.amber : C.red
@@ -195,6 +210,7 @@ export default function StockCard({ ticker, onRemove, session }) {
         </div>
         <div style={{ display:'flex', gap:4, alignItems:'center', flexShrink:0 }}>
           {data && !data.error && <Badge type={data.signal} />}
+          {data && !data.error && <ConfidenceBadge signal={data.signal} stars={data.confidenceStars} />}
           <button onClick={run} disabled={loading}
             style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:6, color:C.muted, cursor:loading?'not-allowed':'pointer', padding:'3px 7px', fontSize:11 }}>↻</button>
           <button onClick={() => onRemove(ticker)}
@@ -373,9 +389,9 @@ export default function StockCard({ ticker, onRemove, session }) {
             <div style={{ fontSize:9, color:C.red, letterSpacing:'0.07em', marginBottom:6, textTransform:'uppercase', fontWeight:700 }}>
               Alertas y advertencias
             </div>
-            {data.avoidReason && (
-              <div style={{ fontSize:11, color:C.red, marginBottom:6, fontWeight:600 }}>
-                ⊘ {data.avoidReason}
+            {(data.signalJustification || data.avoidReason) && (
+              <div style={{ fontSize:11, color: data.signal === 'avoid' ? C.red : C.amber, marginBottom:6, fontWeight:600 }}>
+                {data.signal === 'avoid' ? '⊘ ' : 'ℹ '}{data.signalJustification || data.avoidReason}
               </div>
             )}
             {data.contradictions && data.contradictions.map((c, i) => (

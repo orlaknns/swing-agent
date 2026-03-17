@@ -447,6 +447,98 @@ def calc_score(rsi, ema20, ema50, sma200, price, vol_ratio, mansfield_rs,
     }
 
 
+def determine_final_signal(score: int, tech_signal: str, contradictions: list) -> dict:
+    """
+    Determina la señal final y nivel de confianza basado en:
+    - Score matemático
+    - Señal técnica de Claude
+    - Contradicciones detectadas
+    """
+    has_contradiction = len(contradictions) > 0
+    is_directional = tech_signal in ("buy", "sell")
+
+    # EVITAR
+    if score < 30:
+        return {
+            "signal": "avoid",
+            "confidence": None,
+            "confidenceStars": 0,
+            "justification": "Demasiados factores en contra simultáneamente. No es buen momento para operar."
+        }
+    if 30 <= score <= 44 and has_contradiction:
+        return {
+            "signal": "avoid",
+            "confidence": None,
+            "confidenceStars": 0,
+            "justification": "Condiciones débiles con señales contradictorias. No operar."
+        }
+
+    # ESPERAR
+    if 30 <= score <= 44 and not has_contradiction:
+        return {
+            "signal": "hold",
+            "confidence": None,
+            "confidenceStars": 0,
+            "justification": "Condiciones insuficientes para operar con confianza. Esperar mejor setup."
+        }
+    if not is_directional:  # HOLD de Claude
+        return {
+            "signal": "hold",
+            "confidence": None,
+            "confidenceStars": 0,
+            "justification": "Sin dirección técnica clara. Monitorear y esperar setup definido."
+        }
+    if 45 <= score <= 64 and has_contradiction:
+        # Baja confianza — sigue siendo direccional pero con advertencia
+        action = "buy" if tech_signal == "buy" else "sell"
+        return {
+            "signal": action,
+            "confidence": "low",
+            "confidenceStars": 1,
+            "justification": (
+                "Setup técnico presente pero señales fundamentales contradicen la dirección. "
+                "Riesgo elevado — operar con posición reducida si se decide entrar."
+            )
+        }
+
+    # COMPRAR / VENDER con confianza media o alta
+    action = "buy" if tech_signal == "buy" else "sell"
+    action_label = "compra" if action == "buy" else "venta corta"
+
+    if score >= 65 and not has_contradiction:
+        return {
+            "signal": action,
+            "confidence": "high",
+            "confidenceStars": 3,
+            "justification": f"Condiciones técnicas y fundamentales alineadas. Setup de {action_label} de alta calidad."
+        }
+    if score >= 65 and has_contradiction:
+        return {
+            "signal": action,
+            "confidence": "medium",
+            "confidenceStars": 2,
+            "justification": (
+                f"Setup técnico sólido para {action_label}. "
+                "Los fundamentales presentan señales mixtas — operar con posición más pequeña."
+            )
+        }
+    if 45 <= score <= 64 and not has_contradiction:
+        return {
+            "signal": action,
+            "confidence": "medium",
+            "confidenceStars": 2,
+            "justification": f"Condiciones favorables con algunos factores neutros. Setup de {action_label} aceptable."
+        }
+
+    # fallback
+    return {
+        "signal": "hold",
+        "confidence": None,
+        "confidenceStars": 0,
+        "justification": "Condiciones no concluyentes. Esperar mejor momento."
+    }
+
+
 def extract_json(text: str) -> dict:
     text = re.sub(r"```[a-z]*|```", "", text).strip()
     match = re.search(r'\{[^{}]*\}', text, re.DOTALL)
@@ -553,8 +645,12 @@ async def analyze(ticker: str):
         vol_ratio=vol_ratio, mansfield_rs=mansfield_rs,
         next_earnings=next_earnings, fundamentals=fundamentals, rr=rr
     )
-    # Si debe evitarse, sobreescribir señal
-    final_signal = "avoid" if score_data['avoid'] else ai.get("signal", "hold")
+    # Determinar señal final con nivel de confianza
+    signal_result = determine_final_signal(
+        score=score_data['score'],
+        tech_signal=ai.get("signal", "hold"),
+        contradictions=score_data['contradictions']
+    )
 
     return JSONResponse(content={
         "ticker":       ticker,
@@ -565,7 +661,10 @@ async def analyze(ticker: str):
         "rsi":          rsi,
         "volRatio":     vol_ratio,
         "prices20d":    prices_20d,
-        "signal":       final_signal,
+        "signal":       signal_result["signal"],
+        "confidence":   signal_result["confidence"],
+        "confidenceStars": signal_result["confidenceStars"],
+        "signalJustification": signal_result["justification"],
         "strategy":     ai.get("strategy",    "neutral"),
         "entryLow":     round(entry_low,  2),
         "entryHigh":    round(entry_high, 2),
@@ -577,7 +676,7 @@ async def analyze(ticker: str):
         "scoreBreakdown": score_data['breakdown'],
         "alerts":         score_data['alerts'],
         "contradictions": score_data['contradictions'],
-        "avoidReason":    score_data['avoidReason'],
+        "avoidReason":    score_data['avoidReason'] or signal_result["justification"],
         "momentum4w":     momentum_4w,
         "maxDays":        max_days,
         "keyLevel":     round(float(ai.get("keyLevel", ema20)), 2),
