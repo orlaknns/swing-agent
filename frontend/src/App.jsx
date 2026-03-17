@@ -34,18 +34,16 @@ const C = {
 }
 
 export default function App() {
-  const [session,      setSession]      = useState(null)
-  const [loading,      setLoading]      = useState(true)
-  const [tab,          setTab]          = useState('watchlist')
-  const [watchlist,    setWatchlist]    = useState(DEFAULT_WATCHLIST)
-  const [search,       setSearch]       = useState('')
-  const [refreshKey,   setRefreshKey]   = useState(0)
+  const [session,        setSession]        = useState(null)
+  const [loading,        setLoading]        = useState(true)
+  const [tab,            setTab]            = useState('watchlist')
+  // FIX: null = not yet loaded from DB, prevents premature save
+  const [watchlist,      setWatchlist]      = useState(null)
   const [monitorTickers, setMonitorTickers] = useState([])
-  const [saved,        setSaved]        = useState(false)
-  const [journalCount, setJournalCount] = useState(0)
-
-  // FIX #3: flag para no guardar hasta que hayamos cargado de Supabase
-  const loadedFromDB = useRef(false)
+  const [search,         setSearch]         = useState('')
+  const [refreshKey,     setRefreshKey]     = useState(0)
+  const [saved,          setSaved]          = useState(false)
+  const [journalCount,   setJournalCount]   = useState(0)
 
   // Auth listener
   useEffect(() => {
@@ -54,30 +52,26 @@ export default function App() {
     })
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session)
-      // Reset flag on session change so we reload
-      loadedFromDB.current = false
+      setWatchlist(null) // reset on session change — will reload from DB
     })
     return () => subscription.unsubscribe()
   }, [])
 
-  // Load watchlist from Supabase
+  // Load watchlist from Supabase — sets watchlist (possibly to DEFAULT if no data)
   useEffect(() => {
     if (!session) return
     supabase.from('watchlist').select('tickers').eq('user_id', session.user.id).single()
       .then(({ data }) => {
-        if (data?.tickers?.length) setWatchlist(data.tickers)
-        // Mark as loaded regardless — even if no data, don't overwrite with default
-        loadedFromDB.current = true
+        setWatchlist(data?.tickers?.length ? data.tickers : DEFAULT_WATCHLIST)
       })
       .catch(() => {
-        // Error loading — still mark as loaded to allow future saves
-        loadedFromDB.current = true
+        setWatchlist(DEFAULT_WATCHLIST)
       })
   }, [session])
 
-  // Save watchlist — only after loading from DB
+  // Save watchlist — only when watchlist is non-null (i.e. loaded from DB)
   useEffect(() => {
-    if (!session || !loadedFromDB.current) return
+    if (!session || watchlist === null) return
     const save = async () => {
       await supabase.from('watchlist').upsert({
         user_id: session.user.id,
@@ -103,9 +97,14 @@ export default function App() {
     return () => clearInterval(interval)
   }, [session])
 
+  const activeWatchlist  = (watchlist || []).filter(t => !monitorTickers.includes(t))
+  const monitorWatchlist = (watchlist || []).filter(t => monitorTickers.includes(t))
+
   const add = () => {
     const t = search.trim().toUpperCase().replace(/[^A-Z.]/g, '')
-    if (t && !watchlist.includes(t)) { setWatchlist(p => [t, ...p]); setSearch('') }
+    if (t && watchlist && !watchlist.includes(t)) {
+      setWatchlist(p => [t, ...p]); setSearch('')
+    }
   }
 
   const signOut = async () => { await supabase.auth.signOut() }
@@ -117,6 +116,14 @@ export default function App() {
   )
 
   if (!session) return <Auth />
+
+  // Tabs: Watchlist · En Seguimiento · Descubrir · Journal
+  const tabs = [
+    ['watchlist', `Watchlist · ${(watchlist||[]).length}`],
+    ...(monitorTickers.length > 0 ? [['monitor', `En Seguimiento · ${monitorTickers.length}`]] : []),
+    ['discover', 'Descubrir'],
+    ['journal',  `Journal · ${journalCount}`],
+  ]
 
   return (
     <div style={{ paddingBottom:48 }}>
@@ -165,10 +172,14 @@ export default function App() {
 
           {/* Tabs */}
           <div style={{ display:'flex', borderTop:`1px solid ${C.border}` }}>
-            {[['watchlist',`Watchlist · ${watchlist.length}`], ['discover','Descubrir'], ['journal',`Journal · ${journalCount}`]].map(([key, label]) => (
+            {tabs.map(([key, label]) => (
               <button key={key} onClick={() => setTab(key)}
-                style={{ background:'none', border:'none', borderBottom: tab===key ? `2px solid ${C.accent}` : '2px solid transparent',
-                  color: tab===key ? C.accent : C.muted, padding:'10px 18px', cursor:'pointer', fontSize:12, fontWeight: tab===key ? 700 : 400 }}>
+                style={{ background:'none', border:'none',
+                  borderBottom: tab===key ? `2px solid ${key==='monitor' ? '#00aaff' : C.accent}` : '2px solid transparent',
+                  color: tab===key ? (key==='monitor' ? '#00aaff' : C.accent) : C.muted,
+                  padding:'10px 18px', cursor:'pointer', fontSize:12, fontWeight: tab===key ? 700 : 400,
+                  display:'flex', alignItems:'center', gap:5 }}>
+                {key === 'monitor' && <span style={{ width:6, height:6, borderRadius:'50%', background:'#00aaff', display:'inline-block' }}/>}
                 {label}
               </button>
             ))}
@@ -176,73 +187,78 @@ export default function App() {
         </div>
       </div>
 
-      {/* Content — FIX #2: usar display:none en vez de desmontar */}
+      {/* Content */}
       <div style={{ marginTop:20 }}>
 
-        {/* Watchlist — siempre montada, solo se oculta */}
+        {/* Watchlist activa */}
         <div style={{ display: tab === 'watchlist' ? 'block' : 'none' }}>
           <div style={{ maxWidth:960, margin:'0 auto', padding:'0 20px' }}>
-
-            {/* Tarjetas activas */}
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(268px, 1fr))', gap:11 }}>
-              {watchlist.filter(t => !monitorTickers.includes(t)).map(t => (
-                <ErrorBoundary key={`${t}-${refreshKey}`}>
-                  <StockCard ticker={t} session={session}
-                    onRemove={x => setWatchlist(p => p.filter(v=>v!==x))}
-                    onSignal={(ticker, signal) => {
-                      if (signal === 'monitor') setMonitorTickers(p => p.includes(ticker) ? p : [...p, ticker])
-                      else setMonitorTickers(p => p.filter(v => v !== ticker))
-                    }}
-                  />
-                </ErrorBoundary>
-              ))}
-            </div>
-
-            {/* Sección En seguimiento */}
-            {monitorTickers.length > 0 && (
-              <div style={{ marginTop:24 }}>
-                <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:12 }}>
-                  <div style={{ width:8, height:8, borderRadius:'50%', background:'#00aaff', animation:'pulse 2s infinite' }}/>
-                  <span style={{ fontSize:12, fontWeight:700, color:'#00aaff', letterSpacing:'0.08em' }}>
-                    EN SEGUIMIENTO — {monitorTickers.length} acción{monitorTickers.length !== 1 ? 'es' : ''}
-                  </span>
-                  <span style={{ fontSize:10, color:C.muted }}>· Buenas condiciones técnicas, esperando el momento de entrada</span>
-                </div>
+            {watchlist === null ? (
+              <div style={{ textAlign:'center', padding:'60px', color:C.muted, fontSize:13 }}>Cargando watchlist...</div>
+            ) : (
+              <>
                 <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(268px, 1fr))', gap:11 }}>
-                  {monitorTickers.map(t => (
+                  {activeWatchlist.map(t => (
                     <ErrorBoundary key={`${t}-${refreshKey}`}>
                       <StockCard ticker={t} session={session}
-                        onRemove={x => { setWatchlist(p => p.filter(v=>v!==x)); setMonitorTickers(p => p.filter(v=>v!==x)) }}
-                        onSignal={(ticker, signal) => {
-                          if (signal !== 'monitor') setMonitorTickers(p => p.filter(v => v !== ticker))
+                        onRemove={x => setWatchlist(p => p.filter(v=>v!==x))}
+                        onMonitor={(ticker, isMonitor) => {
+                          // FIX 1: usuario decide manualmente si mover a seguimiento
+                          // onMonitor solo se llama desde botón explícito en StockCard
+                          if (isMonitor) setMonitorTickers(p => p.includes(ticker) ? p : [...p, ticker])
+                          else setMonitorTickers(p => p.filter(v => v !== ticker))
                         }}
                       />
                     </ErrorBoundary>
                   ))}
                 </div>
-              </div>
+                {activeWatchlist.length === 0 && watchlist.length === 0 && (
+                  <div style={{ textAlign:'center', padding:'60px', color:C.muted, fontSize:14 }}>
+                    Agrega tickers con el buscador de arriba
+                  </div>
+                )}
+                <div style={{ marginTop:18, padding:'12px 14px', background:C.card, borderRadius:9, border:`1px solid ${C.border}`, fontSize:11, color:C.muted }}>
+                  <b style={{ color:C.amber }}>Aviso:</b> Análisis orientativo. No constituye asesoría financiera.
+                </div>
+              </>
             )}
-
-            {watchlist.length === 0 && (
-              <div style={{ textAlign:'center', padding:'60px', color:C.muted, fontSize:14 }}>
-                Agrega tickers con el buscador de arriba
-              </div>
-            )}
-            <div style={{ marginTop:18, padding:'12px 14px', background:C.card, borderRadius:9, border:`1px solid ${C.border}`, fontSize:11, color:C.muted }}>
-              <b style={{ color:C.amber }}>Aviso:</b> Análisis orientativo. No constituye asesoría financiera.
-            </div>
           </div>
         </div>
 
-        {/* Descubrir — FIX #1: no redirige al agregar */}
+        {/* En Seguimiento */}
+        <div style={{ display: tab === 'monitor' ? 'block' : 'none' }}>
+          <div style={{ maxWidth:960, margin:'0 auto', padding:'0 20px' }}>
+            <div style={{ marginBottom:14, padding:'10px 14px', background:'#001a2a', border:'1px solid #00aaff33', borderRadius:9, fontSize:11, color:'#4a8080' }}>
+              Acciones con buenas condiciones técnicas que estás esperando para entrar. Re-analiza después del evento para ver si la señal cambió.
+            </div>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(268px, 1fr))', gap:11 }}>
+              {monitorWatchlist.map(t => (
+                <ErrorBoundary key={`${t}-${refreshKey}`}>
+                  <StockCard ticker={t} session={session}
+                    onRemove={x => { setWatchlist(p => p.filter(v=>v!==x)); setMonitorTickers(p => p.filter(v=>v!==x)) }}
+                    onMonitor={(ticker, isMonitor) => {
+                      if (!isMonitor) setMonitorTickers(p => p.filter(v => v !== ticker))
+                    }}
+                  />
+                </ErrorBoundary>
+              ))}
+            </div>
+            {monitorWatchlist.length === 0 && (
+              <div style={{ textAlign:'center', padding:'60px', color:C.muted, fontSize:14 }}>
+                No hay acciones en seguimiento
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Descubrir */}
         <div style={{ display: tab === 'discover' ? 'block' : 'none' }}>
           <ErrorBoundary>
             <Discover
-              watchlist={watchlist}
+              watchlist={watchlist || []}
               onAdd={ticker => {
-                if (!watchlist.includes(ticker)) {
+                if (watchlist && !watchlist.includes(ticker)) {
                   setWatchlist(p => [ticker, ...p])
-                  // FIX #1: no cambia de pestaña — el usuario sigue en Descubrir
                 }
               }}
             />

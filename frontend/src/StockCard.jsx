@@ -158,7 +158,7 @@ function FundamentalsBlock({ f, nextEarnings }) {
   )
 }
 
-export default function StockCard({ ticker, onRemove, session, onSignal }) {
+export default function StockCard({ ticker, onRemove, session, onMonitor }) {
   const [data,         setData]         = useState(null)
   const [loading,      setLoading]      = useState(false)
   const [expanded,     setExpanded]     = useState(false)
@@ -177,7 +177,6 @@ export default function StockCard({ ticker, onRemove, session, onSignal }) {
     try   {
       const json = await fetchAnalysis(ticker)
       setData(json)
-      if (onSignal) onSignal(ticker, json.signal)
     }
     catch (e) { setData({ error: e.message }) }
     setLoading(false)
@@ -307,9 +306,16 @@ export default function StockCard({ ticker, onRemove, session, onSignal }) {
             <div style={{ fontSize:11, color:'#00aaff', fontWeight:600, marginBottom:8 }}>
               ℹ {data.signalJustification}
             </div>
-            <div style={{ fontSize:10, color:'#4a8080', borderTop:'1px solid #00aaff22', paddingTop:6 }}>
-              Las condiciones técnicas son favorables (score {data.successRate}%). Revisar cuando el evento se resuelva.
+            <div style={{ fontSize:10, color:'#4a8080', borderTop:'1px solid #00aaff22', paddingTop:6, marginBottom:8 }}>
+              Condiciones técnicas favorables (score {data.successRate}%). Revisar cuando el evento se resuelva.
             </div>
+            {onMonitor && (
+              <button onClick={() => onMonitor(ticker, true)}
+                style={{ width:'100%', background:'#00aaff22', border:'1px solid #00aaff55', borderRadius:6,
+                  color:'#00aaff', fontSize:11, fontWeight:700, padding:'6px', cursor:'pointer' }}>
+                + Mover a En Seguimiento
+              </button>
+            )}
           </div>
         )}
 

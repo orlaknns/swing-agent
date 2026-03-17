@@ -60,15 +60,27 @@ export default function Discover({ watchlist, onAdd }) {
         <p style={{ fontSize:11, color:C.muted, margin:'4px 0 0' }}>
           Candidatas para swing trading set-and-forget · Filtradas por EMA, RSI y volumen
         </p>
-        <div style={{ marginTop:4, fontSize:11 }}>
+        <div style={{ marginTop:4, fontSize:11, display:'flex', alignItems:'center', gap:8 }}>
           {source === 'curated' ? (
-            <span style={{ color:C.muted }}>
-              Lista de referencia · 40 acciones líquidas S&P500
-            </span>
+            <>
+              <span style={{ background:'#ffb80022', color:C.amber, padding:'2px 8px', borderRadius:99, fontSize:10, fontWeight:700 }}>
+                LISTA CURADA
+              </span>
+              <span style={{ color:C.muted }}>
+                40 acciones líquidas S&P500 · Finviz no disponible desde este servidor
+              </span>
+            </>
+          ) : source === 'finviz' ? (
+            <>
+              <span style={{ background:'#00e09622', color:C.green, padding:'2px 8px', borderRadius:99, fontSize:10, fontWeight:700 }}>
+                FINVIZ LIVE
+              </span>
+              <span style={{ color: screenerDate === new Date().toISOString().slice(0,10) ? C.green : C.amber }}>
+                Actualizado: {updatedAt || screenerDate}
+              </span>
+            </>
           ) : (
-            <span style={{ color: screenerDate === new Date().toISOString().slice(0,10) ? C.green : C.amber }}>
-              Screener actualizado: {updatedAt || screenerDate}
-            </span>
+            <span style={{ color:C.muted }}>Cargando...</span>
           )}
         </div>
       </div>
