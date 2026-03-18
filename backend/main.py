@@ -654,7 +654,22 @@ async def analyze(ticker: str):
     target     = float(ai.get("target",    tg_default))
 
     entry_mid = round((entry_low + entry_high) / 2, 2)
-    rr = round(abs((target - entry_mid) / (entry_mid - stop)), 2) if abs(entry_mid - stop) > 0.001 else 0
+
+    # ── Verificar y corregir R:B mínimo 2.5x ──────────────────────────────
+    # Si Claude no respetó el mínimo, recalcular el objetivo matemáticamente
+    MIN_RR = 2.5
+    risk = abs(entry_mid - stop)
+    if risk > 0.001:
+        actual_rr = abs(target - entry_mid) / risk
+        if actual_rr < MIN_RR:
+            # Corregir objetivo para cumplir R:B mínimo
+            if target > entry_mid:  # BUY — objetivo arriba
+                target = round(entry_mid + risk * MIN_RR, 2)
+            else:  # SELL — objetivo abajo
+                target = round(entry_mid - risk * MIN_RR, 2)
+            print(f"RR corregido para {ticker}: objetivo ajustado a {target} (R:B {MIN_RR}x)")
+
+    rr = round(abs((target - entry_mid) / risk), 2) if risk > 0.001 else 0
 
     # Score calculado matemáticamente
     score_data = calc_score(
