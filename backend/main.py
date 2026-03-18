@@ -733,7 +733,7 @@ import time as _time
 
 _SCREENER_CACHE: dict = {}
 _SCREENER_TS: float = 0
-_SCREENER_TTL = 3600  # 1 hora
+_SCREENER_TTL = 300  # 5 minutos — para reflejar cambios de GitHub Actions rápido
 
 # ETFs a filtrar — no son acciones individuales
 _ETFS = {
