@@ -175,7 +175,7 @@ async def fetch_realtime_quote(ticker: str, client_: httpx.AsyncClient) -> dict 
     symbol = TICKER_MAP.get(ticker, ticker)
     url = (
         f"https://www.alphavantage.co/query"
-        f"?function=GLOBAL_QUOTE&symbol={symbol}&apikey={AV_KEY}"
+        f"?function=GLOBAL_QUOTE&symbol={symbol}&entitlement=delayed&apikey={AV_KEY}"
     )
     try:
         r = await client_.get(url)
