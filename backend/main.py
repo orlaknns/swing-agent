@@ -88,7 +88,8 @@ def fmt_market_cap(val):
         if v >= 1e9:  return f"${v/1e9:.1f}B"
         if v >= 1e6:  return f"${v/1e6:.1f}M"
         return f"${v:.0f}"
-    except Exception:
+    except Exception as e:
+        print(f"GLOBAL_QUOTE error for {ticker}: {e}")
         return None
 
 
