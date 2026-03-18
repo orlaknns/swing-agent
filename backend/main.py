@@ -637,7 +637,9 @@ async def analyze(ticker: str):
     sma200 = calc_sma(closes, 200)
 
     avg_vol     = sum(volumes[-20:]) / min(20, len(volumes))
-    vol_ratio   = round(volumes[-1] / avg_vol * 100) if avg_vol else 100
+    # Usar volumen del día actual si está disponible (GLOBAL_QUOTE)
+    current_vol = rt_quote.get("volume", volumes[-1]) if rt_quote else volumes[-1]
+    vol_ratio   = round(current_vol / avg_vol * 100) if avg_vol else 100
     mansfield_rs = calc_mansfield_rs(closes, spy_closes)
 
     atr          = calc_atr(highs, lows, closes)
