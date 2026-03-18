@@ -170,6 +170,35 @@ async def fetch_fundamentals(ticker: str, client_: httpx.AsyncClient) -> dict:
         return {}
 
 
+async def fetch_realtime_quote(ticker: str, client_: httpx.AsyncClient) -> dict | None:
+    """Obtiene precio en tiempo real via GLOBAL_QUOTE."""
+    symbol = TICKER_MAP.get(ticker, ticker)
+    url = (
+        f"https://www.alphavantage.co/query"
+        f"?function=GLOBAL_QUOTE&symbol={symbol}&apikey={AV_KEY}"
+    )
+    try:
+        r = await client_.get(url)
+        r.raise_for_status()
+        data = r.json()
+        gq = data.get("Global Quote", {})
+        if not gq or "05. price" not in gq:
+            return None
+        return {
+            "price":      round(float(gq.get("05. price", 0)), 2),
+            "open":       round(float(gq.get("02. open", 0)), 2),
+            "high":       round(float(gq.get("03. high", 0)), 2),
+            "low":        round(float(gq.get("04. low", 0)), 2),
+            "volume":     int(float(gq.get("06. volume", 0))),
+            "prevClose":  round(float(gq.get("08. previous close", 0)), 2),
+            "change":     round(float(gq.get("09. change", 0)), 2),
+            "changePct":  round(float(gq.get("10. change percent", "0%").replace("%","")), 2),
+            "tradingDay": gq.get("07. latest trading day", ""),
+        }
+    except Exception:
+        return None
+
+
 async def fetch_earnings(ticker: str, client_: httpx.AsyncClient) -> str | None:
     """Obtiene la próxima fecha de earnings desde Alpha Vantage EARNINGS_CALENDAR."""
     symbol = TICKER_MAP.get(ticker, ticker)
@@ -566,11 +595,12 @@ async def analyze(ticker: str):
     ticker = ticker.upper().strip()
 
     async with httpx.AsyncClient(timeout=20) as http:
-        candles, fundamentals, spy_closes, next_earnings = await asyncio.gather(
+        candles, fundamentals, spy_closes, next_earnings, rt_quote = await asyncio.gather(
             fetch_prices(ticker, http),
             fetch_fundamentals(ticker, http),
             fetch_spy_closes(http),
             fetch_earnings(ticker, http),
+            fetch_realtime_quote(ticker, http),
         )
 
     if len(candles) < 5:
@@ -581,9 +611,19 @@ async def analyze(ticker: str):
     lows    = [c["low"]    for c in candles]
     volumes = [c["volume"] for c in candles]
 
-    price      = round(closes[-1], 2)
-    prev_close = closes[-2] if len(closes) >= 2 else closes[-1]
-    change     = round(((price - prev_close) / prev_close) * 100, 2)
+    # Precio base desde TIME_SERIES_DAILY (cierre anterior)
+    daily_price = round(closes[-1], 2)
+    prev_close  = closes[-2] if len(closes) >= 2 else closes[-1]
+
+    # Si hay precio en tiempo real, usarlo
+    if rt_quote and rt_quote.get("price", 0) > 0:
+        price  = rt_quote["price"]
+        change = rt_quote["changePct"]
+        is_realtime = True
+    else:
+        price  = daily_price
+        change = round(((price - prev_close) / prev_close) * 100, 2)
+        is_realtime = False
 
     ema20 = calc_ema(closes, 20)
     ema50 = calc_ema(closes, 50)
@@ -691,6 +731,9 @@ async def analyze(ticker: str):
         "ticker":       ticker,
         "price":        price,
         "change":       change,
+        "isRealtime":   is_realtime,
+        "rtHigh":       rt_quote.get("high") if rt_quote else None,
+        "rtLow":        rt_quote.get("low")  if rt_quote else None,
         "ema20":        ema20,
         "ema50":        ema50,
         "rsi":          rsi,

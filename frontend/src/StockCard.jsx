@@ -263,8 +263,8 @@ export default function StockCard({ ticker, onRemove, session, onMonitor, onAnal
             <div style={{ fontSize:11, color:data.change >= 0 ? C.green : C.red, fontFamily:'monospace', marginTop:3 }}>
               {data.change >= 0 ? '+' : ''}{data.change?.toFixed(2)}% hoy
             </div>
-            <div style={{ fontSize:9, color:C.muted, marginTop:3, opacity:0.6 }}>
-              ⏱ hasta 15 min delay · confirma precio en broker
+            <div style={{ fontSize:9, color: data.isRealtime ? C.green : C.amber, marginTop:3, opacity:0.8 }}>
+              {data.isRealtime ? '● Precio en tiempo real' : '⏱ Precio de cierre anterior · verifica en broker'}
             </div>
           </div>
           <Sparkline prices={data.prices20d} signal={data.signal} />
