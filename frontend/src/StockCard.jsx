@@ -264,7 +264,7 @@ export default function StockCard({ ticker, onRemove, session, onMonitor, onAnal
               {data.change >= 0 ? '+' : ''}{data.change?.toFixed(2)}% hoy
             </div>
             <div style={{ fontSize:9, color: data.isRealtime ? C.green : C.amber, marginTop:3, opacity:0.8 }}>
-              {data.isRealtime ? '● Precio en tiempo real' : '⏱ Precio de cierre anterior · verifica en broker'}
+              {data.isRealtime ? '⏱ Precio con 15 min de delay' : '⏱ Precio de cierre anterior · verifica en broker'}
             </div>
           </div>
           <Sparkline prices={data.prices20d} signal={data.signal} />

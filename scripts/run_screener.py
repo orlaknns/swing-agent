@@ -36,11 +36,22 @@ HEADERS = {
 
 # ETFs a excluir
 ETFS = {
-    'SPY','QQQ','IWM','DIA','EEM','EFA','GLD','SLV','TLT','LQD','HYG',
+    # Index ETFs
+    'SPY','QQQ','IWM','DIA','IVV','IJH','VTI','VOO','SCHX','SCHG','SCHD',
+    # Sector ETFs
     'XLF','XLK','XLE','XLV','XLI','XLU','XLP','XLB','XLY','XLC',
-    'SOXL','SOXS','TQQQ','SQQQ','SPYM','SCHD','SCHX','SCHG','SCHH',
-    'BKLN','VEA','VCIT','EWZ','EWY','FXI','KWEB','IEMG','IVV','SPIB',
-    'KRE','GDX','SGOV','QID','TZA','UVXY','IBIT','VIX','BITX',
+    # International ETFs
+    'EEM','EFA','VEA','EWZ','EWY','FXI','KWEB','IEMG','EWJ',
+    # Bond ETFs
+    'TLT','LQD','HYG','BIL','BKLN','VCIT','SPIB','SGOV',
+    # Commodity ETFs
+    'GLD','SLV','IAU','GDX','GDXJ','SLB','USO','UNG','PDBC',
+    # Leveraged/Inverse ETFs
+    'SOXL','SOXS','TQQQ','SQQQ','SPYM','QID','TNA','TZA','UVXY',
+    # Crypto ETFs
+    'IBIT','BITX','FBTC','GBTC',
+    # Other funds
+    'SCHH','KRE','VIX','FELG','FMDE','ZSL','SILJ','PAAS',
 }
 
 AV_KEY = os.environ.get("ALPHA_VANTAGE_KEY", "")
