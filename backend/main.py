@@ -172,7 +172,7 @@ async def fetch_fundamentals(ticker: str, client_: httpx.AsyncClient) -> dict:
 
 
 async def fetch_realtime_quote(ticker: str, client_: httpx.AsyncClient) -> dict | None:
-    """Obtiene precio en tiempo real via GLOBAL_QUOTE."""
+    """Obtiene precio con 15 min delay via GLOBAL_QUOTE."""
     print(f"GLOBAL_QUOTE calling for {ticker}")
     symbol = TICKER_MAP.get(ticker, ticker)
     url = (
@@ -180,7 +180,9 @@ async def fetch_realtime_quote(ticker: str, client_: httpx.AsyncClient) -> dict 
         f"?function=GLOBAL_QUOTE&symbol={symbol}&entitlement=delayed&apikey={AV_KEY}"
     )
     try:
-        r = await client_.get(url)
+        # Cliente propio para evitar conflictos con el cliente compartido
+        async with httpx.AsyncClient(timeout=15) as c:
+            r = await c.get(url)
         print(f"GLOBAL_QUOTE response for {ticker}: status={r.status_code}")
         r.raise_for_status()
         data = r.json()
