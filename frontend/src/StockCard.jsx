@@ -166,6 +166,7 @@ export default function StockCard({ ticker, onRemove, session, onMonitor, onAnal
   const [expanded,     setExpanded]     = useState(false)
   const [ready,        setReady]        = useState(!!cachedData)
   const [journalSaved, setJournalSaved] = useState(false)
+  const [showIBKR,     setShowIBKR]     = useState(false)
 
   // Sync with cache when prop updates (e.g. moving to En Seguimiento)
   useEffect(() => {
@@ -179,6 +180,7 @@ export default function StockCard({ ticker, onRemove, session, onMonitor, onAnal
     if (!data || data.error || !session) return
     await saveTradeToJournal(data, session.user.id)
     setJournalSaved(true)
+    setShowIBKR(true)
     setTimeout(() => setJournalSaved(false), 2000)
   }
 
@@ -491,15 +493,19 @@ export default function StockCard({ ticker, onRemove, session, onMonitor, onAnal
             </button>
 
             {/* IBKR OCO config note — shown after saving */}
-            {journalSaved && data.entryLow && data.stopLoss && data.target && (() => {
+            {showIBKR && data.entryLow && data.stopLoss && data.target && (() => {
               const isSell    = data.signal === 'sell'
               const stopLimit = isSell
                 ? round2(data.stopLoss * 1.01)   // SELL: stop al alza, límite 1% más arriba
                 : round2(data.stopLoss * 0.99)   // BUY: stop a la baja, límite 1% más abajo
               return (
                 <div style={{ background:'#0a1628', border:'1px solid #00d4ff33', borderRadius:8, padding:'10px 12px', marginTop:4 }}>
-                  <div style={{ fontSize:9, color:C.accent, letterSpacing:'0.07em', marginBottom:6, textTransform:'uppercase', fontWeight:700 }}>
-                    Configuración OCO en IBKR
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
+                    <div style={{ fontSize:9, color:C.accent, letterSpacing:'0.07em', textTransform:'uppercase', fontWeight:700 }}>
+                      Configuración OCO en IBKR
+                    </div>
+                    <button onClick={() => setShowIBKR(false)}
+                      style={{ background:'none', border:'none', color:C.muted, cursor:'pointer', fontSize:14, padding:'0 2px' }}>×</button>
                   </div>
                   <div style={{ fontSize:10, color:C.muted, marginBottom:6 }}>
                     Usa <b style={{color:C.text}}>Stop Limit</b> en vez de Stop Market para evitar slippage
