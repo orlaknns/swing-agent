@@ -2,8 +2,12 @@ name: Daily Screener
 
 on:
   schedule:
-    - cron: '30 14 * * 1-5'  # 9:30am ET = 14:30 UTC, lunes a viernes
-  workflow_dispatch:          # permite correr manualmente
+    - cron: '30 13 * * 1-5'  # 9:30am EDT (horario verano)  = 13:30 UTC
+    - cron: '30 14 * * 1-5'  # 9:30am EST (horario invierno) = 14:30 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   scrape:
@@ -23,6 +27,8 @@ jobs:
         run: pip install httpx
 
       - name: Run screener
+        env:
+          ALPHA_VANTAGE_KEY: ${{ secrets.ALPHA_VANTAGE_KEY }}
         run: python scripts/run_screener.py
 
       - name: Commit results
