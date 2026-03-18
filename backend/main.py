@@ -186,6 +186,7 @@ async def fetch_realtime_quote(ticker: str, client_: httpx.AsyncClient) -> dict 
         print(f"GLOBAL_QUOTE response for {ticker}: status={r.status_code}")
         r.raise_for_status()
         data = r.json()
+        print(f"GLOBAL_QUOTE data for {ticker}: {str(data)[:200]}")
         gq = data.get("Global Quote", {})
         if not gq or "05. price" not in gq:
             return None
