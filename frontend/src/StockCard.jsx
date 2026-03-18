@@ -158,6 +158,8 @@ function FundamentalsBlock({ f, nextEarnings }) {
   )
 }
 
+const round2 = (n) => Math.round(n * 100) / 100
+
 export default function StockCard({ ticker, onRemove, session, onMonitor, onAnalysed, cachedData, isInMonitorTab }) {
   const [data,         setData]         = useState(cachedData || null)
   const [loading,      setLoading]      = useState(false)
@@ -476,16 +478,49 @@ export default function StockCard({ ticker, onRemove, session, onMonitor, onAnal
             {data.analysis}
           </div>
         )}
-        {/* Save to journal button */}
+        {/* Save to journal button + IBKR config note */}
         {data && !data.error && !loading && (
-          <button onClick={saveToJournal}
-            style={{ width:'100%', background: journalSaved ? C.green+'22' : 'none',
-              border:`1px solid ${journalSaved ? C.green : C.border}`,
-              borderRadius:7, color: journalSaved ? C.green : C.muted,
-              cursor:'pointer', padding:'7px 10px', fontSize:11,
-              transition:'all 0.2s', display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
-            {journalSaved ? '✓ Guardado en journal' : '📋 Guardar en journal'}
-          </button>
+          <>
+            <button onClick={saveToJournal}
+              style={{ width:'100%', background: journalSaved ? C.green+'22' : 'none',
+                border:`1px solid ${journalSaved ? C.green : C.border}`,
+                borderRadius:7, color: journalSaved ? C.green : C.muted,
+                cursor:'pointer', padding:'7px 10px', fontSize:11,
+                transition:'all 0.2s', display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
+              {journalSaved ? '✓ Guardado en journal' : '📋 Guardar en journal'}
+            </button>
+
+            {/* IBKR OCO config note — shown after saving */}
+            {journalSaved && data.entryLow && data.stopLoss && data.target && (() => {
+              const isSell    = data.signal === 'sell'
+              const stopLimit = isSell
+                ? round2(data.stopLoss * 1.01)   // SELL: stop al alza, límite 1% más arriba
+                : round2(data.stopLoss * 0.99)   // BUY: stop a la baja, límite 1% más abajo
+              return (
+                <div style={{ background:'#0a1628', border:'1px solid #00d4ff33', borderRadius:8, padding:'10px 12px', marginTop:4 }}>
+                  <div style={{ fontSize:9, color:C.accent, letterSpacing:'0.07em', marginBottom:6, textTransform:'uppercase', fontWeight:700 }}>
+                    Configuración OCO en IBKR
+                  </div>
+                  <div style={{ fontSize:10, color:C.muted, marginBottom:6 }}>
+                    Usa <b style={{color:C.text}}>Stop Limit</b> en vez de Stop Market para evitar slippage
+                  </div>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:4 }}>
+                    {[
+                      ['Take Profit (Limit)', `$${data.target?.toFixed(2)}`, C.green],
+                      ['Stop Price', `$${data.stopLoss?.toFixed(2)}`, C.red],
+                      ['Stop Limit Price', `$${stopLimit?.toFixed(2)}`, C.amber],
+                      ['Tipo orden', 'Stop Limit + Limit (OCO)', C.accent],
+                    ].map(([label, val, color]) => (
+                      <div key={label} style={{ background:C.card, borderRadius:5, padding:'4px 7px' }}>
+                        <div style={{ fontSize:9, color:C.muted }}>{label}</div>
+                        <div style={{ fontSize:11, fontWeight:700, color, fontFamily:'monospace' }}>{val}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            })()}
+          </>
         )}
       </>)}
     </div>
