@@ -173,6 +173,7 @@ async def fetch_fundamentals(ticker: str, client_: httpx.AsyncClient) -> dict:
 
 async def fetch_realtime_quote(ticker: str, client_: httpx.AsyncClient) -> dict | None:
     """Obtiene precio en tiempo real via GLOBAL_QUOTE."""
+    print(f"GLOBAL_QUOTE calling for {ticker}")
     symbol = TICKER_MAP.get(ticker, ticker)
     url = (
         f"https://www.alphavantage.co/query"
@@ -180,6 +181,7 @@ async def fetch_realtime_quote(ticker: str, client_: httpx.AsyncClient) -> dict 
     )
     try:
         r = await client_.get(url)
+        print(f"GLOBAL_QUOTE response for {ticker}: status={r.status_code}")
         r.raise_for_status()
         data = r.json()
         gq = data.get("Global Quote", {})
