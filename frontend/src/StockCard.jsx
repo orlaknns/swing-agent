@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import { saveTradeToJournal } from './Journal.jsx'
 import { LineChart, Line, ResponsiveContainer, Tooltip } from 'recharts'
 
@@ -219,12 +219,14 @@ export default function StockCard({ ticker, onRemove, session, onMonitor, onAnal
       {/* Title row */}
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:6 }}>
         <div style={{ display:'flex', alignItems:'center', gap:7, minWidth:0 }}>
-          <span style={{ fontFamily:'monospace', fontWeight:700, fontSize:15, color:C.text, letterSpacing:'0.05em', flexShrink:0 }}>{ticker}</span>
-          {data?.fundamentals?.name && (
-            <span style={{ fontSize:10, color:C.muted, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:120 }}>
-              {data.fundamentals.name}
-            </span>
-          )}
+          <div style={{ display:'flex', flexDirection:'column', minWidth:0 }}>
+            <span style={{ fontFamily:'monospace', fontWeight:700, fontSize:15, color:C.text, letterSpacing:'0.05em' }}>{ticker}</span>
+            {data?.fundamentals?.name && (
+              <span style={{ fontSize:10, color:C.muted, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:160 }}>
+                {data.fundamentals.name}
+              </span>
+            )}
+          </div>
           {data && !data.error && <Badge type={data.strategy} />}
         </div>
         <div style={{ display:'flex', gap:4, alignItems:'center', flexShrink:0 }}>
