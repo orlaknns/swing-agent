@@ -65,16 +65,16 @@ async def fetch_finviz():
                 else:
                     print(f"  No known ticker found in HTML")
 
-                # Multiples patrones para encontrar tickers
-                found = re.findall(r'quote\.ashx\?t=([A-Z]{1,5})"', html)
-                if not found:
-                    found = re.findall(r'"ticker"\s*:\s*"([A-Z]{1,5})"', html)
-                if not found:
-                    found = re.findall(r'data-ticker="([A-Z]{1,5})"', html)
-                if not found:
-                    found = re.findall(r'class="screener-link-primary"[^>]*>([A-Z]{1,5})<', html)
-                if not found:
-                    found = re.findall(r'href="/quote\.ashx\?t=([A-Z]{1,5})', html)
+                # Patron correcto: quote.ashx?t=NVDA& (ticker seguido de &)
+                found = re.findall(r'quote\.ashx\?t=([A-Z]{1,5})&', html)
+                # Deduplicar manteniendo orden
+                seen = set()
+                deduped = []
+                for t in found:
+                    if t not in seen:
+                        seen.add(t)
+                        deduped.append(t)
+                found = deduped
 
                 found = list(dict.fromkeys(found))
                 print(f"  Tickers: {found[:10]}")
