@@ -23,8 +23,8 @@ scheduler = AsyncIOScheduler(timezone="America/New_York")
 
 @app.on_event("startup")
 async def startup():
-    """Al iniciar el servidor: log del screener disponible."""
-    data = _load_screener_json()
+    """Al iniciar: pre-carga screener desde GitHub."""
+    data = await _load_screener_json()
     print(f"Screener listo: {data.get('count', 0)} candidatas | source={data.get('source')} | date={data.get('date')}")
     scheduler.start()
 
@@ -712,39 +712,59 @@ def health():
     return {"status": "ok"}
 
 
-# ── Screener — lee data/screener.json generado por GitHub Actions ─────────
-import pathlib, time as _time
+# ── Screener — lee screener.json desde GitHub raw ──────────────────────────
+import time as _time
 
-_SCREENER_JSON = pathlib.Path(__file__).parent.parent / "data" / "screener.json"
+_SCREENER_CACHE: dict = {}
+_SCREENER_TS: float = 0
+_SCREENER_TTL = 3600  # 1 hora
 
-# Metadata from AV for tickers in the screener
-_ticker_meta: dict = {}
-_meta_ts: float = 0
+# ETFs a filtrar — no son acciones individuales
+_ETFS = {
+    'SPY','QQQ','IWM','DIA','EEM','EFA','GLD','SLV','TLT','LQD','HYG',
+    'XLF','XLK','XLE','XLV','XLI','XLU','XLP','XLB','XLY','XLC',
+    'SOXL','SOXS','TQQQ','SQQQ','SPYM','SCHD','SCHX','SCHG','SCHH',
+    'BKLN','VEA','VCIT','EWZ','EWY','FXI','KWEB','IEMG','IVV','SPIB',
+    'KRE','GDX','SGOV','QID','TZA','UVXY','IBIT','VIX',
+}
 
-def _load_screener_json() -> dict:
-    """Lee el JSON generado por GitHub Actions."""
+_GITHUB_RAW = "https://raw.githubusercontent.com/orlaknns/swing-agent/main/data/screener.json"
+_CURATED_FALLBACK = {
+    "tickers": ["AAPL","MSFT","NVDA","GOOGL","META","AMZN","TSLA","JPM","V","MA",
+                "UNH","JNJ","PG","HD","AVGO","CRM","AMD","ORCL","NFLX","DIS",
+                "PYPL","SHOP","SNOW","PLTR","COIN","UBER","ABNB","DDOG","NET","CRWD"],
+    "count": 30, "date": "", "updatedAt": "", "source": "curated",
+}
+
+async def _load_screener_json() -> dict:
+    """Lee screener.json desde GitHub raw — siempre fresco."""
+    global _SCREENER_CACHE, _SCREENER_TS
+    now = _time.time()
+    if _SCREENER_CACHE and (now - _SCREENER_TS) < _SCREENER_TTL:
+        return _SCREENER_CACHE
     try:
-        if _SCREENER_JSON.exists():
-            with open(_SCREENER_JSON) as f:
-                return json.load(f)
+        async with httpx.AsyncClient(timeout=10) as c:
+            r = await c.get(_GITHUB_RAW, headers={"Cache-Control": "no-cache"})
+            if r.status_code == 200:
+                data = r.json()
+                # Filtrar ETFs
+                raw_tickers = data.get("tickers", [])
+                filtered = [t for t in raw_tickers if t not in _ETFS]
+                data["tickers"] = filtered
+                data["count"] = len(filtered)
+                _SCREENER_CACHE = data
+                _SCREENER_TS = now
+                print(f"Screener loaded from GitHub: {len(filtered)} tickers (filtered {len(raw_tickers)-len(filtered)} ETFs)")
+                return data
     except Exception as e:
-        print(f"Error reading screener.json: {e}")
-    return {
-        "tickers": ["AAPL","MSFT","NVDA","GOOGL","META","AMZN","TSLA","JPM","V","MA",
-                    "UNH","JNJ","PG","HD","AVGO","CRM","AMD","ORCL","NFLX","DIS",
-                    "PYPL","SHOP","SNOW","PLTR","COIN","UBER","ABNB","DDOG","NET","CRWD"],
-        "count": 30,
-        "date": "",
-        "updatedAt": "",
-        "source": "curated",
-    }
+        print(f"Error loading screener from GitHub: {e}")
+    return _SCREENER_CACHE or _CURATED_FALLBACK
 
 @app.get("/screener")
 async def screener():
-    """Devuelve candidatas desde data/screener.json (generado por GitHub Actions)."""
-    data = _load_screener_json()
+    """Devuelve candidatas desde GitHub (generado por GitHub Actions diariamente)."""
+    data = await _load_screener_json()
     tickers = data.get("tickers", [])
-    # Convertir lista de tickers a formato de candidatas
     candidates = [{"ticker": t, "company": "", "sector": ""} for t in tickers]
     return JSONResponse(
         content={
