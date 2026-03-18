@@ -154,6 +154,7 @@ async def fetch_fundamentals(ticker: str, client_: httpx.AsyncClient) -> dict:
         eps_growth = round(eps_growth_raw * 100, 1) if eps_growth_raw else None
 
         return {
+            "name":         data.get("Name") or None,
             "sector":       data.get("Sector") or None,
             "industry":     data.get("Industry") or None,
             "marketCap":    mc,
@@ -764,8 +765,11 @@ async def _load_screener_json() -> dict:
 async def screener():
     """Devuelve candidatas desde GitHub (generado por GitHub Actions diariamente)."""
     data = await _load_screener_json()
-    tickers = data.get("tickers", [])
-    candidates = [{"ticker": t, "company": "", "sector": ""} for t in tickers]
+    # Soporta formato nuevo (candidates) y legacy (tickers)
+    if "candidates" in data:
+        candidates = data["candidates"]
+    else:
+        candidates = [{"ticker": t, "company": "", "sector": ""} for t in data.get("tickers", [])]
     return JSONResponse(
         content={
             "candidates": candidates,
