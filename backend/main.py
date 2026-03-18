@@ -198,7 +198,8 @@ async def fetch_realtime_quote(ticker: str, client_: httpx.AsyncClient) -> dict 
         }
         print(f"GLOBAL_QUOTE {ticker}: price={result['price']} tradingDay={result['tradingDay']} change={result['changePct']}%")
         return result
-    except Exception:
+    except Exception as e:
+        print(f"GLOBAL_QUOTE error for {ticker}: {e}")
         return None
 
 
