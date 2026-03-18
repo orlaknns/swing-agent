@@ -184,7 +184,7 @@ async def fetch_realtime_quote(ticker: str, client_: httpx.AsyncClient) -> dict 
         gq = data.get("Global Quote", {})
         if not gq or "05. price" not in gq:
             return None
-        return {
+        result = {
             "price":      round(float(gq.get("05. price", 0)), 2),
             "open":       round(float(gq.get("02. open", 0)), 2),
             "high":       round(float(gq.get("03. high", 0)), 2),
@@ -195,6 +195,8 @@ async def fetch_realtime_quote(ticker: str, client_: httpx.AsyncClient) -> dict 
             "changePct":  round(float(gq.get("10. change percent", "0%").replace("%","")), 2),
             "tradingDay": gq.get("07. latest trading day", ""),
         }
+        print(f"GLOBAL_QUOTE {ticker}: price={result['price']} tradingDay={result['tradingDay']} change={result['changePct']}%")
+        return result
     except Exception:
         return None
 
