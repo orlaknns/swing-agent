@@ -2,8 +2,7 @@ name: Daily Screener
 
 on:
   schedule:
-    - cron: '30 13 * * 1-5'  # 9:30am EDT (horario verano)  = 13:30 UTC
-    - cron: '30 14 * * 1-5'  # 9:30am EST (horario invierno) = 14:30 UTC
+    - cron: '25 15 * * 1-5'  # PRUEBA: 15:25 UTC — cambiar a 13:30 UTC cuando funcione
   workflow_dispatch:
 
 permissions:
