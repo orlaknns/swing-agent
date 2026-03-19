@@ -2,7 +2,7 @@ name: Daily Screener
 
 on:
   schedule:
-    - cron: '25 15 * * 1-5'  # PRUEBA: 15:25 UTC — cambiar a 13:30 UTC cuando funcione
+    - cron: '30 13 * * 1-5'  # 13:30 UTC = 9:30 AM NYC (ET)
   workflow_dispatch:
 
 permissions:
