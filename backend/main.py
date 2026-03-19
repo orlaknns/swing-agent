@@ -788,11 +788,25 @@ _SCREENER_TTL = 300  # 5 minutos — para reflejar cambios de GitHub Actions rá
 
 # ETFs a filtrar — no son acciones individuales
 _ETFS = {
-    'SPY','QQQ','IWM','DIA','EEM','EFA','GLD','SLV','TLT','LQD','HYG',
+    # Index ETFs
+    'SPY','QQQ','IWM','DIA','IVV','IJH','VTI','VOO','SCHX','SCHG','SCHD',
+    # Sector ETFs
     'XLF','XLK','XLE','XLV','XLI','XLU','XLP','XLB','XLY','XLC',
-    'SOXL','SOXS','TQQQ','SQQQ','SPYM','SCHD','SCHX','SCHG','SCHH',
-    'BKLN','VEA','VCIT','EWZ','EWY','FXI','KWEB','IEMG','IVV','SPIB',
-    'KRE','GDX','SGOV','QID','TZA','UVXY','IBIT','VIX',
+    # International ETFs
+    'EEM','EFA','VEA','EWZ','EWY','FXI','KWEB','IEMG','EWJ',
+    # Bond ETFs
+    'TLT','LQD','HYG','BIL','BKLN','VCIT','SPIB','SGOV','EMB','SPSB','SPAB',
+    # Commodity ETFs
+    'GLD','SLV','IAU','GDX','GDXJ','USO','UNG','PDBC',
+    # Leveraged/Inverse ETFs
+    'SOXL','SOXS','TQQQ','SQQQ','SPYM','QID','TNA','TZA','UVXY','PSQ',
+    # Crypto ETFs
+    'IBIT','BITX','FBTC','GBTC',
+    # International / Multi-asset ETFs
+    'SCHF','SCHB','RSP','VIG','VYM','DVY','NOBL',
+    # Other funds/ETFs
+    'SCHH','KRE','VIX','FELG','FMDE','ZSL','SILJ','PAAS',
+    'SLB',  # Schlumberger (ticker coincide con commodity ETF en algunos screeners)
 }
 
 _GITHUB_RAW = "https://raw.githubusercontent.com/orlaknns/swing-agent/main/data/screener.json"
@@ -814,14 +828,19 @@ async def _load_screener_json() -> dict:
             r = await c.get(_GITHUB_RAW, headers={"Cache-Control": "no-cache"})
             if r.status_code == 200:
                 data = r.json()
-                # Filtrar ETFs
+                # Filtrar ETFs de candidates (formato nuevo)
+                raw_candidates = data.get("candidates", [])
+                filtered_candidates = [c for c in raw_candidates if c.get("ticker") not in _ETFS]
+                data["candidates"] = filtered_candidates
+                # Filtrar ETFs de tickers (formato legacy)
                 raw_tickers = data.get("tickers", [])
-                filtered = [t for t in raw_tickers if t not in _ETFS]
-                data["tickers"] = filtered
-                data["count"] = len(filtered)
+                filtered_tickers = [t for t in raw_tickers if t not in _ETFS]
+                data["tickers"] = filtered_tickers
+                data["count"] = len(filtered_candidates) or len(filtered_tickers)
+                removed = (len(raw_candidates) - len(filtered_candidates)) or (len(raw_tickers) - len(filtered_tickers))
                 _SCREENER_CACHE = data
                 _SCREENER_TS = now
-                print(f"Screener loaded from GitHub: {len(filtered)} tickers (filtered {len(raw_tickers)-len(filtered)} ETFs)")
+                print(f"Screener loaded from GitHub: {data['count']} tickers (filtered {removed} ETFs/funds)")
                 return data
     except Exception as e:
         print(f"Error loading screener from GitHub: {e}")
