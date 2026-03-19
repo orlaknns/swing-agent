@@ -6,11 +6,6 @@
       "sector": ""
     },
     {
-      "ticker": "MU",
-      "company": "",
-      "sector": ""
-    },
-    {
       "ticker": "INTC",
       "company": "",
       "sector": ""
@@ -61,12 +56,12 @@
       "sector": ""
     },
     {
-      "ticker": "FCX",
+      "ticker": "RKLB",
       "company": "",
       "sector": ""
     },
     {
-      "ticker": "RKLB",
+      "ticker": "FCX",
       "company": "",
       "sector": ""
     },
@@ -76,7 +71,7 @@
       "sector": ""
     },
     {
-      "ticker": "VZ",
+      "ticker": "CCL",
       "company": "",
       "sector": ""
     },
@@ -86,22 +81,22 @@
       "sector": ""
     },
     {
+      "ticker": "VZ",
+      "company": "",
+      "sector": ""
+    },
+    {
       "ticker": "IREN",
       "company": "",
       "sector": ""
     },
     {
-      "ticker": "CCL",
+      "ticker": "GOOGL",
       "company": "",
       "sector": ""
     },
     {
       "ticker": "CMCSA",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "GOOGL",
       "company": "",
       "sector": ""
     },
@@ -116,6 +111,11 @@
       "sector": ""
     },
     {
+      "ticker": "WBD",
+      "company": "",
+      "sector": ""
+    },
+    {
       "ticker": "HOOD",
       "company": "",
       "sector": ""
@@ -126,17 +126,12 @@
       "sector": ""
     },
     {
-      "ticker": "WBD",
+      "ticker": "SMCI",
       "company": "",
       "sector": ""
     },
     {
       "ticker": "IAUM",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "SMCI",
       "company": "",
       "sector": ""
     },
@@ -161,12 +156,12 @@
       "sector": ""
     },
     {
-      "ticker": "MSTR",
+      "ticker": "IEF",
       "company": "",
       "sector": ""
     },
     {
-      "ticker": "GLDM",
+      "ticker": "MSTR",
       "company": "",
       "sector": ""
     },
@@ -176,27 +171,17 @@
       "sector": ""
     },
     {
+      "ticker": "GLDM",
+      "company": "",
+      "sector": ""
+    },
+    {
       "ticker": "TTD",
       "company": "",
       "sector": ""
     },
     {
-      "ticker": "IEF",
-      "company": "",
-      "sector": ""
-    },
-    {
       "ticker": "PL",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "AGQ",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "FIG",
       "company": "",
       "sector": ""
     },
@@ -211,12 +196,22 @@
       "sector": ""
     },
     {
-      "ticker": "WMT",
+      "ticker": "AGQ",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "FIG",
       "company": "",
       "sector": ""
     },
     {
       "ticker": "WFC",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "WMT",
       "company": "",
       "sector": ""
     },
@@ -236,12 +231,7 @@
       "sector": ""
     },
     {
-      "ticker": "MOS",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "TSM",
+      "ticker": "SMH",
       "company": "",
       "sector": ""
     },
@@ -251,14 +241,23 @@
       "sector": ""
     },
     {
-      "ticker": "SMH",
+      "ticker": "TSM",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "MOS",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "BCS",
       "company": "",
       "sector": ""
     }
   ],
   "tickers": [
     "NVDA",
-    "MU",
     "INTC",
     "TSLA",
     "T",
@@ -269,49 +268,50 @@
     "AMZN",
     "AMD",
     "HIMS",
-    "FCX",
     "RKLB",
+    "FCX",
     "AAPL",
-    "VZ",
-    "SLB",
-    "IREN",
     "CCL",
-    "CMCSA",
+    "SLB",
+    "VZ",
+    "IREN",
     "GOOGL",
+    "CMCSA",
     "NVO",
     "MSFT",
+    "WBD",
     "HOOD",
     "ORCL",
-    "WBD",
-    "IAUM",
     "SMCI",
+    "IAUM",
     "CRWV",
     "PYPL",
     "VWO",
     "AVGO",
-    "MSTR",
-    "GLDM",
-    "IONQ",
-    "TTD",
     "IEF",
+    "MSTR",
+    "IONQ",
+    "GLDM",
+    "TTD",
     "PL",
-    "AGQ",
-    "FIG",
     "C",
     "NBIS",
-    "WMT",
+    "AGQ",
+    "FIG",
     "WFC",
+    "WMT",
     "SGOL",
     "CSCO",
     "KHC",
-    "MOS",
-    "TSM",
+    "SMH",
     "BKR",
-    "SMH"
+    "TSM",
+    "MOS",
+    "BCS"
   ],
   "count": 51,
   "date": "2026-03-19",
-  "updatedAt": "2026-03-19 19:22 UTC",
+  "updatedAt": "2026-03-19 19:33 UTC",
   "source": "finviz",
   "criteria": {
     "exchange": "NYSE, NASDAQ",
