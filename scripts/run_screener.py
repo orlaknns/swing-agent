@@ -45,13 +45,17 @@ ETFS = {
     # Bond ETFs
     'TLT','LQD','HYG','BIL','BKLN','VCIT','SPIB','SGOV','EMB','SPSB','SPAB',
     # Commodity ETFs
-    'GLD','SLV','IAU','GDX','GDXJ','USO','UNG','PDBC',
+    'GLD','SLV','IAU','IAUM','GDX','GDXJ','USO','UNG','PDBC','GLDM','SGOL','AGQ',
+    # Bond ETFs adicionales
+    'IEF','TIP','SHY','IEI','AGG','BND','JNK','HYG',
     # Leveraged/Inverse ETFs
     'SOXL','SOXS','TQQQ','SQQQ','SPYM','QID','TNA','TZA','UVXY','PSQ',
     # Crypto ETFs
     'IBIT','BITX','FBTC','GBTC',
     # International / Multi-asset ETFs
-    'SCHF','SCHB','RSP','VIG','VYM','DVY','NOBL',
+    'SCHF','SCHB','RSP','VIG','VYM','DVY','NOBL','VWO','EWC','EWA',
+    # Semiconductor / Sector ETFs adicionales
+    'SMH','SOXX','XSD','ARKK','ARKG','ARKW','ARKF',
     # Other funds
     'SCHH','KRE','VIX','FELG','FMDE','ZSL','SILJ','PAAS',
 }
