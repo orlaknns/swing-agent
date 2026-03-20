@@ -158,8 +158,8 @@ export default function App() {
   if (!session) return <Auth />
 
   const tabs = [
-    ['watchlist', `Watchlist · ${wl.length}`],
-    ['monitor',   monitor.length > 0 ? `En Seguimiento · ${monitor.length}` : 'En Seguimiento'],
+    ['watchlist', `Watchlist · ${activeWatchlist.length}`],
+    ['monitor',   monitorWatchlist.length > 0 ? `En Seguimiento · ${monitorWatchlist.length}` : 'En Seguimiento'],
     ['discover',  'Descubrir'],
     ['journal',   `Journal · ${journalCount}`],
   ]

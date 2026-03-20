@@ -856,6 +856,7 @@ _GH_WORKFLOW = "screener.yml"
 @app.post("/screener/refresh")
 async def screener_refresh():
     """Dispara el workflow de GitHub Actions para actualizar el screener."""
+    global _SCREENER_TS
     token = os.environ.get("GITHUB_TOKEN_WORKFLOW", "")
     if not token:
         return JSONResponse(status_code=503, content={"error": "Token no configurado"})
@@ -869,6 +870,7 @@ async def screener_refresh():
         async with httpx.AsyncClient(timeout=10) as c:
             r = await c.post(url, headers=headers, json={"ref": "main"})
             if r.status_code == 204:
+                _SCREENER_TS = 0  # invalida caché para forzar recarga al siguiente /screener
                 return JSONResponse(content={"ok": True, "message": "Screener en ejecución — listo en ~60 segundos"})
             return JSONResponse(status_code=r.status_code, content={"error": f"GitHub respondió {r.status_code}", "detail": r.text})
     except Exception as e:
