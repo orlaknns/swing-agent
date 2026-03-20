@@ -849,6 +849,31 @@ async def _load_screener_json() -> dict:
         print(f"Error loading screener from GitHub: {e}")
     return _SCREENER_CACHE or _CURATED_FALLBACK
 
+_GH_OWNER = "orlaknns"
+_GH_REPO  = "swing-agent"
+_GH_WORKFLOW = "screener.yml"
+
+@app.post("/screener/refresh")
+async def screener_refresh():
+    """Dispara el workflow de GitHub Actions para actualizar el screener."""
+    token = os.environ.get("GITHUB_TOKEN_WORKFLOW", "")
+    if not token:
+        return JSONResponse(status_code=503, content={"error": "Token no configurado"})
+    url = f"https://api.github.com/repos/{_GH_OWNER}/{_GH_REPO}/actions/workflows/{_GH_WORKFLOW}/dispatches"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=10) as c:
+            r = await c.post(url, headers=headers, json={"ref": "main"})
+            if r.status_code == 204:
+                return JSONResponse(content={"ok": True, "message": "Screener en ejecución — listo en ~60 segundos"})
+            return JSONResponse(status_code=r.status_code, content={"error": f"GitHub respondió {r.status_code}", "detail": r.text})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
 @app.get("/screener")
 async def screener():
     """Devuelve candidatas desde GitHub (generado por GitHub Actions diariamente)."""

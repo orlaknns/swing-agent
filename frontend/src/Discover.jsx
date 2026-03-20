@@ -28,6 +28,8 @@ export default function Discover({ watchlist, onAdd, onRemove, onAddAll }) {
   const [screenerDate, setScreenerDate] = useState(null)
   const [source, setSource]         = useState(null)
   const [updatedAt, setUpdatedAt]   = useState(null)
+  const [refreshing, setRefreshing] = useState(false)
+  const [refreshMsg, setRefreshMsg] = useState(null)
 
   const load = async () => {
     setLoading(true); setError(null)
@@ -47,6 +49,25 @@ export default function Discover({ watchlist, onAdd, onRemove, onAddAll }) {
 
   useEffect(() => { load() }, [])
 
+  const triggerRefresh = async () => {
+    setRefreshing(true)
+    setRefreshMsg(null)
+    try {
+      const res = await fetch('/api/screener/refresh', { method: 'POST' })
+      const data = await res.json()
+      if (res.ok) {
+        setRefreshMsg({ ok: true, text: 'Actualizando... listo en ~60 segundos' })
+        // Recarga automática después de 65 segundos
+        setTimeout(() => { load(); setRefreshMsg(null) }, 65000)
+      } else {
+        setRefreshMsg({ ok: false, text: data.error || 'Error al actualizar' })
+      }
+    } catch {
+      setRefreshMsg({ ok: false, text: 'No se pudo conectar con el servidor' })
+    }
+    setRefreshing(false)
+  }
+
   const sectors = ['all', ...new Set(candidates.map(c => c.sector).filter(Boolean))]
   const filtered = filter === 'all' ? candidates : candidates.filter(c => c.sector === filter)
   const inWatchlist = (ticker) => watchlist.includes(ticker)
@@ -56,7 +77,17 @@ export default function Discover({ watchlist, onAdd, onRemove, onAddAll }) {
 
       {/* Header */}
       <div style={{ marginBottom:16 }}>
-        <h2 style={{ fontSize:18, fontWeight:700, color:C.text, margin:0 }}>Descubrir acciones</h2>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <h2 style={{ fontSize:18, fontWeight:700, color:C.text, margin:0 }}>Descubrir acciones</h2>
+          <button
+            onClick={triggerRefresh}
+            disabled={refreshing}
+            style={{ background: refreshing ? C.border : C.accent+'22', border:`1px solid ${refreshing ? C.border : C.accent}`,
+              borderRadius:7, color: refreshing ? C.muted : C.accent,
+              fontWeight:700, padding:'6px 14px', cursor: refreshing ? 'default' : 'pointer', fontSize:11 }}>
+            {refreshing ? 'Actualizando...' : '↻ Actualizar screener'}
+          </button>
+        </div>
         <p style={{ fontSize:11, color:C.muted, margin:'4px 0 0' }}>
           Candidatas para swing trading set-and-forget · Filtradas por EMA, RSI y volumen
         </p>
@@ -84,6 +115,16 @@ export default function Discover({ watchlist, onAdd, onRemove, onAddAll }) {
           )}
         </div>
       </div>
+
+      {/* Refresh message */}
+      {refreshMsg && (
+        <div style={{ background: refreshMsg.ok ? C.green+'11' : C.red+'11',
+          border:`1px solid ${refreshMsg.ok ? C.green : C.red}44`,
+          borderRadius:8, padding:'8px 14px', marginBottom:12, fontSize:12,
+          color: refreshMsg.ok ? C.green : C.red }}>
+          {refreshMsg.text}
+        </div>
+      )}
 
       {/* Criterios */}
       <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:8, padding:'10px 14px', marginBottom:16, fontSize:11, color:C.muted }}>
