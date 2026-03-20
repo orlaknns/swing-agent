@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 FINVIZ_URL = (
     "https://finviz.com/screener.ashx?v=111&f="
     "exch_nasd|nyse,"
+    "ind_stocksonly,"
     "sh_avgvol_o500,"
     "sh_price_o20,"
     "ta_rsi_30to60,"
