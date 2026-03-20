@@ -20,7 +20,7 @@ const SECTOR_COLORS = {
   'Utilities':           '#38bdf8',
 }
 
-export default function Discover({ watchlist, onAdd }) {
+export default function Discover({ watchlist, onAdd, onRemove, onAddAll }) {
   const [candidates, setCandidates] = useState([])
   const [loading, setLoading]       = useState(false)
   const [error, setError]           = useState(null)
@@ -106,19 +106,45 @@ export default function Discover({ watchlist, onAdd }) {
         </div>
       )}
 
-      {/* Sector filter */}
+      {/* Sector filter + bulk actions */}
       {!loading && candidates.length > 0 && (
-        <div style={{ display:'flex', gap:6, marginBottom:14, flexWrap:'wrap' }}>
-          {sectors.map(s => (
-            <button key={s} onClick={() => setFilter(s)}
-              style={{ background:filter===s ? (s==='all' ? C.accent : SECTOR_COLORS[s]||C.accent) : 'none',
-                border:`1px solid ${filter===s ? (SECTOR_COLORS[s]||C.accent) : C.border}`,
-                borderRadius:6, color:filter===s ? '#000' : C.muted,
-                padding:'4px 12px', cursor:'pointer', fontSize:11, fontWeight:filter===s?700:400 }}>
-              {s === 'all' ? `Todos (${candidates.length})` : s}
-            </button>
-          ))}
-        </div>
+        <>
+          <div style={{ display:'flex', gap:6, marginBottom:8, flexWrap:'wrap' }}>
+            {sectors.map(s => (
+              <button key={s} onClick={() => setFilter(s)}
+                style={{ background:filter===s ? (s==='all' ? C.accent : SECTOR_COLORS[s]||C.accent) : 'none',
+                  border:`1px solid ${filter===s ? (SECTOR_COLORS[s]||C.accent) : C.border}`,
+                  borderRadius:6, color:filter===s ? '#000' : C.muted,
+                  padding:'4px 12px', cursor:'pointer', fontSize:11, fontWeight:filter===s?700:400 }}>
+                {s === 'all' ? `Todos (${candidates.length})` : s}
+              </button>
+            ))}
+          </div>
+          <div style={{ display:'flex', gap:8, marginBottom:14, alignItems:'center' }}>
+            {(() => {
+              const notAdded = filtered.filter(c => !watchlist.includes(c.ticker))
+              return notAdded.length > 0 ? (
+                <button
+                  onClick={() => onAddAll(notAdded.map(c => c.ticker))}
+                  style={{ background:C.accent, border:'none', borderRadius:7, color:'#000',
+                    fontWeight:700, padding:'6px 14px', cursor:'pointer', fontSize:11 }}>
+                  + Agregar {notAdded.length === filtered.length ? 'todos' : `${notAdded.length} restantes`} a watchlist
+                </button>
+              ) : null
+            })()}
+            {(() => {
+              const added = filtered.filter(c => watchlist.includes(c.ticker))
+              return added.length > 0 ? (
+                <button
+                  onClick={() => added.forEach(c => onRemove(c.ticker))}
+                  style={{ background:'none', border:`1px solid ${C.red}66`, borderRadius:7, color:C.red,
+                    fontWeight:700, padding:'6px 14px', cursor:'pointer', fontSize:11 }}>
+                  − Quitar {added.length === filtered.length ? 'todos' : added.length} de watchlist
+                </button>
+              ) : null
+            })()}
+          </div>
+        </>
       )}
 
       {/* Candidates grid */}
@@ -144,16 +170,15 @@ export default function Discover({ watchlist, onAdd }) {
                     </div>
                   </div>
                   <button
-                    onClick={() => !added && onAdd(c.ticker)}
-                    disabled={added}
+                    onClick={() => added ? onRemove(c.ticker) : onAdd(c.ticker)}
                     style={{
-                      background: added ? C.green+'22' : C.accent,
-                      border: added ? `1px solid ${C.green}` : 'none',
-                      borderRadius:7, color: added ? C.green : '#000',
-                      fontWeight:700, padding:'5px 12px', cursor: added ? 'default' : 'pointer',
+                      background: added ? C.red+'22' : C.accent,
+                      border: added ? `1px solid ${C.red}66` : 'none',
+                      borderRadius:7, color: added ? C.red : '#000',
+                      fontWeight:700, padding:'5px 12px', cursor:'pointer',
                       fontSize:11, whiteSpace:'nowrap', flexShrink:0
                     }}>
-                    {added ? '✓ En watchlist' : '+ Agregar'}
+                    {added ? '− Quitar' : '+ Agregar'}
                   </button>
                 </div>
 

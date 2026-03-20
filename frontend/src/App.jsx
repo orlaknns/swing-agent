@@ -310,6 +310,16 @@ export default function App() {
               onAdd={ticker => {
                 if (!wl.includes(ticker)) setWatchlist(p => [ticker, ...(p||[])])
               }}
+              onRemove={ticker => {
+                setWatchlist(p => (p||[]).filter(t => t !== ticker))
+              }}
+              onAddAll={tickers => {
+                setWatchlist(p => {
+                  const existing = p || []
+                  const toAdd = tickers.filter(t => !existing.includes(t))
+                  return [...toAdd, ...existing]
+                })
+              }}
             />
           </ErrorBoundary>
         </div>
