@@ -260,7 +260,7 @@ export default function Journal({ session }) {
   const [trades,        setTrades]        = useState([])
   const [loading,       setLoading]       = useState(true)
   const [selected,      setSelected]      = useState(null)
-  const [filter,        setFilter]        = useState('all')
+  const [filter,        setFilter]        = useState('open')
   const [confirmDelete, setConfirmDelete] = useState(null) // trade a eliminar
 
   useEffect(() => {
@@ -290,6 +290,23 @@ export default function Journal({ session }) {
     wins:   trades.filter(t => t.status==='closed' && t.exitPrice && t.entryPrice && t.exitPrice > t.entryPrice).length,
   }
   const winRate = stats.closed > 0 ? Math.round((stats.wins/stats.closed)*100) : null
+
+  // Resumen de operaciones cerradas
+  const closedTrades = trades.filter(t => t.status === 'closed' && t.exitPrice && t.entryPrice && t.positionSize)
+  const closedSummary = closedTrades.reduce((acc, t) => {
+    const entry = parseFloat(t.entryPrice)
+    const exit  = parseFloat(t.exitPrice)
+    const shares = parseFloat(t.positionSize)
+    const invested = entry * shares
+    const pnlUsd   = (exit - entry) * shares
+    return {
+      totalInvested: acc.totalInvested + invested,
+      totalPnlUsd:   acc.totalPnlUsd + pnlUsd,
+    }
+  }, { totalInvested: 0, totalPnlUsd: 0 })
+  const closedPnlPct = closedSummary.totalInvested > 0
+    ? (closedSummary.totalPnlUsd / closedSummary.totalInvested * 100).toFixed(2)
+    : null
 
   if (loading) return <div style={{textAlign:'center',padding:60,color:C.muted}}>Cargando journal...</div>
 
@@ -329,6 +346,35 @@ export default function Journal({ session }) {
                 color:filter===k?'#000':C.muted,padding:'4px 12px',cursor:'pointer',fontSize:11,fontWeight:filter===k?700:400}}>
               {l}</button>
           ))}
+        </div>
+      )}
+
+      {/* Resumen cerradas */}
+      {filter === 'closed' && closedTrades.length > 0 && (
+        <div style={{ background:'#0a1520', border:`1px solid ${C.green}33`, borderRadius:10, padding:'14px 16px', marginBottom:14 }}>
+          <div style={{ fontSize:9, color:C.green, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.07em', marginBottom:10 }}>
+            Resumen operaciones cerradas
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:10 }}>
+            <div style={{ textAlign:'center' }}>
+              <div style={{ fontSize:9, color:C.muted, marginBottom:4 }}>TOTAL INVERTIDO</div>
+              <div style={{ fontSize:18, fontWeight:700, fontFamily:'monospace', color:C.text }}>
+                ${closedSummary.totalInvested.toFixed(2)}
+              </div>
+            </div>
+            <div style={{ textAlign:'center' }}>
+              <div style={{ fontSize:9, color:C.muted, marginBottom:4 }}>P&L USD</div>
+              <div style={{ fontSize:18, fontWeight:700, fontFamily:'monospace', color:closedSummary.totalPnlUsd>=0?C.green:C.red }}>
+                {closedSummary.totalPnlUsd>=0?'+':''}{closedSummary.totalPnlUsd.toFixed(2)}
+              </div>
+            </div>
+            <div style={{ textAlign:'center' }}>
+              <div style={{ fontSize:9, color:C.muted, marginBottom:4 }}>P&L %</div>
+              <div style={{ fontSize:18, fontWeight:700, fontFamily:'monospace', color:parseFloat(closedPnlPct)>=0?C.green:C.red }}>
+                {closedPnlPct>=0?'+':''}{closedPnlPct}%
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

@@ -160,7 +160,7 @@ export default function App() {
   const tabs = [
     ['watchlist', `Watchlist · ${activeWatchlist.length}`],
     ['monitor',   monitorWatchlist.length > 0 ? `En Seguimiento · ${monitorWatchlist.length}` : 'En Seguimiento'],
-    ['discover',  'Descubrir'],
+    ['discover',  'Screener'],
     ['journal',   `Journal · ${journalCount}`],
   ]
 
