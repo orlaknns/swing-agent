@@ -123,7 +123,7 @@ function TradeModal({ trade, onSave, onClose }) {
         </div>
         <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
-            {[['Precio entrada real','entryPrice'],['Tamaño posición ($)','positionSize']].map(([l,k])=>(
+            {[['Precio entrada real','entryPrice'],['Número de acciones','positionSize']].map(([l,k])=>(
               <label key={k}><div style={{fontSize:10,color:C.muted,marginBottom:4}}>{l}</div>
                 <input type="number" value={form[k]} onChange={e=>set(k,e.target.value)}
                   style={{width:'100%',background:C.bg,border:`1px solid ${C.border}`,borderRadius:6,padding:'7px 10px',color:C.text,fontSize:13,boxSizing:'border-box'}}/></label>
@@ -142,7 +142,7 @@ function TradeModal({ trade, onSave, onClose }) {
           {pnl && <div style={{background:C.bg,borderRadius:6,padding:'8px 12px',textAlign:'center'}}>
             <span style={{fontSize:12,color:C.muted}}>P&L estimado: </span>
             <span style={{fontSize:16,fontWeight:700,fontFamily:'monospace',color:pnl>0?C.green:C.red}}>
-              {fmtPct(pnl)}{form.positionSize && ` · $${((pnl/100)*form.positionSize).toFixed(0)}`}
+              {fmtPct(pnl)}{form.positionSize && form.exitPrice && ` · $${((parseFloat(form.exitPrice) - parseFloat(form.entryPrice)) * parseFloat(form.positionSize)).toFixed(2)}`}
             </span></div>}
           <label><div style={{fontSize:10,color:C.muted,marginBottom:4}}>Notas</div>
             <textarea value={form.notes} onChange={e=>set('notes',e.target.value)} rows={3}
