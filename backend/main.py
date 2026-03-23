@@ -184,10 +184,9 @@ async def fetch_realtime_quote(ticker: str, client_: httpx.AsyncClient) -> dict 
             r = await c.get(url)
         r.raise_for_status()
         data = r.json()
-        print(f"GLOBAL_QUOTE raw response for {ticker}: {data}")
         gq = data.get("Global Quote", {}) or data.get("Global Quote - DATA DELAYED BY 15 MINUTES", {})
         if not gq or "05. price" not in gq:
-            print(f"GLOBAL_QUOTE empty or missing price for {ticker}, keys: {list(data.keys())}")
+            print(f"GLOBAL_QUOTE empty or missing price for {ticker}")
             return None
         result = {
             "price":      round(float(gq.get("05. price", 0)), 2),
