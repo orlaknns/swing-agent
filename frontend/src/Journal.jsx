@@ -271,9 +271,7 @@ export default function Journal({ session }) {
 
   const update = async (updated) => {
     const row = tradeToDb(updated, session.user.id)
-    const { error } = await supabase.from('journal').update(row).eq('id', updated.id)
-    if (error) console.error('Journal update error:', error)
-    else console.log('Journal updated ok, id:', updated.id, 'entry_price:', row.entry_price)
+    await supabase.from('journal').update(row).eq('id', updated.id)
     setTrades(t => t.map(x => x.id === updated.id ? updated : x))
     setSelected(null)
   }
@@ -468,9 +466,13 @@ function tradeToDb(t, userId) {
     rr: t.rr, rsi: t.rsi, ema20: t.ema20, ema50: t.ema50, sma200: t.sma200,
     mansfield_rs: t.mansfieldRS, next_earnings: t.nextEarnings,
     fundamentals: t.fundamentals, analysis: t.analysis,
-    status: t.status, entry_price: t.entryPrice, position_size: t.positionSize,
-    exit_price: t.exitPrice, notes: t.notes,
-    real_stop_loss: t.realStopLoss, real_target: t.realTarget,
+    status: t.status,
+    entry_price:    t.entryPrice   !== '' ? t.entryPrice   : null,
+    position_size:  t.positionSize !== '' ? t.positionSize : null,
+    exit_price:     t.exitPrice    !== '' ? t.exitPrice    : null,
+    real_stop_loss: t.realStopLoss !== '' ? t.realStopLoss : null,
+    real_target:    t.realTarget   !== '' ? t.realTarget   : null,
+    notes: t.notes,
   }
 }
 
