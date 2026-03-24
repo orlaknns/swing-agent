@@ -271,7 +271,9 @@ export default function Journal({ session }) {
 
   const update = async (updated) => {
     const row = tradeToDb(updated, session.user.id)
-    await supabase.from('journal').update(row).eq('id', updated.id)
+    const { error } = await supabase.from('journal').update(row).eq('id', updated.id)
+    if (error) console.error('Journal update error:', error)
+    else console.log('Journal updated ok, id:', updated.id, 'entry_price:', row.entry_price)
     setTrades(t => t.map(x => x.id === updated.id ? updated : x))
     setSelected(null)
   }
@@ -457,8 +459,8 @@ export default function Journal({ session }) {
 
 // ── DB mappers ─────────────────────────────────────────────────────────
 function tradeToDb(t, userId) {
-  const row = {
-    user_id: userId, date: t.date, ticker: t.ticker,
+  return {
+    id: t.id, user_id: userId, date: t.date, ticker: t.ticker,
     signal: t.signal, strategy: t.strategy, trend: t.trend, price: t.price,
     entry_low: t.entryLow, entry_high: t.entryHigh, stop_loss: t.stopLoss,
     target: t.target,
@@ -470,8 +472,6 @@ function tradeToDb(t, userId) {
     exit_price: t.exitPrice, notes: t.notes,
     real_stop_loss: t.realStopLoss, real_target: t.realTarget,
   }
-  if (t.id) row.id = t.id
-  return row
 }
 
 function dbToTrade(r) {
@@ -493,7 +493,7 @@ function dbToTrade(r) {
 // ── Exported helper: save a trade from StockCard ───────────────────────
 export async function saveTradeToJournal(data, userId) {
   const trade = {
-    date: new Date().toISOString().slice(0,10),
+    id: Date.now().toString(), date: new Date().toISOString().slice(0,10),
     ticker: data.ticker, signal: data.signal, strategy: data.strategy, trend: data.trend,
     price: data.price, entryLow: data.entryLow, entryHigh: data.entryHigh,
     stopLoss: data.stopLoss, target: data.target,
@@ -503,8 +503,6 @@ export async function saveTradeToJournal(data, userId) {
     status: 'open', entryPrice: null, positionSize: null, exitPrice: null, notes: '',
     realStopLoss: null, realTarget: null,
   }
-  const row = tradeToDb(trade, userId)
-  delete row.id  // dejar que Supabase genere el UUID
-  const { data: inserted } = await supabase.from('journal').insert(row).select().single()
-  return dbToTrade(inserted)
+  await supabase.from('journal').insert(tradeToDb(trade, userId))
+  return trade
 }
