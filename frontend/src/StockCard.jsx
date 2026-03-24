@@ -160,7 +160,7 @@ function FundamentalsBlock({ f, nextEarnings }) {
 
 const round2 = (n) => Math.round(n * 100) / 100
 
-export default function StockCard({ ticker, onRemove, session, onMonitor, onAnalysed, cachedData, isInMonitorTab }) {
+export default function StockCard({ ticker, onRemove, session, onMonitor, onAnalysed, cachedData, isInMonitorTab, activeTrade }) {
   const [data,         setData]         = useState(cachedData || null)
   const [loading,      setLoading]      = useState(false)
   const [expanded,     setExpanded]     = useState(false)
@@ -242,6 +242,25 @@ export default function StockCard({ ticker, onRemove, session, onMonitor, onAnal
             style={{ background:'none', border:'none', color:C.muted, cursor:'pointer', fontSize:17, padding:'0 3px' }}>×</button>
         </div>
       </div>
+
+      {/* Active trade badge */}
+      {activeTrade && (() => {
+        const entry = activeTrade.entryPrice
+        const pnlPct = (data && !data.error && data.price && entry)
+          ? (((data.price - entry) / entry) * 100).toFixed(1)
+          : null
+        return (
+          <div style={{ background:'#001a0a', border:'1px solid #00e09644', borderRadius:7, padding:'6px 10px', display:'flex', alignItems:'center', gap:8 }}>
+            <span style={{ fontSize:10, color:C.green, fontWeight:700 }}>📈 TRADE ACTIVO</span>
+            {entry && <span style={{ fontSize:10, color:C.muted, fontFamily:'monospace' }}>Entrada ${Number(entry).toFixed(2)}</span>}
+            {pnlPct !== null && (
+              <span style={{ fontSize:10, fontWeight:700, fontFamily:'monospace', color: Number(pnlPct) >= 0 ? C.green : C.red, marginLeft:'auto' }}>
+                {Number(pnlPct) >= 0 ? '+' : ''}{pnlPct}%
+              </span>
+            )}
+          </div>
+        )
+      })()}
 
       {/* Loading */}
       {loading && (
@@ -486,13 +505,16 @@ export default function StockCard({ ticker, onRemove, session, onMonitor, onAnal
         {/* Save to journal button + IBKR config note */}
         {data && !data.error && !loading && (
           <>
-            <button onClick={saveToJournal}
-              style={{ width:'100%', background: journalSaved ? C.green+'22' : 'none',
-                border:`1px solid ${journalSaved ? C.green : C.border}`,
-                borderRadius:7, color: journalSaved ? C.green : C.muted,
-                cursor:'pointer', padding:'7px 10px', fontSize:11,
+            <button onClick={activeTrade ? undefined : saveToJournal}
+              disabled={!!activeTrade}
+              style={{ width:'100%',
+                background: activeTrade ? C.green+'11' : journalSaved ? C.green+'22' : 'none',
+                border:`1px solid ${activeTrade ? C.green+'44' : journalSaved ? C.green : C.border}`,
+                borderRadius:7,
+                color: activeTrade ? C.green+'99' : journalSaved ? C.green : C.muted,
+                cursor: activeTrade ? 'default' : 'pointer', padding:'7px 10px', fontSize:11,
                 transition:'all 0.2s', display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
-              {journalSaved ? '✓ Guardado en journal' : '📋 Guardar en journal'}
+              {activeTrade ? '📈 Ya tienes un trade activo' : journalSaved ? '✓ Guardado en journal' : '📋 Guardar en journal'}
             </button>
 
             {/* IBKR OCO config note — shown after saving */}

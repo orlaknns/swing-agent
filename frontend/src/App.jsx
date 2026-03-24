@@ -107,14 +107,28 @@ export default function App() {
     saveToSupabase(watchlist, monitorTickers)
   }, [watchlist, monitorTickers, session]) // eslint-disable-line
 
-  // ── Journal count ─────────────────────────────────────────────────────
+  // ── Journal count + open trades ───────────────────────────────────────
+  const [openTrades, setOpenTrades] = useState({}) // { AAPL: { entryPrice: 150, id: '...' } }
+
   useEffect(() => {
     if (!session) return
-    const fetchCount = () =>
-      supabase.from('journal').select('id', { count:'exact' }).eq('user_id', session.user.id)
-        .then(({ count }) => setJournalCount(count || 0))
-    fetchCount()
-    const iv = setInterval(fetchCount, 5000)
+    const fetchJournal = () => {
+      supabase.from('journal')
+        .select('id, ticker, entry_price, status')
+        .eq('user_id', session.user.id)
+        .then(({ data }) => {
+          setJournalCount(data?.length || 0)
+          const map = {}
+          ;(data || []).forEach(t => {
+            if (t.status === 'open' || !t.status) {
+              map[t.ticker] = { id: t.id, entryPrice: t.entry_price }
+            }
+          })
+          setOpenTrades(map)
+        })
+    }
+    fetchJournal()
+    const iv = setInterval(fetchJournal, 5000)
     return () => clearInterval(iv)
   }, [session])
 
@@ -249,6 +263,7 @@ export default function App() {
                         onAnalysed={cacheAnalysis}
                         onRemove={removeFromAll}
                         onMonitor={moveToMonitor}
+                        activeTrade={openTrades[t] || null}
                       />
                     </ErrorBoundary>
                   ))}
@@ -293,6 +308,7 @@ export default function App() {
                         onRemove={removeFromAll}
                         onMonitor={removeFromMonitor}
                         isInMonitorTab={true}
+                        activeTrade={openTrades[t] || null}
                       />
                     </ErrorBoundary>
                   ))}
