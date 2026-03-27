@@ -107,24 +107,31 @@ export default function App() {
     saveToSupabase(watchlist, monitorTickers)
   }, [watchlist, monitorTickers, session]) // eslint-disable-line
 
-  // ── Journal count + open trades ───────────────────────────────────────
-  const [openTrades, setOpenTrades] = useState({}) // { AAPL: { entryPrice: 150, id: '...' } }
+  // ── Journal count + open trades + last closed trade ───────────────────
+  const [openTrades,       setOpenTrades]       = useState({}) // { AAPL: { entryPrice, id } }
+  const [lastClosedTrades, setLastClosedTrades] = useState({}) // { AAPL: { date, exitPrice } }
 
   useEffect(() => {
     if (!session) return
     const fetchJournal = () => {
       supabase.from('journal')
-        .select('id, ticker, entry_price, status')
+        .select('id, ticker, entry_price, exit_price, status, date')
         .eq('user_id', session.user.id)
+        .order('date', { ascending: false })
         .then(({ data }) => {
           setJournalCount(data?.length || 0)
-          const map = {}
+          const openMap  = {}
+          const closedMap = {}
           ;(data || []).forEach(t => {
             if (t.status === 'open' || !t.status) {
-              map[t.ticker] = { id: t.id, entryPrice: t.entry_price }
+              openMap[t.ticker] = { id: t.id, entryPrice: t.entry_price }
+            } else if (t.status === 'closed' && !closedMap[t.ticker]) {
+              // first occurrence = most recent (ordered desc by date)
+              closedMap[t.ticker] = { date: t.date, exitPrice: t.exit_price }
             }
           })
-          setOpenTrades(map)
+          setOpenTrades(openMap)
+          setLastClosedTrades(closedMap)
         })
     }
     fetchJournal()
@@ -264,6 +271,7 @@ export default function App() {
                         onRemove={removeFromAll}
                         onMonitor={moveToMonitor}
                         activeTrade={openTrades[t] || null}
+                        lastClosedTrade={!openTrades[t] ? (lastClosedTrades[t] || null) : null}
                       />
                     </ErrorBoundary>
                   ))}
@@ -309,6 +317,7 @@ export default function App() {
                         onMonitor={removeFromMonitor}
                         isInMonitorTab={true}
                         activeTrade={openTrades[t] || null}
+                        lastClosedTrade={!openTrades[t] ? (lastClosedTrades[t] || null) : null}
                       />
                     </ErrorBoundary>
                   ))}

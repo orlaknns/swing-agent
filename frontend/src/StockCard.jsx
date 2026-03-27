@@ -160,7 +160,7 @@ function FundamentalsBlock({ f, nextEarnings }) {
 
 const round2 = (n) => Math.round(n * 100) / 100
 
-export default function StockCard({ ticker, onRemove, session, onMonitor, onAnalysed, cachedData, isInMonitorTab, activeTrade }) {
+export default function StockCard({ ticker, onRemove, session, onMonitor, onAnalysed, cachedData, isInMonitorTab, activeTrade, lastClosedTrade }) {
   const [data,         setData]         = useState(cachedData || null)
   const [loading,      setLoading]      = useState(false)
   const [expanded,     setExpanded]     = useState(false)
@@ -242,6 +242,20 @@ export default function StockCard({ ticker, onRemove, session, onMonitor, onAnal
             style={{ background:'none', border:'none', color:C.muted, cursor:'pointer', fontSize:17, padding:'0 3px' }}>×</button>
         </div>
       </div>
+
+      {/* Last closed trade badge */}
+      {lastClosedTrade && (() => {
+        const d = new Date(lastClosedTrade.date + 'T00:00:00')
+        const dateLabel = d.toLocaleDateString('es-CL', { day:'numeric', month:'short' })
+        const daysSince = Math.floor((new Date() - d) / (1000*60*60*24))
+        return (
+          <div style={{ background:'#0f1929', border:'1px solid #4a608055', borderRadius:7, padding:'6px 10px', display:'flex', alignItems:'center', gap:8 }}>
+            <span style={{ fontSize:10, color:C.muted, fontWeight:700 }}>🕐 Último trade cerrado</span>
+            <span style={{ fontSize:10, color:C.text, fontFamily:'monospace' }}>{dateLabel}</span>
+            <span style={{ fontSize:10, color:C.muted, marginLeft:'auto' }}>hace {daysSince}d</span>
+          </div>
+        )
+      })()}
 
       {/* Active trade badge */}
       {activeTrade && (() => {
