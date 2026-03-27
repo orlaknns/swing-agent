@@ -271,7 +271,10 @@ export default function Journal({ session }) {
 
   const update = async (updated) => {
     const row = tradeToDb(updated, session.user.id)
-    await supabase.from('journal').update(row).eq('id', updated.id)
+    // Exclude id and user_id from the update payload — they go in the WHERE clause / RLS
+    const { id: _id, user_id: _uid, ...updateRow } = row
+    const { error } = await supabase.from('journal').update(updateRow).eq('id', updated.id)
+    if (error) { console.error('Journal update error:', error); return }
     setTrades(t => t.map(x => x.id === updated.id ? updated : x))
     setSelected(null)
   }
