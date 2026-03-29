@@ -713,6 +713,8 @@ async def _analyze_inner(ticker: str):
     sl_default = round(price * 0.95,  2)
     tg_default = round(price * 1.125, 2)
 
+    ex_dividend_date = (fundamentals or {}).get("exDividendDate")
+
     ex_div_str = ""
     if ex_dividend_date:
         try:
@@ -779,7 +781,6 @@ async def _analyze_inner(ticker: str):
     rr = round(abs((target - entry_mid) / risk), 2) if risk > 0.001 else 0
 
     # Score calculado matemáticamente
-    ex_dividend_date = (fundamentals or {}).get("exDividendDate")
     score_data = calc_score(
         rsi=rsi, ema20=ema20, ema50=ema50, sma200=sma200, price=price,
         vol_ratio=vol_ratio, mansfield_rs=mansfield_rs,
