@@ -116,6 +116,13 @@ function earningsDays(dateStr) {
   } catch { return null }
 }
 
+function exDivDays(dateStr) {
+  try {
+    const d = new Date(dateStr + 'T00:00:00')
+    return Math.ceil((d - new Date()) / (1000*60*60*24))
+  } catch { return null }
+}
+
 function FundamentalsBlock({ f, nextEarnings }) {
   if (!f || Object.keys(f).length === 0) return null
   const rows = [
@@ -138,6 +145,25 @@ function FundamentalsBlock({ f, nextEarnings }) {
         label: 'Prox. earnings',
         val:   days <= 14 ? dateLabel + ' !! ' + days + 'd' : dateLabel + ' (' + days + 'd)',
         color: days <= 14 ? C.red : days <= 30 ? C.amber : C.muted
+      })
+    }
+  }
+
+  if (f.exDividendDate) {
+    const days = exDivDays(f.exDividendDate)
+    if (days !== null && days >= 0) {
+      let dateLabel = f.exDividendDate
+      try { dateLabel = new Date(f.exDividendDate + 'T00:00:00').toLocaleDateString('es-CL', {day:'numeric', month:'short'}) } catch {}
+      const divStr = f.dividendPerShare ? ` · $${f.dividendPerShare}/acc` : ''
+      const yieldStr = f.dividendYield ? ` (yield ${f.dividendYield}%)` : ''
+      rows.push({
+        label: 'Ex-dividend',
+        val:   days <= 5
+          ? `⚠ ${dateLabel} en ${days}d${divStr}`
+          : days <= 30
+            ? `${dateLabel} en ${days}d${divStr}${yieldStr}`
+            : `${dateLabel}${divStr}${yieldStr}`,
+        color: days <= 5 ? C.red : days <= 14 ? C.amber : C.muted
       })
     }
   }

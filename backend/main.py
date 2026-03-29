@@ -154,6 +154,16 @@ async def fetch_fundamentals(ticker: str, client_: httpx.AsyncClient) -> dict:
         eps_growth_raw = safe_float(data.get("QuarterlyEarningsGrowthYOY"))
         eps_growth = round(eps_growth_raw * 100, 1) if eps_growth_raw else None
 
+        # Dividend data
+        ex_div_date = data.get("ExDividendDate") or None
+        div_per_share = safe_float(data.get("DividendPerShare"))
+        div_yield_raw = safe_float(data.get("DividendYield"))
+        div_yield = round(div_yield_raw * 100, 2) if div_yield_raw else None
+
+        # Limpiar fechas inválidas ("None", "0000-00-00", etc.)
+        if ex_div_date and (ex_div_date in ("None", "0000-00-00", "null", "-") or len(ex_div_date) < 8):
+            ex_div_date = None
+
         return {
             "name":         data.get("Name") or None,
             "sector":       data.get("Sector") or None,
@@ -166,6 +176,9 @@ async def fetch_fundamentals(ticker: str, client_: httpx.AsyncClient) -> dict:
             "epsGrowth":    eps_growth,
             "analystTarget": safe_float(data.get("AnalystTargetPrice")),
             "debtToEquity": safe_float(data.get("DebtToEquityRatio")),
+            "exDividendDate": ex_div_date,
+            "dividendPerShare": div_per_share,
+            "dividendYield": div_yield,
         }
     except Exception:
         return {}
@@ -311,7 +324,7 @@ def calc_momentum_4w(closes: list) -> float | None:
 
 
 def calc_score(rsi, ema20, ema50, sma200, price, vol_ratio, mansfield_rs,
-               next_earnings, fundamentals, rr) -> dict:
+               next_earnings, fundamentals, rr, ex_dividend_date=None) -> dict:
     """
     Score de probabilidad calculado matemáticamente (0-100).
     Retorna score, desglose y lista de contradicciones/alertas.
@@ -387,6 +400,25 @@ def calc_score(rsi, ema20, ema50, sma200, price, vol_ratio, mansfield_rs,
                 breakdown['earnings'] = 0
         except Exception:
             breakdown['earnings'] = 0
+
+    # Ex-Dividend
+    if ex_dividend_date:
+        try:
+            from datetime import date
+            days_to_exdiv = (date.fromisoformat(ex_dividend_date) - date.today()).days
+            if 0 <= days_to_exdiv <= 5:
+                score -= 20; breakdown['ex_dividend'] = -20
+                alerts.append(f"Ex-dividend en {days_to_exdiv} días — el precio caerá ~el monto del dividendo. Alto riesgo si el objetivo no cubre esa caída.")
+            elif 0 <= days_to_exdiv <= 14:
+                score -= 10; breakdown['ex_dividend'] = -10
+                alerts.append(f"Ex-dividend en {days_to_exdiv} días — considerar posible presión bajista post-dividendo al planificar el objetivo.")
+            elif 0 <= days_to_exdiv <= 30:
+                score -= 5; breakdown['ex_dividend'] = -5
+                alerts.append(f"Ex-dividend en {days_to_exdiv} días — dentro del plazo del trade. Tener en cuenta presión vendedora post-pago.")
+            else:
+                breakdown['ex_dividend'] = 0
+        except Exception:
+            breakdown['ex_dividend'] = 0
 
     # R:B
     if rr >= 3:
@@ -668,10 +700,23 @@ async def analyze(ticker: str):
     sl_default = round(price * 0.95,  2)
     tg_default = round(price * 1.125, 2)
 
+    ex_div_str = ""
+    if ex_dividend_date:
+        try:
+            from datetime import date as _date
+            days_to_exdiv = (_date.fromisoformat(ex_dividend_date) - _date.today()).days
+            div_amt = (fundamentals or {}).get("dividendPerShare")
+            div_txt = f" (${div_amt}/accion)" if div_amt else ""
+            if 0 <= days_to_exdiv <= 30:
+                ex_div_str = f"\nEx-dividend: {ex_dividend_date} (en {days_to_exdiv} dias){div_txt} — el precio caera aprox el monto del dividendo en esa fecha. Ajustar objetivo si cae dentro del plazo del trade."
+        except Exception:
+            pass
+
     prompt = (
         f"Analiza {ticker} para swing trading set-and-forget (sin gestion activa). Datos reales:\n"
         f"Precio: ${price} | Cambio: {change}% | EMA20: ${ema20} | EMA50: ${ema50} | RSI: {rsi} | Vol%: {vol_ratio}\n"
         f"Max20d: ${round(recent_high,2)} | Min20d: ${round(recent_low,2)} | SMA200: ${sma200 or 'N/A'} | ATR: ${round(atr,2)} | Mom4w: {momentum_4w}% | Ultimos5: {last_5}\n"
+        f"{ex_div_str}"
         f"\nEstrategia: entrada unica, stop-loss fijo, objetivo unico fijo. Sin ajustes manuales. Plazo maximo estimado: {max_days} dias (calculado por volatilidad ATR).\n"
         "\nResponde UNICAMENTE con este JSON (sin texto antes ni despues, sin markdown):\n"
         + '{' + f'"signal":"buy","strategy":"pullback","entryLow":{el_default},"entryHigh":{eh_default},"stopLoss":{sl_default},"target":{tg_default},"trend":"bullish","successRate":60,"keyLevel":{ema20},"analysis":"texto aqui"' + '}'
@@ -721,10 +766,12 @@ async def analyze(ticker: str):
     rr = round(abs((target - entry_mid) / risk), 2) if risk > 0.001 else 0
 
     # Score calculado matemáticamente
+    ex_dividend_date = (fundamentals or {}).get("exDividendDate")
     score_data = calc_score(
         rsi=rsi, ema20=ema20, ema50=ema50, sma200=sma200, price=price,
         vol_ratio=vol_ratio, mansfield_rs=mansfield_rs,
-        next_earnings=next_earnings, fundamentals=fundamentals, rr=rr
+        next_earnings=next_earnings, fundamentals=fundamentals, rr=rr,
+        ex_dividend_date=ex_dividend_date
     )
     # Determinar señal final con nivel de confianza
     signal_result = determine_final_signal(
