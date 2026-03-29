@@ -633,8 +633,19 @@ def extract_json(text: str) -> dict:
 
 @app.get("/analyze/{ticker}")
 async def analyze(ticker: str):
+    import traceback as _tb
     ticker = ticker.upper().strip()
+    try:
+        return await _analyze_inner(ticker)
+    except HTTPException:
+        raise
+    except Exception as e:
+        detail = f"{type(e).__name__}: {e}\n{_tb.format_exc()[-800:]}"
+        print(f"ANALYZE ERROR {ticker}: {detail}")
+        raise HTTPException(status_code=500, detail=detail)
 
+
+async def _analyze_inner(ticker: str):
     async with httpx.AsyncClient(timeout=20) as http:
         candles, fundamentals, spy_closes, next_earnings, rt_quote = await asyncio.gather(
             fetch_prices(ticker, http),
@@ -822,6 +833,7 @@ async def analyze(ticker: str):
         "nextEarnings": next_earnings,
         "fundamentals": fundamentals,
     }, media_type="application/json; charset=utf-8")
+
 
 
 @app.get("/health")
