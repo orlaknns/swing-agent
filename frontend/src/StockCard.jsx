@@ -151,19 +151,16 @@ function FundamentalsBlock({ f, nextEarnings }) {
 
   if (f.exDividendDate) {
     const days = exDivDays(f.exDividendDate)
-    if (days !== null && days >= 0) {
+    // En fundamentales solo mostramos si es > 30 días (los cercanos tienen banner propio)
+    if (days !== null && days > 30) {
       let dateLabel = f.exDividendDate
       try { dateLabel = new Date(f.exDividendDate + 'T00:00:00').toLocaleDateString('es-CL', {day:'numeric', month:'short'}) } catch {}
       const divStr = f.dividendPerShare ? ` · $${f.dividendPerShare}/acc` : ''
       const yieldStr = f.dividendYield ? ` (yield ${f.dividendYield}%)` : ''
       rows.push({
         label: 'Ex-dividend',
-        val:   days <= 5
-          ? `⚠ ${dateLabel} en ${days}d${divStr}`
-          : days <= 30
-            ? `${dateLabel} en ${days}d${divStr}${yieldStr}`
-            : `${dateLabel}${divStr}${yieldStr}`,
-        color: days <= 5 ? C.red : days <= 14 ? C.amber : C.muted
+        val:   `${dateLabel}${divStr}${yieldStr}`,
+        color: C.muted
       })
     }
   }
@@ -328,6 +325,41 @@ export default function StockCard({ ticker, onRemove, session, onMonitor, onAnal
           </div>
           <Sparkline prices={data.prices20d} signal={data.signal} />
         </div>
+
+        {/* Ex-dividend banner — visible solo cuando cae dentro del plazo del trade */}
+        {(() => {
+          const f = data.fundamentals || {}
+          if (!f.exDividendDate) return null
+          const days = exDivDays(f.exDividendDate)
+          if (days === null || days < 0 || days > (data.maxDays || 20)) return null
+          let dateLabel = f.exDividendDate
+          try { dateLabel = new Date(f.exDividendDate + 'T00:00:00').toLocaleDateString('es-CL', {day:'numeric', month:'short'}) } catch {}
+          const divStr = f.dividendPerShare ? ` · $${f.dividendPerShare}/acc` : ''
+          const isUrgent = days <= 5
+          const bg     = isUrgent ? '#1a0505' : '#1a1005'
+          const border = isUrgent ? `${C.red}55`  : `${C.amber}55`
+          const color  = isUrgent ? C.red          : C.amber
+          const icon   = isUrgent ? '⚠' : '📅'
+          return (
+            <div style={{ background:bg, border:`1px solid ${border}`, borderRadius:7, padding:'8px 10px' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                <span style={{ fontSize:10, color, fontWeight:700 }}>
+                  {icon} EX-DIVIDEND en {days} días — {dateLabel}{divStr}
+                </span>
+                {f.dividendYield && (
+                  <span style={{ fontSize:10, color, fontFamily:'monospace', opacity:0.8 }}>
+                    yield {f.dividendYield}%
+                  </span>
+                )}
+              </div>
+              <div style={{ fontSize:10, color, opacity:0.75, marginTop:3 }}>
+                {isUrgent
+                  ? 'El precio caerá ~el monto del dividendo en esta fecha. Evitar abrir posición ahora.'
+                  : 'Cae dentro del plazo del trade — el precio bajará ~el dividendo en esta fecha.'}
+              </div>
+            </div>
+          )
+        })()}
 
         {/* Rango entrada / SL — etiquetas según señal */}
         {(() => {
