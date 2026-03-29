@@ -324,7 +324,7 @@ def calc_momentum_4w(closes: list) -> float | None:
 
 
 def calc_score(rsi, ema20, ema50, sma200, price, vol_ratio, mansfield_rs,
-               next_earnings, fundamentals, rr, ex_dividend_date=None) -> dict:
+               next_earnings, fundamentals, rr, ex_dividend_date=None, max_days=20) -> dict:
     """
     Score de probabilidad calculado matemáticamente (0-100).
     Retorna score, desglose y lista de contradicciones/alertas.
@@ -401,22 +401,24 @@ def calc_score(rsi, ema20, ema50, sma200, price, vol_ratio, mansfield_rs,
         except Exception:
             breakdown['earnings'] = 0
 
-    # Ex-Dividend
+    # Ex-Dividend — solo penaliza si cae dentro del plazo máximo del trade
     if ex_dividend_date:
         try:
             from datetime import date
             days_to_exdiv = (date.fromisoformat(ex_dividend_date) - date.today()).days
-            if 0 <= days_to_exdiv <= 5:
-                score -= 20; breakdown['ex_dividend'] = -20
-                alerts.append(f"Ex-dividend en {days_to_exdiv} días — el precio caerá ~el monto del dividendo. Alto riesgo si el objetivo no cubre esa caída.")
-            elif 0 <= days_to_exdiv <= 14:
-                score -= 10; breakdown['ex_dividend'] = -10
-                alerts.append(f"Ex-dividend en {days_to_exdiv} días — considerar posible presión bajista post-dividendo al planificar el objetivo.")
-            elif 0 <= days_to_exdiv <= 30:
-                score -= 5; breakdown['ex_dividend'] = -5
-                alerts.append(f"Ex-dividend en {days_to_exdiv} días — dentro del plazo del trade. Tener en cuenta presión vendedora post-pago.")
+            if 0 <= days_to_exdiv <= max_days:
+                # Mientras más cerca del inicio del trade, más riesgo
+                if days_to_exdiv <= 5:
+                    score -= 20; breakdown['ex_dividend'] = -20
+                    alerts.append(f"Ex-dividend en {days_to_exdiv} días — el precio caerá ~el monto del dividendo. Alto riesgo si el objetivo no cubre esa caída.")
+                elif days_to_exdiv <= round(max_days * 0.4):
+                    score -= 10; breakdown['ex_dividend'] = -10
+                    alerts.append(f"Ex-dividend en {days_to_exdiv} días (dentro del plazo del trade de {max_days}d) — posible presión bajista post-dividendo.")
+                else:
+                    score -= 5; breakdown['ex_dividend'] = -5
+                    alerts.append(f"Ex-dividend en {days_to_exdiv} días (dentro del plazo del trade de {max_days}d) — tener en cuenta presión vendedora post-pago.")
             else:
-                breakdown['ex_dividend'] = 0
+                breakdown['ex_dividend'] = 0  # fuera del plazo del trade, no afecta
         except Exception:
             breakdown['ex_dividend'] = 0
 
@@ -707,8 +709,8 @@ async def analyze(ticker: str):
             days_to_exdiv = (_date.fromisoformat(ex_dividend_date) - _date.today()).days
             div_amt = (fundamentals or {}).get("dividendPerShare")
             div_txt = f" (${div_amt}/accion)" if div_amt else ""
-            if 0 <= days_to_exdiv <= 30:
-                ex_div_str = f"\nEx-dividend: {ex_dividend_date} (en {days_to_exdiv} dias){div_txt} — el precio caera aprox el monto del dividendo en esa fecha. Ajustar objetivo si cae dentro del plazo del trade."
+            if 0 <= days_to_exdiv <= max_days:
+                ex_div_str = f"\nEx-dividend: {ex_dividend_date} (en {days_to_exdiv} dias){div_txt} — el precio caera aprox el monto del dividendo en esa fecha. Cae dentro del plazo maximo del trade ({max_days}d), ajustar objetivo considerando esa caida."
         except Exception:
             pass
 
@@ -771,7 +773,7 @@ async def analyze(ticker: str):
         rsi=rsi, ema20=ema20, ema50=ema50, sma200=sma200, price=price,
         vol_ratio=vol_ratio, mansfield_rs=mansfield_rs,
         next_earnings=next_earnings, fundamentals=fundamentals, rr=rr,
-        ex_dividend_date=ex_dividend_date
+        ex_dividend_date=ex_dividend_date, max_days=max_days
     )
     # Determinar señal final con nivel de confianza
     signal_result = determine_final_signal(
