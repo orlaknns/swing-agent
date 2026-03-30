@@ -329,58 +329,60 @@ def calc_score(rsi, ema20, ema50, sma200, price, vol_ratio, mansfield_rs,
     Score de probabilidad calculado matemáticamente (0-100).
     Retorna score, desglose y lista de contradicciones/alertas.
     """
-    score = 50  # base neutral
+    # Base mínima: 10. Suma máxima de positivos: 90. Total máximo posible: 100 (sin recorte).
+    # Así cualquier penalización siempre se refleja en el número final visible al usuario.
+    score = 10
     breakdown = {}
     alerts = []
     contradictions = []
 
-    # RSI
+    # RSI (máx +18)
     if 40 <= rsi <= 60:
-        score += 15; breakdown['rsi'] = +15
+        score += 18; breakdown['rsi'] = +18
     elif rsi < 30:
-        score += 8; breakdown['rsi'] = +8
+        score += 10; breakdown['rsi'] = +10
     elif rsi > 75:
-        score -= 15; breakdown['rsi'] = -15
+        score -= 18; breakdown['rsi'] = -18
         alerts.append(f"RSI {rsi} — sobrecompra extrema, alta probabilidad de corrección")
     elif rsi > 65:
-        score -= 8; breakdown['rsi'] = -8
+        score -= 10; breakdown['rsi'] = -10
     else:
         breakdown['rsi'] = 0
 
-    # Tendencia EMA
+    # Tendencia EMA (máx +18)
     if ema20 > ema50:
-        score += 15; breakdown['ema_trend'] = +15
+        score += 18; breakdown['ema_trend'] = +18
     else:
-        score -= 15; breakdown['ema_trend'] = -15
+        score -= 18; breakdown['ema_trend'] = -18
         alerts.append("EMA20 < EMA50 — tendencia bajista de corto plazo")
 
-    # SMA200
+    # SMA200 (máx +12)
     if sma200:
         if price > sma200:
-            score += 10; breakdown['sma200'] = +10
+            score += 12; breakdown['sma200'] = +12
         else:
-            score -= 10; breakdown['sma200'] = -10
+            score -= 12; breakdown['sma200'] = -12
             alerts.append(f"Precio bajo SMA200 (${sma200}) — tendencia bajista estructural")
 
-    # Mansfield RS
+    # Mansfield RS (máx +14)
     if mansfield_rs is not None:
         if mansfield_rs > 2:
-            score += 12; breakdown['mansfield'] = +12
+            score += 14; breakdown['mansfield'] = +14
         elif mansfield_rs > 0:
-            score += 6; breakdown['mansfield'] = +6
+            score += 7; breakdown['mansfield'] = +7
         elif mansfield_rs < -2:
-            score -= 15; breakdown['mansfield'] = -15
+            score -= 18; breakdown['mansfield'] = -18
             alerts.append(f"Mansfield RS {mansfield_rs} — acción muy rezagada vs S&P500")
         else:
-            score -= 6; breakdown['mansfield'] = -6
+            score -= 7; breakdown['mansfield'] = -7
 
-    # Volumen
+    # Volumen (máx +10)
     if vol_ratio >= 100:
-        score += 8; breakdown['volume'] = +8
+        score += 10; breakdown['volume'] = +10
     elif vol_ratio >= 80:
-        score += 4; breakdown['volume'] = +4
+        score += 5; breakdown['volume'] = +5
     elif vol_ratio < 60:
-        score -= 10; breakdown['volume'] = -10
+        score -= 12; breakdown['volume'] = -12
         alerts.append(f"Volumen muy bajo ({vol_ratio}% del promedio) — baja participación institucional")
     else:
         breakdown['volume'] = 0
@@ -422,13 +424,13 @@ def calc_score(rsi, ema20, ema50, sma200, price, vol_ratio, mansfield_rs,
         except Exception:
             breakdown['ex_dividend'] = 0
 
-    # R:B
+    # R:B (máx +12)
     if rr >= 3:
-        score += 10; breakdown['rr'] = +10
+        score += 12; breakdown['rr'] = +12
     elif rr >= 2.5:
-        score += 6; breakdown['rr'] = +6
+        score += 8; breakdown['rr'] = +8
     elif rr < 2:
-        score -= 10; breakdown['rr'] = -10
+        score -= 12; breakdown['rr'] = -12
     else:
         breakdown['rr'] = 0
 
@@ -468,7 +470,7 @@ def calc_score(rsi, ema20, ema50, sma200, price, vol_ratio, mansfield_rs,
             )
             score -= 5
         elif analyst_upside > 30:
-            score += 5  # analistas ven mucho upside
+            score += 6  # analistas ven mucho upside
 
     # Señal EVITAR
     avoid = False
@@ -483,7 +485,7 @@ def calc_score(rsi, ema20, ema50, sma200, price, vol_ratio, mansfield_rs,
         avoid = True
         avoid_reason = "Señales técnicas y fundamentales fuertemente contradictorias. Difícil estimar dirección."
 
-    score = max(0, min(100, score))
+    score = max(0, min(100, score))  # min(100) solo protege casos extremos de penalizaciones negativas acumuladas
     return {
         'score': score,
         'breakdown': breakdown,
