@@ -685,11 +685,20 @@ async def _analyze_inner(ticker: str):
     estimated_days = round(dist_to_target_pct / avg_daily_move * 2.5) if avg_daily_move > 0 else 20
     max_days = max(10, min(30, estimated_days))  # entre 10 y 30 días
 
-    # defaults set-and-forget
+    # defaults set-and-forget — anclados a soportes/resistencias técnicas reales
+    # Entrada: rango estrecho alrededor del precio actual
     el_default = round(price * 0.995, 2)
-    eh_default = round(price * 1.010, 2)
-    sl_default = round(price * 0.95,  2)
-    tg_default = round(price * 1.125, 2)
+    eh_default = round(price * 1.005, 2)
+    entry_mid_default = round((el_default + eh_default) / 2, 2)
+    # Stop-loss: anclado al mínimo de 20 días (soporte técnico real)
+    # Si el mínimo está muy lejos (>10%), usar 7% máximo para evitar stops absurdos
+    raw_sl = round(recent_low * 0.995, 2)  # ligeramente bajo el soporte
+    max_sl_distance = round(price * 0.93, 2)  # no más de 7% bajo precio
+    sl_default = max(raw_sl, max_sl_distance)
+    # Target: anclado al máximo de 20 días con mínimo 2.5x R:B
+    risk_default = entry_mid_default - sl_default
+    min_target_rb = round(entry_mid_default + risk_default * 2.5, 2) if risk_default > 0 else round(price * 1.125, 2)
+    tg_default = round(max(recent_high, min_target_rb), 2)
 
     ex_dividend_date = (fundamentals or {}).get("exDividendDate")
 
@@ -726,10 +735,10 @@ async def _analyze_inner(ticker: str):
         + '{' + f'"signal":"buy","strategy":"pullback","entryLow":{el_default},"entryHigh":{eh_default},"stopLoss":{sl_default},"target":{tg_default},"trend":"bullish","keyLevel":{ema20},"analysis":"texto aqui"' + '}'
         + "\n\nReglas:\n"
         "- signal debe reflejar las condiciones objetivas indicadas arriba (buy solo si tendencia alcista, sell si bajista)\n"
-        "- entryLow: limite inferior del rango de entrada (soporte tecnico, precio -0.5% a -1.5%)\n"
-        "- entryHigh: limite superior del rango de entrada (resistencia menor, precio +0.5% a +1.5%)\n"
-        "- stopLoss: FIJO entre 5% y 7% bajo entryLow, en soporte tecnico real. NO se mueve.\n"
-        "- target: objetivo UNICO fijo con R:B minimo 2.5x. En resistencia tecnica real.\n"
+        f"- entryLow: limite inferior del rango de entrada — usar {el_default} como base (soporte cercano al precio actual)\n"
+        f"- entryHigh: limite superior del rango de entrada — usar {eh_default} como base (resistencia menor)\n"
+        f"- stopLoss: FIJO en soporte tecnico real — minimo 20d es ${round(recent_low,2)}, usar ese nivel como referencia. Default: {sl_default}. NO se mueve.\n"
+        f"- target: objetivo UNICO fijo con R:B minimo 2.5x — maximo 20d es ${round(recent_high,2)}, usar como referencia. Default: {tg_default}. En resistencia tecnica real.\n"
         "- signal=buy/sell/hold, strategy=pullback/breakout/reversal/neutral, trend=bullish/bearish/sideways\n"
         "- Para sell: entryLow/entryHigh es rango venta corta, stopLoss es proteccion al alza, target es objetivo a la baja."
     )

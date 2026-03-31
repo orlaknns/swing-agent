@@ -138,6 +138,12 @@ function TradeModal({ trade, onSave, onClose }) {
   const pnlUsd = pnlPct && form.positionSize && form.exitPrice
     ? ((parseFloat(form.exitPrice) - parseFloat(form.entryPrice)) * parseFloat(form.positionSize)).toFixed(2)
     : null
+  const slPct = form.realStopLoss && form.entryPrice && parseFloat(form.entryPrice) > 0
+    ? (((parseFloat(form.realStopLoss) - parseFloat(form.entryPrice)) / parseFloat(form.entryPrice)) * 100).toFixed(2)
+    : null
+  const tpPct = form.realTarget && form.entryPrice && parseFloat(form.entryPrice) > 0
+    ? (((parseFloat(form.realTarget) - parseFloat(form.entryPrice)) / parseFloat(form.entryPrice)) * 100).toFixed(2)
+    : null
 
   const inputStyle = { width:'100%', background:C.bg, border:`1px solid ${C.border}`, borderRadius:6, padding:'7px 10px', color:C.text, fontSize:13, boxSizing:'border-box' }
   const labelStyle = { fontSize:10, color:C.muted, marginBottom:4 }
@@ -196,10 +202,20 @@ function TradeModal({ trade, onSave, onClose }) {
                 <input type="number" value={form.positionSize} onChange={e=>set('positionSize',e.target.value)} style={inputStyle}/></label>
             </div>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
-              <label><div style={labelStyle}>Stop-loss real (broker)</div>
-                <input type="number" value={form.realStopLoss} onChange={e=>set('realStopLoss',e.target.value)} style={inputStyle}/></label>
-              <label><div style={labelStyle}>Take profit real (broker)</div>
-                <input type="number" value={form.realTarget} onChange={e=>set('realTarget',e.target.value)} style={inputStyle}/></label>
+              <label>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
+                  <span style={labelStyle}>Stop-loss real (broker)</span>
+                  {slPct && <span style={{ fontSize:11, fontWeight:700, fontFamily:'monospace', color:parseFloat(slPct)>=0?C.green:C.red }}>{parseFloat(slPct)>=0?'+':''}{slPct}%</span>}
+                </div>
+                <input type="number" value={form.realStopLoss} onChange={e=>set('realStopLoss',e.target.value)} style={inputStyle}/>
+              </label>
+              <label>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
+                  <span style={labelStyle}>Take profit real (broker)</span>
+                  {tpPct && <span style={{ fontSize:11, fontWeight:700, fontFamily:'monospace', color:parseFloat(tpPct)>=0?C.green:C.red }}>{parseFloat(tpPct)>=0?'+':''}{tpPct}%</span>}
+                </div>
+                <input type="number" value={form.realTarget} onChange={e=>set('realTarget',e.target.value)} style={inputStyle}/>
+              </label>
             </div>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
               <label><div style={labelStyle}>Precio cierre real</div>
