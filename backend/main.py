@@ -324,74 +324,134 @@ def calc_momentum_4w(closes: list) -> float | None:
 
 
 def calc_score(rsi, ema20, ema50, sma200, price, vol_ratio, mansfield_rs,
-               next_earnings, fundamentals, rr, ex_dividend_date=None, max_days=20) -> dict:
+               next_earnings, fundamentals, rr, ex_dividend_date=None, max_days=20,
+               momentum_4w=None, recent_high=None) -> dict:
     """
     Score de probabilidad calculado matemáticamente (0-100).
-    Retorna score, desglose y lista de contradicciones/alertas.
+    Base: 50 (neutral). Suma máxima de positivos: 50. Máximo teórico: 100 exacto.
+    Cada penalización siempre se refleja en el número final — sin recorte artificial.
+
+    Factores y pesos:
+      EMA trend    +10 / -10   (tendencia corto plazo)
+      RSI          +8  / -10   (momentum y sobrecompra)
+      R:B          +10 / -10   (calidad matemática del trade)
+      Mansfield RS +8  / -12   (fuerza relativa vs S&P500)
+      SMA200       +6  / -6    (tendencia estructural, reducida en recuperaciones)
+      Volumen      +4  / -8    (participación institucional, umbral <50%)
+      Momentum 4s  +3  / -6    (magnitud del movimiento reciente)
+      Distancia max +3 / -5    (espacio libre antes de resistencia 20d)
+      Suma máx positivos: 52 → ajustada a 50 con los casos neutros
     """
-    # Base mínima: 10. Suma máxima de positivos: 90. Total máximo posible: 100 (sin recorte).
-    # Así cualquier penalización siempre se refleja en el número final visible al usuario.
-    score = 10
+    from datetime import date as _date
+
+    score = 50  # base neutral: sin factores ni positivos ni negativos = 50%
     breakdown = {}
     alerts = []
     contradictions = []
 
-    # RSI (máx +18)
+    # ── EMA trend: tendencia de corto plazo (máx +10) ─────────────────────
+    ema_cross_recent = ema20 > ema50 and (ema20 - ema50) / ema50 < 0.02  # cruce reciente (<2% separación)
+    if ema20 > ema50:
+        score += 10; breakdown['ema_trend'] = +10
+    else:
+        score -= 10; breakdown['ema_trend'] = -10
+        alerts.append("EMA20 < EMA50 — tendencia bajista de corto plazo")
+
+    # ── RSI: momentum y zona de entrada (máx +8) ──────────────────────────
     if 40 <= rsi <= 60:
-        score += 18; breakdown['rsi'] = +18
+        score += 8; breakdown['rsi'] = +8
     elif rsi < 30:
-        score += 10; breakdown['rsi'] = +10
+        score += 5; breakdown['rsi'] = +5   # sobreventa = oportunidad pero con riesgo
     elif rsi > 75:
-        score -= 18; breakdown['rsi'] = -18
+        score -= 10; breakdown['rsi'] = -10
         alerts.append(f"RSI {rsi} — sobrecompra extrema, alta probabilidad de corrección")
     elif rsi > 65:
-        score -= 10; breakdown['rsi'] = -10
+        score -= 5; breakdown['rsi'] = -5
     else:
         breakdown['rsi'] = 0
 
-    # Tendencia EMA (máx +18)
-    if ema20 > ema50:
-        score += 18; breakdown['ema_trend'] = +18
-    else:
-        score -= 18; breakdown['ema_trend'] = -18
-        alerts.append("EMA20 < EMA50 — tendencia bajista de corto plazo")
-
-    # SMA200 (máx +12)
+    # ── SMA200: tendencia estructural (máx +6) ────────────────────────────
+    # Caso recuperación: precio bajo SMA200 pero EMA20>EMA50 y momentum positivo
+    # → penalización reducida a -3 porque la tendencia de corto plazo ya está mejorando
     if sma200:
         if price > sma200:
-            score += 12; breakdown['sma200'] = +12
+            score += 6; breakdown['sma200'] = +6
         else:
-            score -= 12; breakdown['sma200'] = -12
-            alerts.append(f"Precio bajo SMA200 (${sma200}) — tendencia bajista estructural")
+            recovering = ema20 > ema50 and (momentum_4w or 0) > 0
+            penalty = -3 if recovering else -6
+            score += penalty; breakdown['sma200'] = penalty
+            if not recovering:
+                alerts.append(f"Precio bajo SMA200 (${sma200}) — tendencia bajista estructural")
+            else:
+                alerts.append(f"Precio bajo SMA200 (${sma200}) pero con tendencia de recuperación")
 
-    # Mansfield RS (máx +14)
+    # ── Mansfield RS: fuerza relativa vs S&P500 (máx +8) ─────────────────
+    # Cruce EMA reciente: el RS tarda en ponerse positivo → reducir penalización
     if mansfield_rs is not None:
         if mansfield_rs > 2:
-            score += 14; breakdown['mansfield'] = +14
+            score += 8; breakdown['mansfield'] = +8
         elif mansfield_rs > 0:
-            score += 7; breakdown['mansfield'] = +7
+            score += 4; breakdown['mansfield'] = +4
+        elif mansfield_rs >= -1 and ema_cross_recent:
+            # Inicio de tendencia: RS aún ligeramente negativo pero EMA acaba de cruzar
+            score += 0; breakdown['mansfield'] = 0  # neutral, no penalizar
         elif mansfield_rs < -2:
-            score -= 18; breakdown['mansfield'] = -18
+            score -= 12; breakdown['mansfield'] = -12
             alerts.append(f"Mansfield RS {mansfield_rs} — acción muy rezagada vs S&P500")
         else:
-            score -= 7; breakdown['mansfield'] = -7
+            score -= 6; breakdown['mansfield'] = -6
 
-    # Volumen (máx +10)
+    # ── Volumen: participación institucional (máx +4) ─────────────────────
+    # Umbral de penalización: <50% (no <80%) para no castigar mid-caps estructuralmente menos líquidas
     if vol_ratio >= 100:
-        score += 10; breakdown['volume'] = +10
-    elif vol_ratio >= 80:
-        score += 5; breakdown['volume'] = +5
-    elif vol_ratio < 60:
-        score -= 12; breakdown['volume'] = -12
+        score += 4; breakdown['volume'] = +4
+    elif vol_ratio >= 70:
+        score += 2; breakdown['volume'] = +2
+    elif vol_ratio < 50:
+        score -= 8; breakdown['volume'] = -8
         alerts.append(f"Volumen muy bajo ({vol_ratio}% del promedio) — baja participación institucional")
     else:
         breakdown['volume'] = 0
 
-    # Earnings
+    # ── Momentum 4 semanas: magnitud del movimiento reciente (máx +3) ─────
+    if momentum_4w is not None:
+        if 5 <= momentum_4w <= 20:
+            score += 3; breakdown['momentum4w'] = +3   # fuerza moderada, aún tiene recorrido
+        elif momentum_4w > 20:
+            score -= 5; breakdown['momentum4w'] = -5   # sobreextendido, riesgo de pullback fuerte
+            alerts.append(f"Momentum +{momentum_4w:.1f}% en 4 semanas — posible sobreextensión")
+        elif momentum_4w < -5:
+            score -= 6; breakdown['momentum4w'] = -6   # debilidad reciente activa
+        elif momentum_4w < 0:
+            score -= 3; breakdown['momentum4w'] = -3
+        else:
+            breakdown['momentum4w'] = 0
+
+    # ── Distancia al máximo de 20 días: espacio antes de resistencia (máx +3) ──
+    if recent_high and recent_high > 0 and price > 0:
+        dist_to_high_pct = ((recent_high - price) / price) * 100
+        if dist_to_high_pct > 5:
+            score += 3; breakdown['dist_to_high'] = +3   # espacio libre antes de resistencia
+        elif dist_to_high_pct < 2:
+            score -= 5; breakdown['dist_to_high'] = -5   # resistencia inmediata
+            alerts.append(f"Precio a {dist_to_high_pct:.1f}% del máximo de 20 días — resistencia inmediata")
+        else:
+            breakdown['dist_to_high'] = 0
+
+    # ── R:B: calidad matemática del trade (máx +10) ───────────────────────
+    if rr >= 3:
+        score += 10; breakdown['rr'] = +10
+    elif rr >= 2.5:
+        score += 6; breakdown['rr'] = +6
+    elif rr < 2:
+        score -= 10; breakdown['rr'] = -10
+    else:
+        breakdown['rr'] = 0
+
+    # ── Earnings: penalización por evento de riesgo binario ───────────────
     if next_earnings:
         try:
-            from datetime import date
-            days_to_earn = (date.fromisoformat(next_earnings) - date.today()).days
+            days_to_earn = (_date.fromisoformat(next_earnings) - _date.today()).days
             if days_to_earn < 7:
                 score -= 25; breakdown['earnings'] = -25
                 alerts.append(f"Earnings en {days_to_earn} días — riesgo muy alto de movimiento inesperado")
@@ -403,47 +463,42 @@ def calc_score(rsi, ema20, ema50, sma200, price, vol_ratio, mansfield_rs,
         except Exception:
             breakdown['earnings'] = 0
 
-    # Ex-Dividend — solo penaliza si cae dentro del plazo máximo del trade
+    # ── Ex-Dividend: penalización escalada por yield y cercanía ───────────
+    # Solo penaliza si cae dentro del plazo del trade Y el yield es material (>0.3%)
     if ex_dividend_date:
         try:
-            from datetime import date
-            days_to_exdiv = (date.fromisoformat(ex_dividend_date) - date.today()).days
-            if 0 <= days_to_exdiv <= max_days:
-                # Mientras más cerca del inicio del trade, más riesgo
+            days_to_exdiv = (_date.fromisoformat(ex_dividend_date) - _date.today()).days
+            div_yield = (fundamentals or {}).get('dividendYield') or 0
+            if 0 <= days_to_exdiv <= max_days and div_yield > 0.3:
+                # Escalar penalización por yield: yield alto = caída de precio significativa
+                yield_factor = min(2.0, div_yield / 1.5)  # normalizado: yield 1.5% = factor 1.0
                 if days_to_exdiv <= 5:
-                    score -= 20; breakdown['ex_dividend'] = -20
-                    alerts.append(f"Ex-dividend en {days_to_exdiv} días — el precio caerá ~el monto del dividendo. Alto riesgo si el objetivo no cubre esa caída.")
+                    pen = round(-15 * yield_factor)
+                    score += pen; breakdown['ex_dividend'] = pen
+                    alerts.append(f"Ex-dividend en {days_to_exdiv} días (yield {div_yield}%) — el precio caerá ~el monto del dividendo. Alto riesgo.")
                 elif days_to_exdiv <= round(max_days * 0.4):
-                    score -= 10; breakdown['ex_dividend'] = -10
-                    alerts.append(f"Ex-dividend en {days_to_exdiv} días (dentro del plazo del trade de {max_days}d) — posible presión bajista post-dividendo.")
+                    pen = round(-8 * yield_factor)
+                    score += pen; breakdown['ex_dividend'] = pen
+                    alerts.append(f"Ex-dividend en {days_to_exdiv} días (yield {div_yield}%) — posible presión bajista post-dividendo dentro del plazo del trade.")
                 else:
-                    score -= 5; breakdown['ex_dividend'] = -5
-                    alerts.append(f"Ex-dividend en {days_to_exdiv} días (dentro del plazo del trade de {max_days}d) — tener en cuenta presión vendedora post-pago.")
+                    pen = round(-4 * yield_factor)
+                    score += pen; breakdown['ex_dividend'] = pen
+                    alerts.append(f"Ex-dividend en {days_to_exdiv} días (yield {div_yield}%) — tener en cuenta presión vendedora post-pago.")
             else:
-                breakdown['ex_dividend'] = 0  # fuera del plazo del trade, no afecta
+                breakdown['ex_dividend'] = 0
         except Exception:
             breakdown['ex_dividend'] = 0
 
-    # R:B (máx +12)
-    if rr >= 3:
-        score += 12; breakdown['rr'] = +12
-    elif rr >= 2.5:
-        score += 8; breakdown['rr'] = +8
-    elif rr < 2:
-        score -= 12; breakdown['rr'] = -12
-    else:
-        breakdown['rr'] = 0
-
-    # Detectar contradicciones técnico vs fundamental
+    # ── Contradicciones técnico vs fundamental ────────────────────────────
     f = fundamentals or {}
-    eps_growth = f.get('epsGrowth')
-    rev_growth = f.get('revenueGrowth')
+    eps_growth     = f.get('epsGrowth')
+    rev_growth     = f.get('revenueGrowth')
     analyst_target = f.get('analystTarget')
 
     tech_bullish = ema20 > ema50 and (sma200 is None or price > sma200)
     tech_bearish = ema20 < ema50 or (sma200 and price < sma200)
-    fund_strong = (eps_growth and eps_growth > 15) or (rev_growth and rev_growth > 15)
-    fund_weak = (eps_growth and eps_growth < -10) or (rev_growth and rev_growth < -5)
+    fund_strong  = (eps_growth and eps_growth > 15) or (rev_growth and rev_growth > 15)
+    fund_weak    = (eps_growth and eps_growth < -10) or (rev_growth and rev_growth < -5)
 
     if tech_bearish and fund_strong:
         contradictions.append(
@@ -451,7 +506,7 @@ def calc_score(rsi, ema20, ema50, sma200, price, vol_ratio, mansfield_rs,
             f"(EPS +{eps_growth}%, ventas +{rev_growth}%). "
             "Señal SELL de menor confianza — el negocio va bien pero el precio está bajo presión."
         )
-        score -= 8
+        score -= 12
 
     if tech_bullish and fund_weak:
         contradictions.append(
@@ -459,7 +514,7 @@ def calc_score(rsi, ema20, ema50, sma200, price, vol_ratio, mansfield_rs,
             f"(EPS {eps_growth}%, ventas {rev_growth}%). "
             "Señal BUY de menor confianza — el precio sube pero los resultados no acompañan."
         )
-        score -= 8
+        score -= 12
 
     if analyst_target and price > 0:
         analyst_upside = ((analyst_target - price) / price) * 100
@@ -469,30 +524,13 @@ def calc_score(rsi, ema20, ema50, sma200, price, vol_ratio, mansfield_rs,
                 "por debajo del precio actual — consenso institucional bajista."
             )
             score -= 5
-        elif analyst_upside > 30:
-            score += 6  # analistas ven mucho upside
 
-    # Señal EVITAR
-    avoid = False
-    avoid_reason = None
-    if score < 30:
-        avoid = True
-        avoid_reason = "Condiciones desfavorables en múltiples dimensiones. No es buen momento para operar."
-    elif len(alerts) >= 3:
-        avoid = True
-        avoid_reason = "Demasiadas señales de alerta simultáneas. Esperar mejores condiciones."
-    elif len(contradictions) >= 2:
-        avoid = True
-        avoid_reason = "Señales técnicas y fundamentales fuertemente contradictorias. Difícil estimar dirección."
-
-    score = max(0, min(100, score))  # min(100) solo protege casos extremos de penalizaciones negativas acumuladas
+    score = max(0, min(100, score))
     return {
         'score': score,
         'breakdown': breakdown,
         'alerts': alerts,
         'contradictions': contradictions,
-        'avoid': avoid,
-        'avoidReason': avoid_reason,
     }
 
 
@@ -515,7 +553,7 @@ def determine_final_signal(score: int, tech_signal: str, contradictions: list,
     if score >= 50 and is_directional:
         monitor_reason = None
 
-        # Earnings en menos de 7 días con buenas condiciones
+        # Earnings próximos: <7d siempre fuerza MONITOREAR; 7-14d solo si score <70
         if next_earnings:
             try:
                 days_to_earn = (date.fromisoformat(next_earnings) - date.today()).days
@@ -525,14 +563,20 @@ def determine_final_signal(score: int, tech_signal: str, contradictions: list,
                         "las condiciones técnicas son buenas pero el reporte puede cambiar la dirección. "
                         "Esperar el resultado antes de entrar."
                     )
+                elif days_to_earn < 14 and score < 70:
+                    monitor_reason = (
+                        f"Earnings en {days_to_earn} días y score {score}/100 — "
+                        "condiciones no suficientemente sólidas para asumir el riesgo del reporte. "
+                        "Esperar resultado o confirmar con score ≥70."
+                    )
             except Exception:
                 pass
 
-        # RSI muy alto pero score bueno (cerca de sobrecompra)
-        if not monitor_reason and rsi >= 68:
+        # RSI muy alto pero score bueno (cerca de sobrecompra) — umbral subido a 72
+        if not monitor_reason and rsi >= 72:
             monitor_reason = (
                 f"RSI en {rsi} — cerca de sobrecompra. "
-                "Las condiciones son buenas pero esperar un pullback a zona 55–60 mejora la entrada."
+                "Las condiciones son buenas pero esperar un pullback a zona 55–65 mejora la entrada."
             )
 
         if monitor_reason:
@@ -729,20 +773,31 @@ async def _analyze_inner(ticker: str):
         except Exception:
             pass
 
+    # Condiciones objetivas para orientar la narrativa de Claude
+    ema_trend_ctx = "EMA20 > EMA50 (tendencia alcista corto plazo)" if ema20 > ema50 else "EMA20 < EMA50 (tendencia bajista corto plazo)"
+    sma200_ctx = f"Precio {'sobre' if sma200 and price > sma200 else 'bajo'} SMA200" if sma200 else "SMA200 no disponible"
+    rsi_ctx = "RSI en zona neutra/pullback" if 40 <= rsi <= 60 else (f"RSI {rsi} — sobrecompra" if rsi > 65 else (f"RSI {rsi} — sobreventa" if rsi < 35 else f"RSI {rsi}"))
+    try:
+        from datetime import date as _dctx
+        earnings_ctx = f"Earnings en {(_dctx.fromisoformat(next_earnings) - _dctx.today()).days} dias" if next_earnings else "Sin earnings proximos"
+    except Exception:
+        earnings_ctx = "Sin earnings proximos"
+
     prompt = (
         f"Analiza {ticker} para swing trading set-and-forget (sin gestion activa). Datos reales:\n"
         f"Precio: ${price} | Cambio: {change}% | EMA20: ${ema20} | EMA50: ${ema50} | RSI: {rsi} | Vol%: {vol_ratio}\n"
         f"Max20d: ${round(recent_high,2)} | Min20d: ${round(recent_low,2)} | SMA200: ${sma200 or 'N/A'} | ATR: ${round(atr,2)} | Mom4w: {momentum_4w}% | Ultimos5: {last_5}\n"
+        f"Condiciones objetivas: {ema_trend_ctx} | {sma200_ctx} | {rsi_ctx} | {earnings_ctx}\n"
         f"{ex_div_str}"
         f"\nEstrategia: entrada unica, stop-loss fijo, objetivo unico fijo. Sin ajustes manuales. Plazo maximo estimado: {max_days} dias (calculado por volatilidad ATR).\n"
         "\nResponde UNICAMENTE con este JSON (sin texto antes ni despues, sin markdown):\n"
-        + '{' + f'"signal":"buy","strategy":"pullback","entryLow":{el_default},"entryHigh":{eh_default},"stopLoss":{sl_default},"target":{tg_default},"trend":"bullish","successRate":60,"keyLevel":{ema20},"analysis":"texto aqui"' + '}'
+        + '{' + f'"signal":"buy","strategy":"pullback","entryLow":{el_default},"entryHigh":{eh_default},"stopLoss":{sl_default},"target":{tg_default},"trend":"bullish","keyLevel":{ema20},"analysis":"texto aqui"' + '}'
         + "\n\nReglas:\n"
+        "- signal debe reflejar las condiciones objetivas indicadas arriba (buy solo si tendencia alcista, sell si bajista)\n"
         "- entryLow: limite inferior del rango de entrada (soporte tecnico, precio -0.5% a -1.5%)\n"
         "- entryHigh: limite superior del rango de entrada (resistencia menor, precio +0.5% a +1.5%)\n"
         "- stopLoss: FIJO entre 5% y 7% bajo entryLow, en soporte tecnico real. NO se mueve.\n"
         "- target: objetivo UNICO fijo con R:B minimo 2.5x. En resistencia tecnica real.\n"
-        "- successRate: probabilidad de llegar al objetivo antes del stop en 20 dias (0-100)\n"
         "- signal=buy/sell/hold, strategy=pullback/breakout/reversal/neutral, trend=bullish/bearish/sideways\n"
         "- Para sell: entryLow/entryHigh es rango venta corta, stopLoss es proteccion al alza, target es objetivo a la baja."
     )
@@ -787,7 +842,8 @@ async def _analyze_inner(ticker: str):
         rsi=rsi, ema20=ema20, ema50=ema50, sma200=sma200, price=price,
         vol_ratio=vol_ratio, mansfield_rs=mansfield_rs,
         next_earnings=next_earnings, fundamentals=fundamentals, rr=rr,
-        ex_dividend_date=ex_dividend_date, max_days=max_days
+        ex_dividend_date=ex_dividend_date, max_days=max_days,
+        momentum_4w=momentum_4w, recent_high=recent_high
     )
     # Determinar señal final con nivel de confianza
     signal_result = determine_final_signal(
@@ -826,7 +882,7 @@ async def _analyze_inner(ticker: str):
         "scoreBreakdown": score_data['breakdown'],
         "alerts":         score_data['alerts'],
         "contradictions": score_data['contradictions'],
-        "avoidReason":    score_data['avoidReason'] or signal_result["justification"],
+        "avoidReason":    signal_result["justification"],
         "momentum4w":     momentum_4w,
         "maxDays":        max_days,
         "keyLevel":     round(float(ai.get("keyLevel", ema20)), 2),
