@@ -50,6 +50,7 @@ export default function App() {
   const [saved,          setSaved]          = useState(false)
   const [journalCount,   setJournalCount]   = useState(0)
   const saveTimer = useRef(null)
+  const dbLoaded  = useRef(false)  // true después de la primera carga desde Supabase
 
   // ── Auth ──────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -71,6 +72,7 @@ export default function App() {
   // ── Load from Supabase (single source of truth) ───────────────────────
   useEffect(() => {
     if (!session) return
+    dbLoaded.current = false
     supabase.from('watchlist')
       .select('tickers, monitor_tickers')
       .eq('user_id', session.user.id)
@@ -78,10 +80,12 @@ export default function App() {
       .then(({ data }) => {
         setWatchlist(data?.tickers?.length     ? data.tickers         : DEFAULT_WATCHLIST)
         setMonitorTickers(data?.monitor_tickers?.length ? data.monitor_tickers : [])
+        dbLoaded.current = true
       })
       .catch(() => {
         setWatchlist(DEFAULT_WATCHLIST)
         setMonitorTickers([])
+        dbLoaded.current = true
       })
   }, [session])
 
@@ -101,9 +105,10 @@ export default function App() {
     }, 800)
   }
 
-  // Trigger save when either list changes (but only after both loaded)
+  // Trigger save when either list changes (but only after DB load completes)
   useEffect(() => {
     if (watchlist === null || monitorTickers === null) return
+    if (!dbLoaded.current) return  // evitar sobrescribir datos reales con el state inicial
     saveToSupabase(watchlist, monitorTickers)
   }, [watchlist, monitorTickers, session]) // eslint-disable-line
 
