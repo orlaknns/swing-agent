@@ -32,20 +32,6 @@ function Badge({ type }) {
   )
 }
 
-function ConfidenceBadge({ signal, stars }) {
-  if (!stars || stars === 0) return null
-  const isBuy  = signal === 'buy'
-  const isSell = signal === 'sell'
-  if (!isBuy && !isSell) return null
-  const color = stars === 3 ? C.green : stars === 2 ? C.amber : '#ff8c00'
-  const filled = '★'.repeat(stars)
-  const empty  = '☆'.repeat(3 - stars)
-  return (
-    <span style={{ fontSize:11, color, fontWeight:700, letterSpacing:'0.05em' }}>
-      {filled}{empty}
-    </span>
-  )
-}
 
 function RRBar({ rr }) {
   const pct   = Math.min(((rr || 0) / 4) * 100, 100)
@@ -243,28 +229,67 @@ export default function StockCard({ ticker, onRemove, session, onMonitor, onAnal
 
   return (
     <div style={{ background:C.card, border:`1px solid ${cardBorder}`, borderRadius:12, padding:16, display:'flex', flexDirection:'column', gap:10, transition:'border-color 0.4s' }}>
-      {/* Title row */}
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:6 }}>
-        <div style={{ display:'flex', alignItems:'center', gap:7, minWidth:0 }}>
-          <div style={{ display:'flex', flexDirection:'column', minWidth:0 }}>
-            <span style={{ fontFamily:'monospace', fontWeight:700, fontSize:15, color:C.text, letterSpacing:'0.05em' }}>{ticker}</span>
-            {data?.fundamentals?.name && (
-              <span style={{ fontSize:10, color:C.muted, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:160 }}>
-                {data.fundamentals.name}
-              </span>
-            )}
-          </div>
-          {data && !data.error && <Badge type={data.strategy} />}
+
+      {/* ── Fila 1: Ticker + nombre + botones ── */}
+      <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:6 }}>
+        <div style={{ display:'flex', flexDirection:'column', minWidth:0, flex:1 }}>
+          <span style={{ fontFamily:'monospace', fontWeight:700, fontSize:16, color:C.text, letterSpacing:'0.05em' }}>{ticker}</span>
+          {data?.fundamentals?.name && (
+            <span style={{ fontSize:10, color:C.muted, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+              {data.fundamentals.name}
+            </span>
+          )}
         </div>
         <div style={{ display:'flex', gap:4, alignItems:'center', flexShrink:0 }}>
-          {data && !data.error && <Badge type={data.signal} />}
-          {data && !data.error && <ConfidenceBadge signal={data.signal} stars={data.confidenceStars} />}
           <button onClick={run} disabled={loading}
             style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:6, color:C.muted, cursor:loading?'not-allowed':'pointer', padding:'3px 7px', fontSize:11 }}>↻</button>
           <button onClick={() => onRemove(ticker)}
             style={{ background:'none', border:'none', color:C.muted, cursor:'pointer', fontSize:17, padding:'0 3px' }}>×</button>
         </div>
       </div>
+
+      {/* ── Fila 2: Score + Estrellas + R:B (solo cuando hay datos) ── */}
+      {data && !data.error && !loading && (() => {
+        const scoreVal  = data.successRate
+        const scoreColor = scoreVal >= 65 ? C.green : scoreVal >= 45 ? C.amber : C.red
+        const stars      = data.confidenceStars || 0
+        const starColor  = stars === 3 ? C.green : stars === 2 ? C.amber : C.red
+        const rrVal      = data.rr || 0
+        const rrColor    = rrVal >= 3 ? C.green : rrVal >= 2.5 ? C.amber : C.red
+        return (
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:6 }}>
+            {/* Score técnico */}
+            <div style={{ background:C.bg, borderRadius:8, padding:'8px 10px', textAlign:'center' }}>
+              <div style={{ fontSize:9, color:C.muted, letterSpacing:'0.07em', textTransform:'uppercase', marginBottom:3 }}>Score</div>
+              <div style={{ fontSize:20, fontWeight:700, color:scoreColor, fontFamily:'monospace', lineHeight:1 }}>{scoreVal}</div>
+              <div style={{ fontSize:9, color:C.muted, marginTop:2 }}>técnico</div>
+            </div>
+            {/* Estrellas de contexto */}
+            <div style={{ background:C.bg, borderRadius:8, padding:'8px 10px', textAlign:'center' }}>
+              <div style={{ fontSize:9, color:C.muted, letterSpacing:'0.07em', textTransform:'uppercase', marginBottom:3 }}>Contexto</div>
+              <div style={{ fontSize:16, color:starColor, lineHeight:1 }}>
+                {stars > 0 ? '★'.repeat(stars) + '☆'.repeat(3 - stars) : '☆☆☆'}
+              </div>
+              <div style={{ fontSize:9, color:C.muted, marginTop:2 }}>entrada</div>
+            </div>
+            {/* R:B */}
+            <div style={{ background:C.bg, borderRadius:8, padding:'8px 10px', textAlign:'center' }}>
+              <div style={{ fontSize:9, color:C.muted, letterSpacing:'0.07em', textTransform:'uppercase', marginBottom:3 }}>R:B</div>
+              <div style={{ fontSize:20, fontWeight:700, color:rrColor, fontFamily:'monospace', lineHeight:1 }}>{rrVal.toFixed(1)}x</div>
+              <div style={{ fontSize:9, color:C.muted, marginTop:2 }}>riesgo/ben.</div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* ── Fila 3: Señal + estrategia ── */}
+      {data && !data.error && !loading && (
+        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+          <Badge type={data.signal} />
+          <Badge type={data.strategy} />
+          {data.signal === 'buy' || data.signal === 'sell' ? null : null}
+        </div>
+      )}
 
       {/* Last closed trade badge */}
       {lastClosedTrade && (() => {
@@ -411,27 +436,14 @@ export default function StockCard({ ticker, onRemove, session, onMonitor, onAnal
           </div>
         </div>
 
-        {/* MONITOREAR — razón y condición de espera */}
-        {data.signal === 'monitor' && (
-          <div style={{ background:'#001a2a', border:'1px solid #00aaff44', borderRadius:8, padding:'10px 12px' }}>
-            <div style={{ fontSize:9, color:'#00aaff', letterSpacing:'0.07em', marginBottom:6, textTransform:'uppercase', fontWeight:700 }}>
-              Por qué monitorear
-            </div>
-            <div style={{ fontSize:11, color:'#00aaff', fontWeight:600, marginBottom:8 }}>
-              ℹ {data.signalJustification}
-            </div>
-            <div style={{ fontSize:10, color:'#4a8080', borderTop:'1px solid #00aaff22', paddingTop:6, marginBottom:8 }}>
-              Condiciones técnicas favorables (score {data.successRate}%). Revisar cuando el evento se resuelva.
-            </div>
-            {onMonitor && (
-              <button onClick={() => onMonitor(ticker, !isInMonitorTab)}
-                style={{ width:'100%', background: isInMonitorTab ? '#00aaff11' : '#00aaff22',
-                  border:'1px solid #00aaff55', borderRadius:6,
-                  color:'#00aaff', fontSize:11, fontWeight:700, padding:'6px', cursor:'pointer' }}>
-                {isInMonitorTab ? '← Volver a Watchlist activa' : '+ Mover a En Seguimiento'}
-              </button>
-            )}
-          </div>
+        {/* MONITOREAR — botón para mover a En Seguimiento */}
+        {data.signal === 'monitor' && onMonitor && (
+          <button onClick={() => onMonitor(ticker, !isInMonitorTab)}
+            style={{ width:'100%', background: isInMonitorTab ? '#00aaff11' : '#00aaff22',
+              border:'1px solid #00aaff55', borderRadius:6,
+              color:'#00aaff', fontSize:11, fontWeight:700, padding:'7px', cursor:'pointer' }}>
+            {isInMonitorTab ? '← Volver a Watchlist activa' : '+ Mover a En Seguimiento'}
+          </button>
         )}
 
         {/* Indicators */}
@@ -471,10 +483,6 @@ export default function StockCard({ ticker, onRemove, session, onMonitor, onAnal
               </span>
             </div>
           )}
-          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:8 }}>
-            <span style={{ color:C.muted, flexShrink:0 }}>R:B</span>
-            <div style={{ flex:1 }}><RRBar rr={data.rr} /></div>
-          </div>
           {data.mansfieldRS != null && (
             <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:8 }}>
               <span style={{ color:C.muted, flexShrink:0 }}>Mansfield RS</span>
@@ -510,36 +518,30 @@ export default function StockCard({ ticker, onRemove, session, onMonitor, onAnal
           <span>Análisis detallado</span><span>{expanded ? '▲' : '▼'}</span>
         </button>
 
-        {/* Score de probabilidad */}
+        {/* Barra de score técnico */}
         {data.successRate != null && (
-          <div style={{ background:C.bg, borderRadius:8, padding:'10px 12px' }}>
-            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
-              <span style={{ fontSize:10, color:C.muted, textTransform:'uppercase', letterSpacing:'0.07em' }}>Probabilidad de éxito</span>
-              <span style={{ fontSize:16, fontWeight:700, fontFamily:'monospace',
-                color: data.successRate >= 65 ? C.green : data.successRate >= 45 ? C.amber : C.red }}>
-                {data.successRate}%
-              </span>
-            </div>
-            <div style={{ height:5, background:C.border, borderRadius:3, overflow:'hidden' }}>
+          <div>
+            <div style={{ height:4, background:C.border, borderRadius:3, overflow:'hidden' }}>
               <div style={{ width:`${data.successRate}%`, height:'100%', borderRadius:3,
                 background: data.successRate >= 65 ? C.green : data.successRate >= 45 ? C.amber : C.red }}/>
             </div>
-            <div style={{ fontSize:9, color:C.muted, marginTop:4 }}>
-              Calculado en base a RSI, tendencia, volumen, Mansfield RS, earnings y R:B
+            <div style={{ fontSize:9, color:C.muted, marginTop:3 }}>
+              Score técnico: EMA, RSI, SMA200, Mansfield RS, volumen, momentum
             </div>
           </div>
         )}
 
-        {/* Alertas y contradicciones */}
-        {((data.alerts && data.alerts.length > 0) || (data.contradictions && data.contradictions.length > 0) || data.signalJustification || data.avoidReason) && (() => {
-          const isHighConf = data.confidenceStars === 3
-          const isAvoid    = data.signal === 'avoid'
-          const bgColor    = isHighConf ? '#0a1a0a' : '#1a0a0a'
-          const borderColor= isHighConf ? C.green+'44' : C.red+'44'
-          const titleColor = isHighConf ? C.green : C.red
-          const titleLabel = isHighConf ? 'Información adicional' : 'Alertas y advertencias'
-          const justColor  = isAvoid ? C.red : isHighConf ? C.green : C.amber
-          const justIcon   = isAvoid ? '⊘ ' : isHighConf ? '✓ ' : 'ℹ '
+        {/* Alertas y contexto */}
+        {((data.alerts && data.alerts.length > 0) || (data.contextReasons && data.contextReasons.length > 0) || data.signalJustification || data.avoidReason) && (() => {
+          const isHighConf  = data.confidenceStars === 3
+          const isAvoid     = data.signal === 'avoid'
+          const isMonitor   = data.signal === 'monitor'
+          const bgColor     = isHighConf ? '#0a1a0a' : isMonitor ? '#001a2a' : '#1a0a0a'
+          const borderColor = isHighConf ? C.green+'44' : isMonitor ? '#00aaff44' : C.red+'44'
+          const titleColor  = isHighConf ? C.green : isMonitor ? '#00aaff' : C.red
+          const titleLabel  = isHighConf ? 'Información adicional' : isMonitor ? 'Por qué monitorear' : 'Alertas y advertencias'
+          const justColor   = isAvoid ? C.red : isMonitor ? '#00aaff' : isHighConf ? C.green : C.amber
+          const justIcon    = isAvoid ? '⊘ ' : isMonitor ? 'ℹ ' : isHighConf ? '✓ ' : 'ℹ '
           return (
             <div style={{ background:bgColor, border:`1px solid ${borderColor}`, borderRadius:8, padding:'10px 12px' }}>
               <div style={{ fontSize:9, color:titleColor, letterSpacing:'0.07em', marginBottom:6, textTransform:'uppercase', fontWeight:700 }}>
@@ -550,9 +552,9 @@ export default function StockCard({ ticker, onRemove, session, onMonitor, onAnal
                   {justIcon}{data.signalJustification || data.avoidReason}
                 </div>
               )}
-              {data.contradictions && data.contradictions.map((c, i) => (
-                <div key={i} style={{ fontSize:11, color: isHighConf ? C.muted : C.amber, marginBottom:4, paddingLeft:8, borderLeft:`2px solid ${isHighConf ? C.border : C.amber}` }}>
-                  {c}
+              {data.contextReasons && data.contextReasons.map((r, i) => (
+                <div key={i} style={{ fontSize:11, color:C.amber, marginBottom:4, paddingLeft:8, borderLeft:`2px solid ${C.amber}` }}>
+                  {r}
                 </div>
               ))}
               {data.alerts && data.alerts.map((a, i) => (
