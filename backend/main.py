@@ -623,17 +623,22 @@ async def analyze(ticker: str):
         raise HTTPException(status_code=500, detail=detail)
 
 
-def calc_levels(price: float, recent_low: float, recent_high: float) -> dict:
+def calc_levels(price: float, recent_low: float, recent_high: float, ema20: float) -> dict:
     """Calcula niveles de entrada/stop/target anclados a soportes técnicos reales.
+
+    Entrada anclada a EMA20 (soporte dinámico diario, estable entre refreshes).
+    Stop anclado a mínimo 20d (soporte histórico real).
+    Target anclado a máximo 20d con mínimo R:B 2.5x.
 
     Returns dict con keys: el, eh, entry_mid, sl, tg
     """
-    el = round(price * 0.995, 2)
-    eh = round(price * 1.005, 2)
+    # Entrada: zona alrededor de EMA20 (cambia solo con el cierre diario, no tick a tick)
+    el = round(ema20 * 0.995, 2)
+    eh = round(ema20 * 1.010, 2)
     entry_mid = round((el + eh) / 2, 2)
-    raw_sl = round(recent_low * 0.995, 2)
-    max_sl_distance = round(price * 0.93, 2)
-    sl = max(raw_sl, max_sl_distance)
+    # Stop: siempre el mínimo de 20 días ligeramente por debajo — valor fijo histórico
+    sl = round(recent_low * 0.995, 2)
+    # Target: máximo 20d o R:B 2.5x mínimo, lo que sea mayor
     risk = entry_mid - sl
     min_target_rb = round(entry_mid + risk * 2.5, 2) if risk > 0 else round(price * 1.125, 2)
     tg = round(max(recent_high, min_target_rb), 2)
@@ -703,7 +708,7 @@ async def _analyze_inner(ticker: str):
     max_days = max(10, min(30, estimated_days))  # entre 10 y 30 días
 
     # defaults set-and-forget — anclados a soportes/resistencias técnicas reales
-    _lvl = calc_levels(price, recent_low, recent_high)
+    _lvl = calc_levels(price, recent_low, recent_high, ema20)
     el_default        = _lvl["el"]
     eh_default        = _lvl["eh"]
     sl_default        = _lvl["sl"]
@@ -744,9 +749,8 @@ async def _analyze_inner(ticker: str):
         + '{' + f'"signal":"buy","strategy":"pullback","entryLow":{el_default},"entryHigh":{eh_default},"stopLoss":{sl_default},"target":{tg_default},"trend":"bullish","keyLevel":{ema20},"analysis":"texto aqui"' + '}'
         + "\n\nReglas:\n"
         "- signal debe reflejar las condiciones objetivas indicadas arriba (buy solo si tendencia alcista, sell si bajista)\n"
-        f"- entryLow: limite inferior del rango de entrada — usar {el_default} como base (soporte cercano al precio actual)\n"
-        f"- entryHigh: limite superior del rango de entrada — usar {eh_default} como base (resistencia menor)\n"
-        f"- stopLoss: FIJO en soporte tecnico real — minimo 20d es ${round(recent_low,2)}, usar ese nivel como referencia. Default: {sl_default}. NO se mueve.\n"
+        f"- entryLow/entryHigh: zona de entrada anclada a EMA20 (${ema20}) — usar {el_default} y {eh_default} como referencia. Solo ajustar si hay soporte/resistencia tecnica mejor documentada.\n"
+        f"- stopLoss: FIJO en minimo 20d (${round(recent_low,2)}) ligeramente por debajo — usar {sl_default} como referencia. Este nivel es el soporte real que el precio ya respeto. NO se mueve.\n"
         f"- target: objetivo UNICO fijo con R:B minimo 2.5x — maximo 20d es ${round(recent_high,2)}, usar como referencia. Default: {tg_default}. En resistencia tecnica real.\n"
         "- signal=buy/sell/hold, strategy=pullback/breakout/reversal/neutral, trend=bullish/bearish/sideways\n"
         "- Para sell: entryLow/entryHigh es rango venta corta, stopLoss es proteccion al alza, target es objetivo a la baja."

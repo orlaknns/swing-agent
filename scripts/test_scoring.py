@@ -186,44 +186,45 @@ check("Claude hold → hold", r['signal'], "hold")
 # ── 4. calc_levels — niveles anclados a soportes técnicos ─────────────────────
 print("\n[4] calc_levels — niveles anclados a soportes técnicos")
 
-# Caso normal: mínimo 20d no muy lejano (dentro del 7%)
-lv = calc_levels(price=100.0, recent_low=95.0, recent_high=115.0)
-check("Entrada baja = precio × 0.995", lv['el'], 99.5)
-check("Entrada alta = precio × 1.005", lv['eh'], 100.5)
-# stop = max(95*0.995=94.525→94.53, 100*0.93=93.0) → 94.53
+# Caso normal: entrada anclada a EMA20, stop al mínimo 20d
+lv = calc_levels(price=100.0, recent_low=95.0, recent_high=115.0, ema20=99.0)
+# Entrada: ema20=99 → el=99*0.995=98.5, eh=99*1.010=99.99
+check("Entrada baja = ema20 × 0.995", lv['el'], 98.5)
+check("Entrada alta = ema20 × 1.010", lv['eh'], 99.99)
+# stop = 95*0.995 = 94.53
 check("Stop anclado al mínimo 20d (94.53)", lv['sl'], 94.53)
-# riesgo = 100 - 94.52 = 5.48 | min_target = 100 + 5.48*2.5 = 113.7 | max(115, 113.7) = 115
+# entry_mid = (98.51+99.99)/2 = 99.25 | riesgo = 99.25-94.53=4.72 | min_target=99.25+4.72*2.5=110.05 | max(115,110.05)=115
 check("Target = máximo 20d cuando supera mínimo R:B", lv['tg'], 115.0)
 
-# Caso: mínimo 20d muy lejano (>7%) → floor activa
-lv = calc_levels(price=100.0, recent_low=80.0, recent_high=115.0)
-# raw_sl = 80*0.995=79.6, max_sl = 100*0.93=93.0 → sl=93.0 (floor activa)
-check("Stop flooreado al 7% cuando mínimo 20d muy lejano", lv['sl'], 93.0)
+# Stop siempre anclado al mínimo 20d — sin floor porcentual del precio actual
+lv = calc_levels(price=100.0, recent_low=80.0, recent_high=115.0, ema20=99.0)
+# sl = 80*0.995 = 79.6 — sin floor, precio no interviene
+check("Stop = mínimo 20d × 0.995 aunque esté lejos (79.6)", lv['sl'], 79.6)
 
 # Caso: máximo 20d insuficiente para 2.5x R:B → target calculado
-lv = calc_levels(price=100.0, recent_low=97.0, recent_high=101.0)
-# sl = max(97*0.995=96.52, 93.0) → 96.52
-# entry_mid = 100.0, riesgo = 100-96.52=3.48, min_target = 100+3.48*2.5=108.7
-# max(101, 108.7) = 108.7 → R:B respetado aunque máximo 20d sea bajo
-check("Target calculado por R:B 2.5x cuando máximo 20d es insuficiente", lv['tg'], 108.7)
+lv = calc_levels(price=100.0, recent_low=97.0, recent_high=101.0, ema20=99.0)
+# sl=97*0.995=96.52, entry_mid≈99.25, riesgo=99.25-96.52=2.73, min_target=99.25+2.73*2.5=106.08 | max(101,106.08)=106.08
+check("Target calculado por R:B 2.5x cuando máximo 20d es insuficiente", lv['tg'], 106.08)
 
 # R:B resultante siempre >= 2.5x
-for price, low, high in [(100, 95, 115), (200, 185, 220), (50, 47, 55)]:
-    lv = calc_levels(price=price, recent_low=low, recent_high=high)
+for price, low, high, ema in [(100, 95, 115, 99), (200, 185, 220, 198), (50, 47, 55, 49)]:
+    lv = calc_levels(price=price, recent_low=low, recent_high=high, ema20=ema)
     risk = lv['entry_mid'] - lv['sl']
     if risk > 0:
         rr = round((lv['tg'] - lv['entry_mid']) / risk, 2)
         check(f"R:B >= 2.5x para price={price} low={low} high={high} (obtenido {rr}x)", rr >= 2.5, True)
 
-# Niveles estables: mismo precio → mismos niveles
-lv1 = calc_levels(price=150.0, recent_low=142.0, recent_high=162.0)
-lv2 = calc_levels(price=150.0, recent_low=142.0, recent_high=162.0)
+# Niveles estables: mismo precio Y ema → mismos niveles
+lv1 = calc_levels(price=150.0, recent_low=142.0, recent_high=162.0, ema20=148.0)
+lv2 = calc_levels(price=150.0, recent_low=142.0, recent_high=162.0, ema20=148.0)
 check("Niveles reproducibles con mismos inputs", lv1, lv2)
 
-# Precio levemente diferente → stop no cambia si mínimo 20d no cambió
-lv_a = calc_levels(price=150.0, recent_low=142.0, recent_high=162.0)
-lv_b = calc_levels(price=150.5, recent_low=142.0, recent_high=162.0)
+# Precio levemente diferente pero EMA20 y mínimo/máximo 20d iguales → niveles IDÉNTICOS
+lv_a = calc_levels(price=150.0, recent_low=142.0, recent_high=162.0, ema20=148.0)
+lv_b = calc_levels(price=150.5, recent_low=142.0, recent_high=162.0, ema20=148.0)
 check("Stop idéntico si mínimo 20d no cambió", lv_a['sl'], lv_b['sl'])
+check("Entrada idéntica si EMA20 no cambió", lv_a['el'], lv_b['el'])
+check("Target idéntico si máximo 20d no cambió", lv_a['tg'], lv_b['tg'])
 
 # ── Resultado final ───────────────────────────────────────────────────────────
 print(f"\n{'='*40}")
