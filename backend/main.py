@@ -623,6 +623,23 @@ async def analyze(ticker: str):
         raise HTTPException(status_code=500, detail=detail)
 
 
+def calc_levels(price: float, recent_low: float, recent_high: float) -> dict:
+    """Calcula niveles de entrada/stop/target anclados a soportes técnicos reales.
+
+    Returns dict con keys: el, eh, entry_mid, sl, tg
+    """
+    el = round(price * 0.995, 2)
+    eh = round(price * 1.005, 2)
+    entry_mid = round((el + eh) / 2, 2)
+    raw_sl = round(recent_low * 0.995, 2)
+    max_sl_distance = round(price * 0.93, 2)
+    sl = max(raw_sl, max_sl_distance)
+    risk = entry_mid - sl
+    min_target_rb = round(entry_mid + risk * 2.5, 2) if risk > 0 else round(price * 1.125, 2)
+    tg = round(max(recent_high, min_target_rb), 2)
+    return {"el": el, "eh": eh, "entry_mid": entry_mid, "sl": sl, "tg": tg}
+
+
 async def _analyze_inner(ticker: str):
     async with httpx.AsyncClient(timeout=20) as http:
         candles, fundamentals, spy_closes, next_earnings, rt_quote = await asyncio.gather(
@@ -686,19 +703,11 @@ async def _analyze_inner(ticker: str):
     max_days = max(10, min(30, estimated_days))  # entre 10 y 30 días
 
     # defaults set-and-forget — anclados a soportes/resistencias técnicas reales
-    # Entrada: rango estrecho alrededor del precio actual
-    el_default = round(price * 0.995, 2)
-    eh_default = round(price * 1.005, 2)
-    entry_mid_default = round((el_default + eh_default) / 2, 2)
-    # Stop-loss: anclado al mínimo de 20 días (soporte técnico real)
-    # Si el mínimo está muy lejos (>10%), usar 7% máximo para evitar stops absurdos
-    raw_sl = round(recent_low * 0.995, 2)  # ligeramente bajo el soporte
-    max_sl_distance = round(price * 0.93, 2)  # no más de 7% bajo precio
-    sl_default = max(raw_sl, max_sl_distance)
-    # Target: anclado al máximo de 20 días con mínimo 2.5x R:B
-    risk_default = entry_mid_default - sl_default
-    min_target_rb = round(entry_mid_default + risk_default * 2.5, 2) if risk_default > 0 else round(price * 1.125, 2)
-    tg_default = round(max(recent_high, min_target_rb), 2)
+    _lvl = calc_levels(price, recent_low, recent_high)
+    el_default        = _lvl["el"]
+    eh_default        = _lvl["eh"]
+    sl_default        = _lvl["sl"]
+    tg_default        = _lvl["tg"]
 
     ex_dividend_date = (fundamentals or {}).get("exDividendDate")
 

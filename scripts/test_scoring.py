@@ -12,7 +12,7 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'backend'))
 
-from main import calc_score, calc_context_stars, determine_final_signal
+from main import calc_score, calc_context_stars, determine_final_signal, calc_levels
 
 PASS = 0
 FAIL = 0
@@ -182,6 +182,48 @@ check("RSI 74 → monitor", r['signal'], "monitor")
 r = determine_final_signal(score=55, tech_signal="hold", context_stars=3,
                            context_reasons=[], rsi=50)
 check("Claude hold → hold", r['signal'], "hold")
+
+# ── 4. calc_levels — niveles anclados a soportes técnicos ─────────────────────
+print("\n[4] calc_levels — niveles anclados a soportes técnicos")
+
+# Caso normal: mínimo 20d no muy lejano (dentro del 7%)
+lv = calc_levels(price=100.0, recent_low=95.0, recent_high=115.0)
+check("Entrada baja = precio × 0.995", lv['el'], 99.5)
+check("Entrada alta = precio × 1.005", lv['eh'], 100.5)
+# stop = max(95*0.995=94.525→94.53, 100*0.93=93.0) → 94.53
+check("Stop anclado al mínimo 20d (94.53)", lv['sl'], 94.53)
+# riesgo = 100 - 94.52 = 5.48 | min_target = 100 + 5.48*2.5 = 113.7 | max(115, 113.7) = 115
+check("Target = máximo 20d cuando supera mínimo R:B", lv['tg'], 115.0)
+
+# Caso: mínimo 20d muy lejano (>7%) → floor activa
+lv = calc_levels(price=100.0, recent_low=80.0, recent_high=115.0)
+# raw_sl = 80*0.995=79.6, max_sl = 100*0.93=93.0 → sl=93.0 (floor activa)
+check("Stop flooreado al 7% cuando mínimo 20d muy lejano", lv['sl'], 93.0)
+
+# Caso: máximo 20d insuficiente para 2.5x R:B → target calculado
+lv = calc_levels(price=100.0, recent_low=97.0, recent_high=101.0)
+# sl = max(97*0.995=96.52, 93.0) → 96.52
+# entry_mid = 100.0, riesgo = 100-96.52=3.48, min_target = 100+3.48*2.5=108.7
+# max(101, 108.7) = 108.7 → R:B respetado aunque máximo 20d sea bajo
+check("Target calculado por R:B 2.5x cuando máximo 20d es insuficiente", lv['tg'], 108.7)
+
+# R:B resultante siempre >= 2.5x
+for price, low, high in [(100, 95, 115), (200, 185, 220), (50, 47, 55)]:
+    lv = calc_levels(price=price, recent_low=low, recent_high=high)
+    risk = lv['entry_mid'] - lv['sl']
+    if risk > 0:
+        rr = round((lv['tg'] - lv['entry_mid']) / risk, 2)
+        check(f"R:B >= 2.5x para price={price} low={low} high={high} (obtenido {rr}x)", rr >= 2.5, True)
+
+# Niveles estables: mismo precio → mismos niveles
+lv1 = calc_levels(price=150.0, recent_low=142.0, recent_high=162.0)
+lv2 = calc_levels(price=150.0, recent_low=142.0, recent_high=162.0)
+check("Niveles reproducibles con mismos inputs", lv1, lv2)
+
+# Precio levemente diferente → stop no cambia si mínimo 20d no cambió
+lv_a = calc_levels(price=150.0, recent_low=142.0, recent_high=162.0)
+lv_b = calc_levels(price=150.5, recent_low=142.0, recent_high=162.0)
+check("Stop idéntico si mínimo 20d no cambió", lv_a['sl'], lv_b['sl'])
 
 # ── Resultado final ───────────────────────────────────────────────────────────
 print(f"\n{'='*40}")
