@@ -949,7 +949,9 @@ async def _load_screener_json() -> dict:
         return _SCREENER_CACHE
     try:
         async with httpx.AsyncClient(timeout=10) as c:
-            r = await c.get(_GITHUB_RAW, headers={"Cache-Control": "no-cache"})
+            # Query param con timestamp para bypass del CDN cache de GitHub raw
+            bust_url = f"{_GITHUB_RAW}?t={int(now)}"
+            r = await c.get(bust_url, headers={"Cache-Control": "no-cache", "Pragma": "no-cache"})
             if r.status_code == 200:
                 data = r.json()
                 # Filtrar ETFs de candidates (formato nuevo)

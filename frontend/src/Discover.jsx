@@ -56,9 +56,9 @@ export default function Discover({ watchlist, onAdd, onRemove, onAddAll }) {
       const res = await fetch('/api/screener/refresh', { method: 'POST' })
       const data = await res.json()
       if (res.ok) {
-        setRefreshMsg({ ok: true, text: 'Actualizando... listo en ~60 segundos' })
-        // Recarga automática después de 65 segundos
-        setTimeout(() => { load(); setRefreshMsg(null) }, 65000)
+        setRefreshMsg({ ok: true, text: 'Actualizando... listo en ~90 segundos' })
+        // Recarga automática después de 90 segundos (GitHub Actions tarda ~60-90s)
+        setTimeout(() => { load(); setRefreshMsg(null) }, 90000)
       } else {
         setRefreshMsg({ ok: false, text: data.error || 'Error al actualizar' })
       }
