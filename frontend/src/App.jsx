@@ -77,14 +77,16 @@ export default function App() {
       .select('tickers, monitor_tickers')
       .eq('user_id', session.user.id)
       .single()
-      .then(({ data }) => {
+      .then(({ data, error }) => {
+        if (error && error.code !== 'PGRST116') {
+          // Error real de red/BD — NO sobrescribir con defaults, dejar null
+          // El save useEffect no dispara porque dbLoaded sigue false
+          console.error('Supabase watchlist load error:', error)
+          return
+        }
+        // PGRST116 = no existe fila todavía (usuario nuevo) → usar defaults
         setWatchlist(data?.tickers?.length     ? data.tickers         : DEFAULT_WATCHLIST)
         setMonitorTickers(data?.monitor_tickers?.length ? data.monitor_tickers : [])
-        dbLoaded.current = true
-      })
-      .catch(() => {
-        setWatchlist(DEFAULT_WATCHLIST)
-        setMonitorTickers([])
         dbLoaded.current = true
       })
   }, [session])
