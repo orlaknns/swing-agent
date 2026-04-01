@@ -453,12 +453,12 @@ export default function StockCard({ ticker, onRemove, session, onMonitor, onAnal
             <span style={{ color:data.rsi < 30 ? C.green : data.rsi > 70 ? C.red : C.text, fontFamily:'monospace', fontWeight:700 }}>{data.rsi?.toFixed(0)}</span>
           </div>
           <div style={{ display:'flex', justifyContent:'space-between' }}>
-            <span style={{ color:C.muted }}>EMA20</span>
-            <span style={{ color:C.text, fontFamily:'monospace' }}>${data.ema20?.toFixed(2)}</span>
+            <span style={{ color:C.muted }}>SMA21</span>
+            <span style={{ color:C.text, fontFamily:'monospace' }}>${data.sma21?.toFixed(2)}</span>
           </div>
           <div style={{ display:'flex', justifyContent:'space-between' }}>
-            <span style={{ color:C.muted }}>EMA50</span>
-            <span style={{ color:C.text, fontFamily:'monospace' }}>${data.ema50?.toFixed(2)}</span>
+            <span style={{ color:C.muted }}>SMA50</span>
+            <span style={{ color:C.text, fontFamily:'monospace' }}>${data.sma50?.toFixed(2)}</span>
           </div>
           {data.sma200 != null && (
             <div style={{ display:'flex', justifyContent:'space-between' }}>

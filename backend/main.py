@@ -323,14 +323,14 @@ def calc_momentum_4w(closes: list) -> float | None:
     return round(((closes[-1] - closes[-21]) / closes[-21]) * 100, 2)
 
 
-def calc_score(rsi, ema20, ema50, sma200, price, vol_ratio, mansfield_rs,
+def calc_score(rsi, sma21, sma50, sma200, price, vol_ratio, mansfield_rs,
                momentum_4w=None, recent_high=None) -> dict:
     """
     Score técnico puro (0-100) — solo análisis técnico de precio y momentum.
     Base: 50 (neutral). Máximo teórico: 100 exacto.
 
     Factores:
-      EMA trend    +10 / -10   (tendencia corto plazo)
+      SMA trend    +10 / -10   (tendencia corto plazo: SMA21 vs SMA50)
       RSI          +8  / -10   (momentum y sobrecompra)
       SMA200       +6  / -6    (tendencia estructural)
       Mansfield RS +8  / -12   (fuerza relativa vs S&P500)
@@ -343,13 +343,13 @@ def calc_score(rsi, ema20, ema50, sma200, price, vol_ratio, mansfield_rs,
     breakdown = {}
     alerts = []
 
-    # ── EMA trend: tendencia de corto plazo (máx +10) ─────────────────────
-    ema_cross_recent = ema20 > ema50 and (ema20 - ema50) / ema50 < 0.02
-    if ema20 > ema50:
+    # ── SMA trend: tendencia de corto plazo (máx +10) ─────────────────────
+    ema_cross_recent = sma21 > sma50 and (sma21 - sma50) / sma50 < 0.02
+    if sma21 > sma50:
         score += 10; breakdown['ema_trend'] = +10
     else:
         score -= 10; breakdown['ema_trend'] = -10
-        alerts.append("EMA20 < EMA50 — tendencia bajista de corto plazo")
+        alerts.append("SMA21 < SMA50 — tendencia bajista de corto plazo")
 
     # ── RSI: momentum y zona de entrada (máx +8) ──────────────────────────
     if 40 <= rsi <= 60:
@@ -369,7 +369,7 @@ def calc_score(rsi, ema20, ema50, sma200, price, vol_ratio, mansfield_rs,
         if price > sma200:
             score += 6; breakdown['sma200'] = +6
         else:
-            recovering = ema20 > ema50 and (momentum_4w or 0) > 0
+            recovering = sma21 > sma50 and (momentum_4w or 0) > 0
             penalty = -3 if recovering else -6
             score += penalty; breakdown['sma200'] = penalty
             if not recovering:
@@ -435,7 +435,7 @@ def calc_score(rsi, ema20, ema50, sma200, price, vol_ratio, mansfield_rs,
     }
 
 
-def calc_context_stars(score: int, ema20: float, ema50: float, mansfield_rs,
+def calc_context_stars(score: int, sma21: float, sma50: float, mansfield_rs,
                        next_earnings: str, ex_dividend_date: str,
                        fundamentals: dict, price: float, max_days: int) -> dict:
     """
@@ -497,7 +497,7 @@ def calc_context_stars(score: int, ema20: float, ema50: float, mansfield_rs,
             )
 
     # ── Mansfield RS muy negativo con técnica alcista ─────────────────────
-    tech_bullish = ema20 > ema50
+    tech_bullish = sma21 > sma50
     if tech_bullish and mansfield_rs is not None and mansfield_rs < -2:
         stars -= 1
         reasons.append(
@@ -623,18 +623,18 @@ async def analyze(ticker: str):
         raise HTTPException(status_code=500, detail=detail)
 
 
-def calc_levels(price: float, recent_low: float, recent_high: float, ema20: float) -> dict:
+def calc_levels(price: float, recent_low: float, recent_high: float, sma21: float) -> dict:
     """Calcula niveles de entrada/stop/target anclados a soportes técnicos reales.
 
-    Entrada anclada a EMA20 (soporte dinámico diario, estable entre refreshes).
+    Entrada anclada a SMA21 (soporte dinámico diario, estable entre refreshes).
     Stop anclado a mínimo 20d (soporte histórico real).
     Target anclado a máximo 20d con mínimo R:B 2.5x.
 
     Returns dict con keys: el, eh, entry_mid, sl, tg
     """
-    # Entrada: zona alrededor de EMA20 (cambia solo con el cierre diario, no tick a tick)
-    el = round(ema20 * 0.995, 2)
-    eh = round(ema20 * 1.010, 2)
+    # Entrada: zona alrededor de SMA21 (cambia solo con el cierre diario, no tick a tick)
+    el = round(sma21 * 0.995, 2)
+    eh = round(sma21 * 1.010, 2)
     entry_mid = round((el + eh) / 2, 2)
     # Stop: siempre el mínimo de 20 días ligeramente por debajo — valor fijo histórico
     sl = round(recent_low * 0.995, 2)
@@ -677,9 +677,9 @@ async def _analyze_inner(ticker: str):
         change = round(((price - prev_close) / prev_close) * 100, 2)
         is_realtime = False
 
-    ema20 = calc_ema(closes, 20)
-    ema50 = calc_ema(closes, 50)
-    rsi   = calc_rsi(closes)
+    sma21  = calc_sma(closes, 21)
+    sma50  = calc_sma(closes, 50)
+    rsi    = calc_rsi(closes)
     sma200 = calc_sma(closes, 200)
 
     avg_vol     = sum(volumes[-20:]) / min(20, len(volumes))
@@ -708,7 +708,7 @@ async def _analyze_inner(ticker: str):
     max_days = max(10, min(30, estimated_days))  # entre 10 y 30 días
 
     # defaults set-and-forget — anclados a soportes/resistencias técnicas reales
-    _lvl = calc_levels(price, recent_low, recent_high, ema20)
+    _lvl = calc_levels(price, recent_low, recent_high, sma21)
     el_default        = _lvl["el"]
     eh_default        = _lvl["eh"]
     sl_default        = _lvl["sl"]
@@ -729,7 +729,7 @@ async def _analyze_inner(ticker: str):
             pass
 
     # Condiciones objetivas para orientar la narrativa de Claude
-    ema_trend_ctx = "EMA20 > EMA50 (tendencia alcista corto plazo)" if ema20 > ema50 else "EMA20 < EMA50 (tendencia bajista corto plazo)"
+    ema_trend_ctx = "SMA21 > SMA50 (tendencia alcista corto plazo)" if sma21 > sma50 else "SMA21 < SMA50 (tendencia bajista corto plazo)"
     sma200_ctx = f"Precio {'sobre' if sma200 and price > sma200 else 'bajo'} SMA200" if sma200 else "SMA200 no disponible"
     rsi_ctx = "RSI en zona neutra/pullback" if 40 <= rsi <= 60 else (f"RSI {rsi} — sobrecompra" if rsi > 65 else (f"RSI {rsi} — sobreventa" if rsi < 35 else f"RSI {rsi}"))
     try:
@@ -740,16 +740,16 @@ async def _analyze_inner(ticker: str):
 
     prompt = (
         f"Analiza {ticker} para swing trading set-and-forget (sin gestion activa). Datos reales:\n"
-        f"Precio: ${price} | Cambio: {change}% | EMA20: ${ema20} | EMA50: ${ema50} | RSI: {rsi} | Vol%: {vol_ratio}\n"
+        f"Precio: ${price} | Cambio: {change}% | SMA21: ${sma21} | SMA50: ${sma50} | RSI: {rsi} | Vol%: {vol_ratio}\n"
         f"Max20d: ${round(recent_high,2)} | Min20d: ${round(recent_low,2)} | SMA200: ${sma200 or 'N/A'} | ATR: ${round(atr,2)} | Mom4w: {momentum_4w}% | Ultimos5: {last_5}\n"
         f"Condiciones objetivas: {ema_trend_ctx} | {sma200_ctx} | {rsi_ctx} | {earnings_ctx}\n"
         f"{ex_div_str}"
         f"\nEstrategia: entrada unica, stop-loss fijo, objetivo unico fijo. Sin ajustes manuales. Plazo maximo estimado: {max_days} dias (calculado por volatilidad ATR).\n"
         "\nResponde UNICAMENTE con este JSON (sin texto antes ni despues, sin markdown):\n"
-        + '{' + f'"signal":"buy","strategy":"pullback","entryLow":{el_default},"entryHigh":{eh_default},"stopLoss":{sl_default},"target":{tg_default},"trend":"bullish","keyLevel":{ema20},"analysis":"texto aqui"' + '}'
+        + '{' + f'"signal":"buy","strategy":"pullback","entryLow":{el_default},"entryHigh":{eh_default},"stopLoss":{sl_default},"target":{tg_default},"trend":"bullish","keyLevel":{sma21},"analysis":"texto aqui"' + '}'
         + "\n\nReglas:\n"
         "- signal debe reflejar las condiciones objetivas indicadas arriba (buy solo si tendencia alcista, sell si bajista)\n"
-        f"- entryLow/entryHigh: zona de entrada anclada a EMA20 (${ema20}) — usar {el_default} y {eh_default} como referencia. Solo ajustar si hay soporte/resistencia tecnica mejor documentada.\n"
+        f"- entryLow/entryHigh: zona de entrada anclada a SMA21 (${sma21}) — usar {el_default} y {eh_default} como referencia. Solo ajustar si hay soporte/resistencia tecnica mejor documentada.\n"
         f"- stopLoss: FIJO en minimo 20d (${round(recent_low,2)}) ligeramente por debajo — usar {sl_default} como referencia. Este nivel es el soporte real que el precio ya respeto. NO se mueve.\n"
         f"- target: objetivo UNICO fijo con R:B minimo 2.5x — maximo 20d es ${round(recent_high,2)}, usar como referencia. Default: {tg_default}. En resistencia tecnica real.\n"
         "- signal=buy/sell/hold, strategy=pullback/breakout/reversal/neutral, trend=bullish/bearish/sideways\n"
@@ -793,14 +793,14 @@ async def _analyze_inner(ticker: str):
 
     # Score técnico puro
     score_data = calc_score(
-        rsi=rsi, ema20=ema20, ema50=ema50, sma200=sma200, price=price,
+        rsi=rsi, sma21=sma21, sma50=sma50, sma200=sma200, price=price,
         vol_ratio=vol_ratio, mansfield_rs=mansfield_rs,
         momentum_4w=momentum_4w, recent_high=recent_high
     )
     # Estrellas de contexto de entrada
     context_data = calc_context_stars(
         score=score_data['score'],
-        ema20=ema20, ema50=ema50, mansfield_rs=mansfield_rs,
+        sma21=sma21, sma50=sma50, mansfield_rs=mansfield_rs,
         next_earnings=next_earnings, ex_dividend_date=ex_dividend_date,
         fundamentals=fundamentals, price=price, max_days=max_days
     )
@@ -821,8 +821,8 @@ async def _analyze_inner(ticker: str):
         "isRealtime":   is_realtime,
         "rtHigh":       rt_quote.get("high") if rt_quote else None,
         "rtLow":        rt_quote.get("low")  if rt_quote else None,
-        "ema20":        ema20,
-        "ema50":        ema50,
+        "sma21":        sma21,
+        "sma50":        sma50,
         "rsi":          rsi,
         "volRatio":     vol_ratio,
         "prices20d":    prices_20d,
@@ -845,7 +845,7 @@ async def _analyze_inner(ticker: str):
         "avoidReason":     signal_result["justification"],
         "momentum4w":     momentum_4w,
         "maxDays":        max_days,
-        "keyLevel":     round(float(ai.get("keyLevel", ema20)), 2),
+        "keyLevel":     round(float(ai.get("keyLevel", sma21)), 2),
         "analysis":     str(ai.get("analysis", "")),
         "mansfieldRS":  mansfield_rs,
         "sma200":       sma200,

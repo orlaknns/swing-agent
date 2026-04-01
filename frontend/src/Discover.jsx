@@ -129,7 +129,7 @@ export default function Discover({ watchlist, onAdd, onRemove, onAddAll }) {
       {/* Criterios */}
       <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:8, padding:'10px 14px', marginBottom:16, fontSize:11, color:C.muted }}>
         <span style={{ color:C.accent, fontWeight:700 }}>Criterios de filtrado: </span>
-        EMA20 cruzó sobre EMA50 (tendencia alcista reciente) · RSI entre 30 y 60 (zona de pullback) · Precio &gt; $20 · Volumen promedio &gt; 500k · NYSE y NASDAQ
+        SMA21 cruzó sobre SMA50 (tendencia alcista reciente) · RSI entre 30 y 60 (zona de pullback) · Precio &gt; $20 · Volumen promedio &gt; 500k · NYSE y NASDAQ
       </div>
 
       {/* Error */}

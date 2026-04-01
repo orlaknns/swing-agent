@@ -191,7 +191,7 @@ async def main():
                 "avgVolume": "> 500k",
                 "price": "> $20",
                 "rsi": "30-60 (pullback zone)",
-                "ema": "EMA20 recently crossed above EMA50"
+                "ema": "EMA20 recently crossed above EMA50 (Finviz filter — app uses SMA21/SMA50 for analysis)"
             }
         }
         print(f"Success: {len(candidates)} candidatas con nombre y sector")

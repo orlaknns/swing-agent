@@ -95,7 +95,7 @@ function ConfirmModal({ ticker, onConfirm, onCancel }) {
 function exportToCSV(trades) {
   const headers = ['Fecha','Ticker','Señal','Estrategia','Tendencia','Precio app',
     'Rango bajo (app)','Rango alto (app)','Stop-loss (app)','Objetivo (app)','R:B (app)',
-    'RSI','EMA20','EMA50','SMA200','Mansfield RS','EPS','ROE%','Crecim.EPS%','Crecim.Ventas%',
+    'RSI','SMA21','SMA50','SMA200','Mansfield RS','EPS','ROE%','Crecim.EPS%','Crecim.Ventas%',
     'Market Cap','P/E','Próx.Earnings',
     'Entrada real','SL real','TP real','N° acciones','Precio cierre',
     'P&L %','P&L USD','Estado','Días abierta','Notas']
@@ -108,7 +108,7 @@ function exportToCSV(trades) {
     const days = t.status !== 'closed' ? calcDaysOpen(t.date) : ''
     return [t.date, t.ticker, t.signal, t.strategy, t.trend, t.price,
       t.entryLow, t.entryHigh, t.stopLoss, t.target, t.rr,
-      t.rsi, t.ema20, t.ema50, t.sma200||'', t.mansfieldRS||'',
+      t.rsi, t.sma21, t.sma50, t.sma200||'', t.mansfieldRS||'',
       f.eps||'', f.roe||'', f.epsGrowth||'', f.revenueGrowth||'', f.marketCap||'', f.peRatio||'', t.nextEarnings||'',
       t.entryPrice||'', t.realStopLoss||'', t.realTarget||'', t.positionSize||'', t.exitPrice||'',
       pnlPct, pnlUsd, STATUS_LABELS[t.status]||t.status, days, t.notes||'']
@@ -173,7 +173,7 @@ function TradeModal({ trade, onSave, onClose }) {
               ['Objetivo app', fmt(trade.target)],
               ['R:B app', trade.rr ? `${trade.rr}x` : '—'],
               ['Mansfield RS', trade.mansfieldRS ?? '—'],
-              ['EMA20', fmt(trade.ema20)],
+              ['SMA21', fmt(trade.sma21)],
               ['SMA200', trade.sma200 ? fmt(trade.sma200) : '—'],
             ].map(([l,v]) => (
               <div key={l}>
@@ -482,7 +482,7 @@ function tradeToDb(t, userId) {
     entry_low: t.entryLow, entry_high: t.entryHigh, stop_loss: t.stopLoss,
     target: t.target,
     max_days: t.maxDays || 20,
-    rr: t.rr, rsi: t.rsi, ema20: t.ema20, ema50: t.ema50, sma200: t.sma200,
+    rr: t.rr, rsi: t.rsi, sma21: t.sma21, sma50: t.sma50, sma200: t.sma200,
     mansfield_rs: t.mansfieldRS, next_earnings: t.nextEarnings,
     fundamentals: t.fundamentals, analysis: t.analysis,
     status: t.status,
@@ -502,7 +502,7 @@ function dbToTrade(r) {
     entryLow: r.entry_low, entryHigh: r.entry_high, stopLoss: r.stop_loss,
     target: r.target,
     maxDays: r.max_days || 20,
-    rr: r.rr, rsi: r.rsi, ema20: r.ema20, ema50: r.ema50, sma200: r.sma200,
+    rr: r.rr, rsi: r.rsi, sma21: r.sma21, sma50: r.sma50, sma200: r.sma200,
     mansfieldRS: r.mansfield_rs, nextEarnings: r.next_earnings,
     fundamentals: r.fundamentals, analysis: r.analysis,
     status: r.status, entryPrice: r.entry_price, positionSize: r.position_size,
@@ -518,7 +518,7 @@ export async function saveTradeToJournal(data, userId) {
     ticker: data.ticker, signal: data.signal, strategy: data.strategy, trend: data.trend,
     price: data.price, entryLow: data.entryLow, entryHigh: data.entryHigh,
     stopLoss: data.stopLoss, target: data.target,
-    rr: data.rr, rsi: data.rsi, ema20: data.ema20, ema50: data.ema50,
+    rr: data.rr, rsi: data.rsi, sma21: data.sma21, sma50: data.sma50,
     sma200: data.sma200, mansfieldRS: data.mansfieldRS, nextEarnings: data.nextEarnings,
     fundamentals: data.fundamentals, analysis: data.analysis,
     status: 'open', entryPrice: null, positionSize: null, exitPrice: null, notes: '',
