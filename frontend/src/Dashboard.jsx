@@ -72,24 +72,33 @@ export default function Dashboard({ session }) {
   const now = new Date()
   const thisMonth = now.toISOString().slice(0, 7) // "2026-04"
 
-  const openTrades   = trades.filter(t => ['open','breakeven','partial'].includes(t.status))
-  const closedTrades = trades.filter(t => t.status === 'closed')
+  // Mes anterior
+  const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+  const prevMonth = prevDate.toISOString().slice(0, 7) // "2026-03"
+
+  const openTrades     = trades.filter(t => ['open','breakeven','partial'].includes(t.status))
+  const closedTrades   = trades.filter(t => t.status === 'closed')
   const closedWithData = closedTrades.filter(t => t.exitPrice && t.entryPrice && t.positionSize)
 
-  // Cerradas este mes
-  const closedThisMonth = closedWithData.filter(t => t.date?.startsWith(thisMonth))
-  // Abiertas este mes
+  // Mes de cierre real: exit_date si existe, fallback a date (apertura) para trades legacy
+  const closedMonth = (t) => (t.exitDate || t.date || '').slice(0, 7)
+
+  // Cerradas este mes y mes anterior (por fecha de cierre)
+  const closedThisMonth = closedWithData.filter(t => closedMonth(t) === thisMonth)
+  const closedPrevMonth = closedWithData.filter(t => closedMonth(t) === prevMonth)
+
+  // Abiertas este mes (por fecha de apertura — es lo que tiene sentido aquí)
   const openThisMonth = openTrades.filter(t => t.date?.startsWith(thisMonth))
 
-  // P&L total cerradas
-  const totalStats = calcPnl(closedWithData)
-  // P&L cerradas este mes
-  const monthStats = calcPnl(closedThisMonth)
+  // P&L stats
+  const totalStats   = calcPnl(closedWithData)
+  const monthStats   = calcPnl(closedThisMonth)
+  const prevMonStats = calcPnl(closedPrevMonth)
 
-  // Capital en riesgo (operaciones abiertas con stop y entrada real)
+  // Capital en riesgo (abiertas con SL real o app)
   const capitalRisk = openTrades.reduce((acc, t) => {
-    const entry = parseFloat(t.entryPrice || 0)
-    const stop  = parseFloat(t.realStopLoss || t.stopLoss || 0)
+    const entry  = parseFloat(t.entryPrice || 0)
+    const stop   = parseFloat(t.realStopLoss || t.stopLoss || 0)
     const shares = parseFloat(t.positionSize || 0)
     if (entry > 0 && stop > 0 && shares > 0) acc += (entry - stop) * shares
     return acc
@@ -103,15 +112,26 @@ export default function Dashboard({ session }) {
   }, 0)
 
   // Win rate total y mensual
-  const wins  = closedWithData.filter(t => parseFloat(t.exitPrice) > parseFloat(t.entryPrice)).length
-  const winRate = closedWithData.length > 0 ? Math.round(wins / closedWithData.length * 100) : null
-  const winsMonth = closedThisMonth.filter(t => parseFloat(t.exitPrice) > parseFloat(t.entryPrice)).length
+  const wins         = closedWithData.filter(t => parseFloat(t.exitPrice) > parseFloat(t.entryPrice)).length
+  const winRate      = closedWithData.length > 0 ? Math.round(wins / closedWithData.length * 100) : null
+  const winsMonth    = closedThisMonth.filter(t => parseFloat(t.exitPrice) > parseFloat(t.entryPrice)).length
   const winRateMonth = closedThisMonth.length > 0 ? Math.round(winsMonth / closedThisMonth.length * 100) : null
+  const winsPrev     = closedPrevMonth.filter(t => parseFloat(t.exitPrice) > parseFloat(t.entryPrice)).length
+  const winRatePrev  = closedPrevMonth.length > 0 ? Math.round(winsPrev / closedPrevMonth.length * 100) : null
 
-  // ── Últimas 10 cerradas ───────────────────────────────────────────────
-  const recentClosed = closedWithData.slice(0, 10)
+  // ── Últimas 10 cerradas (ordenadas por fecha de cierre desc) ──────────
+  const recentClosed = [...closedWithData]
+    .sort((a, b) => (b.exitDate || b.date || '').localeCompare(a.exitDate || a.date || ''))
+    .slice(0, 10)
 
-  const monthName = now.toLocaleString('es', { month:'long', year:'numeric' })
+  const monthName     = now.toLocaleString('es', { month:'long', year:'numeric' })
+  const prevMonthName = prevDate.toLocaleString('es', { month:'long', year:'numeric' })
+
+  // Deltas mes actual vs mes anterior
+  const pnlUsdDelta = (monthStats.pnlUsd != null && prevMonStats.pnlUsd != null)
+    ? monthStats.pnlUsd - prevMonStats.pnlUsd : null
+  const pnlPctDelta = (monthStats.pnlPct != null && prevMonStats.pnlPct != null)
+    ? monthStats.pnlPct - prevMonStats.pnlPct : null
 
   return (
     <div style={{ maxWidth:960, margin:'0 auto', padding:'0 20px 48px' }}>
@@ -179,16 +199,39 @@ export default function Dashboard({ session }) {
               label="P&L USD"
               value={monthStats.invested > 0 ? fmtUsd(monthStats.pnlUsd) : '—'}
               color={monthStats.pnlUsd >= 0 ? C.green : C.red}
+              sub={pnlUsdDelta != null ? `vs ${prevMonthName.split(' ')[0]}: ${fmtUsd(pnlUsdDelta)}` : null}
             />
             <StatCard
               label="P&L %"
               value={monthStats.pnlPct != null ? fmtPct(monthStats.pnlPct) : '—'}
               color={monthStats.pnlPct >= 0 ? C.green : C.red}
-              sub="sobre capital invertido"
+              sub={pnlPctDelta != null ? `vs ${prevMonthName.split(' ')[0]}: ${pnlPctDelta >= 0 ? '+' : ''}${pnlPctDelta.toFixed(2)}pp` : 'sobre capital invertido'}
             />
           </div>
         )}
       </div>
+
+      {/* ── SECCIÓN: MES ANTERIOR ─────────────────────────────────────── */}
+      {closedPrevMonth.length > 0 && (
+        <div style={{ marginBottom:24 }}>
+          <SectionHeader title={`Mes anterior · ${prevMonthName} · ${closedPrevMonth.length} cerradas`} />
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(160px, 1fr))', gap:8 }}>
+            <StatCard label="Cerradas" value={closedPrevMonth.length} color={C.muted} />
+            <StatCard label="Win rate" value={winRatePrev != null ? `${winRatePrev}%` : '—'} color={winRatePrev >= 50 ? C.green : winRatePrev != null ? C.red : C.muted} sub={`${winsPrev} ganadoras`} />
+            <StatCard
+              label="P&L USD"
+              value={prevMonStats.invested > 0 ? fmtUsd(prevMonStats.pnlUsd) : '—'}
+              color={prevMonStats.pnlUsd >= 0 ? C.green : C.red}
+            />
+            <StatCard
+              label="P&L %"
+              value={prevMonStats.pnlPct != null ? fmtPct(prevMonStats.pnlPct) : '—'}
+              color={prevMonStats.pnlPct >= 0 ? C.green : C.red}
+              sub="sobre capital invertido"
+            />
+          </div>
+        </div>
+      )}
 
       {/* ── SECCIÓN: ÚLTIMAS OPERACIONES CERRADAS ────────────────────── */}
       {recentClosed.length > 0 && (
@@ -211,7 +254,12 @@ export default function Dashboard({ session }) {
                 }}>
                   <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
                     <span style={{ fontSize:15, fontWeight:700, fontFamily:'monospace', color:C.text }}>{t.ticker}</span>
-                    <span style={{ fontSize:10, color:C.muted }}>{t.date}</span>
+                    <span style={{ fontSize:10, color:C.muted }}>
+                      {t.exitDate
+                        ? <>cierre {t.exitDate}</>
+                        : <>apertura {t.date}<span style={{ color:C.muted, opacity:0.5 }}> *</span></>
+                      }
+                    </span>
                     <span style={{ fontSize:10, color:C.muted }}>
                       {fmt(t.entryPrice)} → {fmt(t.exitPrice)}
                       {shares > 0 && <span style={{ marginLeft:6 }}>{shares} acc.</span>}
@@ -228,6 +276,9 @@ export default function Dashboard({ session }) {
                 </div>
               )
             })}
+          </div>
+          <div style={{ fontSize:9, color:C.muted, marginTop:8, opacity:0.6 }}>
+            * Trades cerrados antes de esta versión muestran fecha de apertura — la fecha de cierre real no estaba disponible.
           </div>
         </div>
       )}
@@ -253,11 +304,12 @@ function dbToTrade(r) {
   return {
     id: r.id, date: r.date, ticker: r.ticker,
     status: r.status,
-    entryPrice:  r.entry_price,
-    exitPrice:   r.exit_price,
+    entryPrice:   r.entry_price,
+    exitPrice:    r.exit_price,
     positionSize: r.position_size,
-    stopLoss:    r.stop_loss,
+    stopLoss:     r.stop_loss,
     realStopLoss: r.real_stop_loss,
-    price: r.price,
+    price:        r.price,
+    exitDate:     r.exit_date || null,  // null para trades cerrados antes de esta feature
   }
 }

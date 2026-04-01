@@ -93,7 +93,7 @@ function ConfirmModal({ ticker, onConfirm, onCancel }) {
 }
 
 function exportToCSV(trades) {
-  const headers = ['Fecha','Ticker','Señal','Estrategia','Tendencia','Precio app',
+  const headers = ['Fecha apertura','Fecha cierre','Ticker','Señal','Estrategia','Tendencia','Precio app',
     'Rango bajo (app)','Rango alto (app)','Stop-loss (app)','Objetivo (app)','R:B (app)',
     'RSI','SMA21','SMA50','SMA200','Mansfield RS','EPS','ROE%','Crecim.EPS%','Crecim.Ventas%',
     'Market Cap','P/E','Próx.Earnings',
@@ -106,7 +106,7 @@ function exportToCSV(trades) {
     const pnlUsd = t.exitPrice && entryRef && t.positionSize
       ? ((t.exitPrice - entryRef) * parseFloat(t.positionSize)).toFixed(2) : ''
     const days = t.status !== 'closed' ? calcDaysOpen(t.date) : ''
-    return [t.date, t.ticker, t.signal, t.strategy, t.trend, t.price,
+    return [t.date, t.exitDate||'', t.ticker, t.signal, t.strategy, t.trend, t.price,
       t.entryLow, t.entryHigh, t.stopLoss, t.target, t.rr,
       t.rsi, t.sma21, t.sma50, t.sma200||'', t.mansfieldRS||'',
       f.eps||'', f.roe||'', f.epsGrowth||'', f.revenueGrowth||'', f.marketCap||'', f.peRatio||'', t.nextEarnings||'',
@@ -129,6 +129,7 @@ function TradeModal({ trade, onSave, onClose }) {
     exitPrice:    trade.exitPrice    || '',
     status:       trade.status       || 'open',
     notes:        trade.notes        || '',
+    exitDate:     trade.exitDate     || null,  // no editable — se calcula al cerrar
   })
   const set = (k,v) => setForm(f=>({...f,[k]:v}))
 
@@ -409,6 +410,7 @@ export default function Journal({ session }) {
                 {trade.realStopLoss && <span><span style={{color:C.muted}}>SL real: </span><span style={{color:C.red,fontFamily:'monospace'}}>{fmt(trade.realStopLoss)}</span></span>}
                 <span><span style={{color:C.muted}}>TP app: </span><span style={{color:C.green,fontFamily:'monospace'}}>{fmt(trade.target)}</span></span>
                 {trade.realTarget && <span><span style={{color:C.muted}}>TP real: </span><span style={{color:C.green,fontFamily:'monospace'}}>{fmt(trade.realTarget)}</span></span>}
+                {trade.exitDate && <span><span style={{color:C.muted}}>Cerrada: </span><span style={{color:C.muted,fontFamily:'monospace'}}>{trade.exitDate}</span></span>}
                 {trade.nextEarnings && <span><span style={{color:C.muted}}>Earnings: </span><span style={{color:C.amber,fontFamily:'monospace'}}>{trade.nextEarnings}</span></span>}
               </div>
               {trade.notes && <div style={{marginTop:8,fontSize:11,color:C.muted,fontStyle:'italic',borderTop:`1px solid ${C.border}`,paddingTop:6}}>{trade.notes}</div>}
@@ -433,6 +435,12 @@ export default function Journal({ session }) {
 
 // ── DB mappers ─────────────────────────────────────────────────────────
 function tradeToDb(t, userId) {
+  // exit_date: se setea al cerrar (solo si no tenía ya una — preserva fecha original)
+  // se limpia si el trade vuelve a estado no-cerrado
+  let exit_date = null
+  if (t.status === 'closed') {
+    exit_date = t.exitDate || new Date().toISOString().slice(0, 10)
+  }
   return {
     id: t.id, user_id: userId, date: t.date, ticker: t.ticker,
     signal: t.signal, strategy: t.strategy, trend: t.trend, price: t.price,
@@ -449,6 +457,7 @@ function tradeToDb(t, userId) {
     real_stop_loss: t.realStopLoss !== '' ? t.realStopLoss : null,
     real_target:    t.realTarget   !== '' ? t.realTarget   : null,
     notes: t.notes,
+    exit_date,
   }
 }
 
@@ -465,6 +474,7 @@ function dbToTrade(r) {
     status: r.status, entryPrice: r.entry_price, positionSize: r.position_size,
     exitPrice: r.exit_price, notes: r.notes,
     realStopLoss: r.real_stop_loss, realTarget: r.real_target,
+    exitDate: r.exit_date || null,
   }
 }
 
@@ -479,7 +489,7 @@ export async function saveTradeToJournal(data, userId) {
     sma200: data.sma200, mansfieldRS: data.mansfieldRS, nextEarnings: data.nextEarnings,
     fundamentals: data.fundamentals, analysis: data.analysis,
     status: 'open', entryPrice: null, positionSize: null, exitPrice: null, notes: '',
-    realStopLoss: null, realTarget: null,
+    realStopLoss: null, realTarget: null, exitDate: null,
   }
   await supabase.from('journal').insert(tradeToDb(trade, userId))
   return trade
