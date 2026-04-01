@@ -1,5 +1,9 @@
 import { useState, useEffect } from 'react'
 import { supabase } from './supabase.js'
+import {
+  ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid,
+  Tooltip, ResponsiveContainer, ReferenceLine, Cell,
+} from 'recharts'
 
 const C = {
   bg:'#070d1a', card:'#0f1929', border:'#1a2d45',
@@ -7,9 +11,9 @@ const C = {
   amber:'#ffb800', text:'#dde6f0', muted:'#4a6080',
 }
 
-function fmt(n, decimals = 2) {
+function fmt(n) {
   if (n == null) return '—'
-  return `$${Number(n).toFixed(decimals)}`
+  return `$${Number(n).toFixed(2)}`
 }
 function fmtPct(n) {
   if (n == null) return '—'
@@ -21,6 +25,13 @@ function fmtUsd(n) {
   const sign = n >= 0 ? '+' : '-'
   if (abs >= 1000) return `${sign}$${(abs/1000).toFixed(1)}k`
   return `${sign}$${abs.toFixed(2)}`
+}
+function fmtUsdShort(n) {
+  if (n == null) return '—'
+  const abs = Math.abs(n)
+  const sign = n >= 0 ? '+' : '-'
+  if (abs >= 1000) return `${sign}$${(abs/1000).toFixed(1)}k`
+  return `${sign}$${abs.toFixed(0)}`
 }
 
 function StatCard({ label, value, color, sub }) {
@@ -36,8 +47,25 @@ function StatCard({ label, value, color, sub }) {
 function SectionHeader({ title }) {
   return (
     <div style={{ fontSize:10, color:C.muted, letterSpacing:'0.1em', textTransform:'uppercase',
-      fontWeight:700, marginBottom:10, paddingBottom:6, borderBottom:`1px solid ${C.border}` }}>
+      fontWeight:700, marginBottom:12, paddingBottom:6, borderBottom:`1px solid ${C.border}` }}>
       {title}
+    </div>
+  )
+}
+
+// Tooltip personalizado para el gráfico
+function ChartTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null
+  const d = payload[0]?.payload
+  if (!d) return null
+  return (
+    <div style={{ background:'#0f1929', border:`1px solid #1a2d45`, borderRadius:8, padding:'10px 14px', fontSize:11 }}>
+      <div style={{ color:C.accent, fontWeight:700, marginBottom:6 }}>{d.monthLabel}</div>
+      <div style={{ color:C.muted, marginBottom:2 }}>P&L mensual: <span style={{ color: d.pnlUsd >= 0 ? C.green : C.red, fontWeight:700, fontFamily:'monospace' }}>{fmtUsd(d.pnlUsd)}</span></div>
+      <div style={{ color:C.muted, marginBottom:2 }}>P&L %: <span style={{ color: d.pnlPct >= 0 ? C.green : C.red, fontFamily:'monospace' }}>{fmtPct(d.pnlPct)}</span></div>
+      <div style={{ color:C.muted, marginBottom:2 }}>Acumulado: <span style={{ color: d.cumPnl >= 0 ? C.green : C.red, fontFamily:'monospace' }}>{fmtUsd(d.cumPnl)}</span></div>
+      <div style={{ color:C.muted, marginBottom:2 }}>Trades: <span style={{ color:C.text, fontFamily:'monospace' }}>{d.count}</span></div>
+      <div style={{ color:C.muted }}>Win rate: <span style={{ color: d.winRate >= 50 ? C.green : C.red, fontFamily:'monospace' }}>{d.winRate}%</span></div>
     </div>
   )
 }
@@ -68,34 +96,68 @@ export default function Dashboard({ session }) {
     </div>
   )
 
-  // ── Cálculos ──────────────────────────────────────────────────────────
-  const now = new Date()
-  const thisMonth = now.toISOString().slice(0, 7) // "2026-04"
-
-  // Mes anterior
-  const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-  const prevMonth = prevDate.toISOString().slice(0, 7) // "2026-03"
+  // ── Datos base ────────────────────────────────────────────────────────
+  const now        = new Date()
+  const thisMonth  = now.toISOString().slice(0, 7)
 
   const openTrades     = trades.filter(t => ['open','breakeven','partial'].includes(t.status))
-  const closedTrades   = trades.filter(t => t.status === 'closed')
-  const closedWithData = closedTrades.filter(t => t.exitPrice && t.entryPrice && t.positionSize)
+  const closedWithData = trades.filter(t =>
+    t.status === 'closed' && t.exitPrice && t.entryPrice && t.positionSize
+  )
 
-  // Mes de cierre real: exit_date si existe, fallback a date (apertura) para trades legacy
-  const closedMonth = (t) => (t.exitDate || t.date || '').slice(0, 7)
+  // Mes de cierre: exit_date si existe, fallback a date para legacy
+  const tradeMonth = (t) => (t.exitDate || t.date || '').slice(0, 7)
 
-  // Cerradas este mes y mes anterior (por fecha de cierre)
-  const closedThisMonth = closedWithData.filter(t => closedMonth(t) === thisMonth)
-  const closedPrevMonth = closedWithData.filter(t => closedMonth(t) === prevMonth)
+  // ── Agrupar por mes — todos los meses con trades cerrados ─────────────
+  const monthMap = {}
+  closedWithData.forEach(t => {
+    const m = tradeMonth(t)
+    if (!m) return
+    if (!monthMap[m]) monthMap[m] = []
+    monthMap[m].push(t)
+  })
 
-  // Abiertas este mes (por fecha de apertura — es lo que tiene sentido aquí)
-  const openThisMonth = openTrades.filter(t => t.date?.startsWith(thisMonth))
+  // Ordenar meses cronológicamente
+  const sortedMonths = Object.keys(monthMap).sort()
 
-  // P&L stats
-  const totalStats   = calcPnl(closedWithData)
-  const monthStats   = calcPnl(closedThisMonth)
-  const prevMonStats = calcPnl(closedPrevMonth)
+  // Calcular stats por mes + P&L acumulado
+  let cumPnl = 0
+  const monthlyData = sortedMonths.map(m => {
+    const ts      = monthMap[m]
+    const stats   = calcPnl(ts)
+    const wins    = ts.filter(t => parseFloat(t.exitPrice) > parseFloat(t.entryPrice)).length
+    const winRate = ts.length > 0 ? Math.round(wins / ts.length * 100) : 0
+    cumPnl += stats.pnlUsd
+    const date    = new Date(m + '-02')  // día 2 para evitar timezone offset
+    const monthLabel = date.toLocaleString('es', { month:'short', year:'2-digit' })
+    return {
+      month: m,
+      monthLabel,
+      count:    ts.length,
+      wins,
+      winRate,
+      invested: stats.invested,
+      pnlUsd:   stats.pnlUsd,
+      pnlPct:   stats.pnlPct,
+      cumPnl:   Math.round(cumPnl * 100) / 100,
+    }
+  })
 
-  // Capital en riesgo (abiertas con SL real o app)
+  // Stats del mes actual
+  const thisMonthData = monthlyData.find(d => d.month === thisMonth)
+  const prevMonthData = monthlyData.length >= 2
+    ? monthlyData[monthlyData.length - (thisMonthData ? 2 : 1)]
+    : null
+
+  // Stats totales
+  const totalStats  = calcPnl(closedWithData)
+  const totalWins   = closedWithData.filter(t => parseFloat(t.exitPrice) > parseFloat(t.entryPrice)).length
+  const totalWinRate = closedWithData.length > 0 ? Math.round(totalWins / closedWithData.length * 100) : null
+
+  // Capital abierto y en riesgo
+  const openInvested = openTrades.reduce((acc, t) => {
+    return acc + parseFloat(t.entryPrice || 0) * parseFloat(t.positionSize || 0)
+  }, 0)
   const capitalRisk = openTrades.reduce((acc, t) => {
     const entry  = parseFloat(t.entryPrice || 0)
     const stop   = parseFloat(t.realStopLoss || t.stopLoss || 0)
@@ -104,34 +166,15 @@ export default function Dashboard({ session }) {
     return acc
   }, 0)
 
-  // Inversión actual abierta
-  const openInvested = openTrades.reduce((acc, t) => {
-    const entry  = parseFloat(t.entryPrice || 0)
-    const shares = parseFloat(t.positionSize || 0)
-    return acc + entry * shares
-  }, 0)
-
-  // Win rate total y mensual
-  const wins         = closedWithData.filter(t => parseFloat(t.exitPrice) > parseFloat(t.entryPrice)).length
-  const winRate      = closedWithData.length > 0 ? Math.round(wins / closedWithData.length * 100) : null
-  const winsMonth    = closedThisMonth.filter(t => parseFloat(t.exitPrice) > parseFloat(t.entryPrice)).length
-  const winRateMonth = closedThisMonth.length > 0 ? Math.round(winsMonth / closedThisMonth.length * 100) : null
-  const winsPrev     = closedPrevMonth.filter(t => parseFloat(t.exitPrice) > parseFloat(t.entryPrice)).length
-  const winRatePrev  = closedPrevMonth.length > 0 ? Math.round(winsPrev / closedPrevMonth.length * 100) : null
-
-  // ── Últimas 10 cerradas (ordenadas por fecha de cierre desc) ──────────
+  // Últimas 10 cerradas por fecha de cierre
   const recentClosed = [...closedWithData]
     .sort((a, b) => (b.exitDate || b.date || '').localeCompare(a.exitDate || a.date || ''))
     .slice(0, 10)
 
-  const monthName     = now.toLocaleString('es', { month:'long', year:'numeric' })
-  const prevMonthName = prevDate.toLocaleString('es', { month:'long', year:'numeric' })
+  // Escala del gráfico de barras
+  const maxAbsPnl = Math.max(...monthlyData.map(d => Math.abs(d.pnlUsd)), 1)
 
-  // Deltas mes actual vs mes anterior
-  const pnlUsdDelta = (monthStats.pnlUsd != null && prevMonStats.pnlUsd != null)
-    ? monthStats.pnlUsd - prevMonStats.pnlUsd : null
-  const pnlPctDelta = (monthStats.pnlPct != null && prevMonStats.pnlPct != null)
-    ? monthStats.pnlPct - prevMonStats.pnlPct : null
+  const hasLegacyTrades = closedWithData.some(t => !t.exitDate)
 
   return (
     <div style={{ maxWidth:960, margin:'0 auto', padding:'0 20px 48px' }}>
@@ -141,19 +184,27 @@ export default function Dashboard({ session }) {
         <p style={{ fontSize:11, color:C.muted, margin:'4px 0 0' }}>Resumen de tu actividad de trading</p>
       </div>
 
-      {/* ── SECCIÓN: POSICIONES ABIERTAS ─────────────────────────────── */}
+      {/* ── RESUMEN TOTAL ─────────────────────────────────────────────── */}
       <div style={{ marginBottom:24 }}>
-        <SectionHeader title="Posiciones abiertas" />
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(160px, 1fr))', gap:8 }}>
-          <StatCard label="Posiciones abiertas" value={openTrades.length} color={C.accent} />
-          <StatCard label="Abiertas este mes" value={openThisMonth.length} color={C.accent} />
-          <StatCard
-            label="Capital invertido"
-            value={openInvested > 0 ? `$${(openInvested/1000).toFixed(1)}k` : '—'}
-            color={C.text}
+        <SectionHeader title={`Histórico total · ${closedWithData.length} operaciones cerradas`} />
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(150px, 1fr))', gap:8 }}>
+          <StatCard label="Total cerradas"   value={closedWithData.length}  color={C.muted} />
+          <StatCard label="Abiertas ahora"   value={openTrades.length}      color={C.accent} />
+          <StatCard label="Win rate total"
+            value={totalWinRate != null ? `${totalWinRate}%` : '—'}
+            color={totalWinRate >= 50 ? C.green : totalWinRate != null ? C.red : C.muted}
+            sub={`${totalWins} de ${closedWithData.length}`}
           />
-          <StatCard
-            label="Capital en riesgo"
+          <StatCard label="P&L total USD"
+            value={totalStats.invested > 0 ? fmtUsd(totalStats.pnlUsd) : '—'}
+            color={totalStats.pnlUsd >= 0 ? C.green : C.red}
+          />
+          <StatCard label="P&L total %"
+            value={totalStats.pnlPct != null ? fmtPct(totalStats.pnlPct) : '—'}
+            color={totalStats.pnlPct >= 0 ? C.green : C.red}
+            sub="sobre capital invertido"
+          />
+          <StatCard label="Capital en riesgo"
             value={capitalRisk > 0 ? fmtUsd(-capitalRisk) : '—'}
             color={capitalRisk > 0 ? C.red : C.muted}
             sub="si todos los SL se activan"
@@ -161,125 +212,232 @@ export default function Dashboard({ session }) {
         </div>
       </div>
 
-      {/* ── SECCIÓN: HISTÓRICO TOTAL ──────────────────────────────────── */}
-      <div style={{ marginBottom:24 }}>
-        <SectionHeader title={`Total histórico · ${closedWithData.length} operaciones cerradas`} />
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(160px, 1fr))', gap:8 }}>
-          <StatCard label="Operaciones cerradas" value={closedTrades.length} color={C.muted} />
-          <StatCard label="Win rate" value={winRate != null ? `${winRate}%` : '—'} color={winRate >= 50 ? C.green : winRate != null ? C.red : C.muted} sub={`${wins} ganadoras de ${closedWithData.length}`} />
-          <StatCard
-            label="Total invertido"
-            value={totalStats.invested > 0 ? `$${(totalStats.invested/1000).toFixed(1)}k` : '—'}
-            color={C.text}
-          />
-          <StatCard
-            label="P&L Total USD"
-            value={totalStats.invested > 0 ? fmtUsd(totalStats.pnlUsd) : '—'}
-            color={totalStats.pnlUsd >= 0 ? C.green : C.red}
-          />
-          <StatCard
-            label="P&L Total %"
-            value={totalStats.pnlPct != null ? fmtPct(totalStats.pnlPct) : '—'}
-            color={totalStats.pnlPct >= 0 ? C.green : C.red}
-            sub="sobre capital invertido"
-          />
-        </div>
-      </div>
-
-      {/* ── SECCIÓN: ESTE MES ─────────────────────────────────────────── */}
-      <div style={{ marginBottom:24 }}>
-        <SectionHeader title={`Este mes · ${monthName} · ${closedThisMonth.length} cerradas`} />
-        {closedThisMonth.length === 0 ? (
-          <div style={{ fontSize:12, color:C.muted, padding:'12px 0' }}>Sin operaciones cerradas este mes todavía.</div>
-        ) : (
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(160px, 1fr))', gap:8 }}>
-            <StatCard label="Cerradas" value={closedThisMonth.length} color={C.muted} />
-            <StatCard label="Win rate" value={winRateMonth != null ? `${winRateMonth}%` : '—'} color={winRateMonth >= 50 ? C.green : winRateMonth != null ? C.red : C.muted} sub={`${winsMonth} ganadoras`} />
-            <StatCard
-              label="P&L USD"
-              value={monthStats.invested > 0 ? fmtUsd(monthStats.pnlUsd) : '—'}
-              color={monthStats.pnlUsd >= 0 ? C.green : C.red}
-              sub={pnlUsdDelta != null ? `vs ${prevMonthName.split(' ')[0]}: ${fmtUsd(pnlUsdDelta)}` : null}
-            />
-            <StatCard
-              label="P&L %"
-              value={monthStats.pnlPct != null ? fmtPct(monthStats.pnlPct) : '—'}
-              color={monthStats.pnlPct >= 0 ? C.green : C.red}
-              sub={pnlPctDelta != null ? `vs ${prevMonthName.split(' ')[0]}: ${pnlPctDelta >= 0 ? '+' : ''}${pnlPctDelta.toFixed(2)}pp` : 'sobre capital invertido'}
-            />
-          </div>
-        )}
-      </div>
-
-      {/* ── SECCIÓN: MES ANTERIOR ─────────────────────────────────────── */}
-      {closedPrevMonth.length > 0 && (
+      {/* ── GRÁFICO + TABLA MENSUAL ───────────────────────────────────── */}
+      {monthlyData.length > 0 && (
         <div style={{ marginBottom:24 }}>
-          <SectionHeader title={`Mes anterior · ${prevMonthName} · ${closedPrevMonth.length} cerradas`} />
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(160px, 1fr))', gap:8 }}>
-            <StatCard label="Cerradas" value={closedPrevMonth.length} color={C.muted} />
-            <StatCard label="Win rate" value={winRatePrev != null ? `${winRatePrev}%` : '—'} color={winRatePrev >= 50 ? C.green : winRatePrev != null ? C.red : C.muted} sub={`${winsPrev} ganadoras`} />
-            <StatCard
-              label="P&L USD"
-              value={prevMonStats.invested > 0 ? fmtUsd(prevMonStats.pnlUsd) : '—'}
-              color={prevMonStats.pnlUsd >= 0 ? C.green : C.red}
+          <SectionHeader title={`Comparativa mensual · ${monthlyData.length} ${monthlyData.length === 1 ? 'mes' : 'meses'}`} />
+
+          {/* Gráfico: barras P&L mensual + línea acumulada */}
+          <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:'16px 8px 8px', marginBottom:12 }}>
+            <div style={{ fontSize:9, color:C.muted, textAlign:'right', marginRight:16, marginBottom:4, letterSpacing:'0.07em' }}>
+              BARRAS = P&L MENSUAL · LÍNEA = P&L ACUMULADO
+            </div>
+            <ResponsiveContainer width="100%" height={200}>
+              <ComposedChart data={monthlyData} margin={{ top:4, right:16, left:0, bottom:0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false} />
+                <XAxis
+                  dataKey="monthLabel"
+                  tick={{ fontSize:10, fill:C.muted }}
+                  axisLine={{ stroke:C.border }}
+                  tickLine={false}
+                />
+                <YAxis
+                  yAxisId="bar"
+                  tick={{ fontSize:9, fill:C.muted }}
+                  axisLine={false}
+                  tickLine={false}
+                  tickFormatter={v => fmtUsdShort(v)}
+                  domain={[-maxAbsPnl * 1.2, maxAbsPnl * 1.2]}
+                  width={52}
+                />
+                <YAxis
+                  yAxisId="line"
+                  orientation="right"
+                  tick={{ fontSize:9, fill:C.muted }}
+                  axisLine={false}
+                  tickLine={false}
+                  tickFormatter={v => fmtUsdShort(v)}
+                  width={52}
+                />
+                <Tooltip content={<ChartTooltip />} />
+                <ReferenceLine yAxisId="bar" y={0} stroke={C.border} strokeWidth={1} />
+                <Bar yAxisId="bar" dataKey="pnlUsd" radius={[3,3,0,0]} maxBarSize={48}>
+                  {monthlyData.map((d, i) => (
+                    <Cell key={i} fill={d.pnlUsd >= 0 ? C.green : C.red} fillOpacity={0.8} />
+                  ))}
+                </Bar>
+                <Line
+                  yAxisId="line"
+                  type="monotone"
+                  dataKey="cumPnl"
+                  stroke={C.accent}
+                  strokeWidth={2}
+                  dot={{ fill:C.accent, r:3, strokeWidth:0 }}
+                  activeDot={{ r:5, fill:C.accent }}
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Tabla mensual */}
+          <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, overflow:'hidden' }}>
+            {/* Header */}
+            <div style={{
+              display:'grid', gridTemplateColumns:'80px 1fr 1fr 1fr 1fr 1fr 1fr',
+              padding:'8px 14px', borderBottom:`1px solid ${C.border}`,
+              fontSize:9, color:C.muted, letterSpacing:'0.07em', textTransform:'uppercase'
+            }}>
+              <span>Mes</span>
+              <span style={{ textAlign:'center' }}>Trades</span>
+              <span style={{ textAlign:'center' }}>Win rate</span>
+              <span style={{ textAlign:'right' }}>Invertido</span>
+              <span style={{ textAlign:'right' }}>P&L USD</span>
+              <span style={{ textAlign:'right' }}>P&L %</span>
+              <span style={{ textAlign:'right' }}>Acumulado</span>
+            </div>
+            {/* Filas — más reciente primero */}
+            {[...monthlyData].reverse().map((d, i) => {
+              const isThisMonth = d.month === thisMonth
+              return (
+                <div key={d.month} style={{
+                  display:'grid', gridTemplateColumns:'80px 1fr 1fr 1fr 1fr 1fr 1fr',
+                  padding:'9px 14px',
+                  background: isThisMonth ? '#00d4ff08' : i % 2 === 0 ? 'transparent' : '#ffffff04',
+                  borderBottom:`1px solid ${C.border}`,
+                  borderLeft: isThisMonth ? `2px solid ${C.accent}` : '2px solid transparent',
+                  fontSize:11,
+                }}>
+                  <span style={{ color: isThisMonth ? C.accent : C.text, fontWeight: isThisMonth ? 700 : 400 }}>
+                    {d.monthLabel}{isThisMonth ? ' ←' : ''}
+                  </span>
+                  <span style={{ textAlign:'center', color:C.muted, fontFamily:'monospace' }}>
+                    {d.count} <span style={{ fontSize:9 }}>({d.wins}W)</span>
+                  </span>
+                  <span style={{ textAlign:'center', fontFamily:'monospace', fontWeight:700,
+                    color: d.winRate >= 50 ? C.green : C.red }}>
+                    {d.winRate}%
+                  </span>
+                  <span style={{ textAlign:'right', color:C.muted, fontFamily:'monospace' }}>
+                    {d.invested > 0 ? `$${(d.invested/1000).toFixed(1)}k` : '—'}
+                  </span>
+                  <span style={{ textAlign:'right', fontFamily:'monospace', fontWeight:700,
+                    color: d.pnlUsd >= 0 ? C.green : C.red }}>
+                    {fmtUsd(d.pnlUsd)}
+                  </span>
+                  <span style={{ textAlign:'right', fontFamily:'monospace',
+                    color: d.pnlPct >= 0 ? C.green : C.red }}>
+                    {fmtPct(d.pnlPct)}
+                  </span>
+                  <span style={{ textAlign:'right', fontFamily:'monospace',
+                    color: d.cumPnl >= 0 ? C.green : C.red }}>
+                    {fmtUsd(d.cumPnl)}
+                  </span>
+                </div>
+              )
+            })}
+            {/* Fila total */}
+            <div style={{
+              display:'grid', gridTemplateColumns:'80px 1fr 1fr 1fr 1fr 1fr 1fr',
+              padding:'9px 14px',
+              background:'#ffffff06',
+              borderTop:`1px solid ${C.border}`,
+              fontSize:11, fontWeight:700,
+            }}>
+              <span style={{ color:C.text }}>Total</span>
+              <span style={{ textAlign:'center', color:C.muted, fontFamily:'monospace' }}>
+                {closedWithData.length} <span style={{ fontSize:9 }}>({totalWins}W)</span>
+              </span>
+              <span style={{ textAlign:'center', fontFamily:'monospace',
+                color: totalWinRate >= 50 ? C.green : C.red }}>
+                {totalWinRate != null ? `${totalWinRate}%` : '—'}
+              </span>
+              <span style={{ textAlign:'right', color:C.muted, fontFamily:'monospace' }}>
+                {totalStats.invested > 0 ? `$${(totalStats.invested/1000).toFixed(1)}k` : '—'}
+              </span>
+              <span style={{ textAlign:'right', fontFamily:'monospace',
+                color: totalStats.pnlUsd >= 0 ? C.green : C.red }}>
+                {fmtUsd(totalStats.pnlUsd)}
+              </span>
+              <span style={{ textAlign:'right', fontFamily:'monospace',
+                color: totalStats.pnlPct >= 0 ? C.green : C.red }}>
+                {fmtPct(totalStats.pnlPct)}
+              </span>
+              <span style={{ textAlign:'right', color:C.muted }}>—</span>
+            </div>
+          </div>
+
+          {hasLegacyTrades && (
+            <div style={{ fontSize:9, color:C.muted, marginTop:6, opacity:0.6 }}>
+              * Trades cerrados antes de v17 usan fecha de apertura como referencia mensual.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── POSICIONES ABIERTAS ───────────────────────────────────────── */}
+      {openTrades.length > 0 && (
+        <div style={{ marginBottom:24 }}>
+          <SectionHeader title={`Posiciones abiertas · ${openTrades.length}`} />
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(150px, 1fr))', gap:8 }}>
+            <StatCard label="Capital invertido"
+              value={openInvested > 0 ? `$${(openInvested/1000).toFixed(1)}k` : '—'}
+              color={C.text}
             />
-            <StatCard
-              label="P&L %"
-              value={prevMonStats.pnlPct != null ? fmtPct(prevMonStats.pnlPct) : '—'}
-              color={prevMonStats.pnlPct >= 0 ? C.green : C.red}
-              sub="sobre capital invertido"
+            <StatCard label="Capital en riesgo"
+              value={capitalRisk > 0 ? fmtUsd(-capitalRisk) : '—'}
+              color={capitalRisk > 0 ? C.red : C.muted}
+              sub="si todos los SL se activan"
             />
           </div>
         </div>
       )}
 
-      {/* ── SECCIÓN: ÚLTIMAS OPERACIONES CERRADAS ────────────────────── */}
+      {/* ── ÚLTIMAS OPERACIONES CERRADAS ─────────────────────────────── */}
       {recentClosed.length > 0 && (
         <div>
           <SectionHeader title="Últimas operaciones cerradas" />
-          <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-            {recentClosed.map(t => {
+          <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, overflow:'hidden' }}>
+            <div style={{
+              display:'grid', gridTemplateColumns:'70px 1fr 1fr 1fr 1fr',
+              padding:'8px 14px', borderBottom:`1px solid ${C.border}`,
+              fontSize:9, color:C.muted, letterSpacing:'0.07em', textTransform:'uppercase'
+            }}>
+              <span>Ticker</span>
+              <span>Cierre</span>
+              <span style={{ textAlign:'right' }}>Entrada → Salida</span>
+              <span style={{ textAlign:'right' }}>P&L %</span>
+              <span style={{ textAlign:'right' }}>P&L USD</span>
+            </div>
+            {recentClosed.map((t, i) => {
               const entry  = parseFloat(t.entryPrice)
               const exit   = parseFloat(t.exitPrice)
               const shares = parseFloat(t.positionSize)
-              const pnlPct = ((exit - entry) / entry * 100)
+              const pnlPct = (exit - entry) / entry * 100
               const pnlUsd = (exit - entry) * shares
               const isWin  = exit > entry
               return (
                 <div key={t.id} style={{
-                  background:C.card, borderRadius:8, padding:'10px 14px',
-                  border:`1px solid ${C.border}`,
-                  borderLeft:`3px solid ${isWin ? C.green : C.red}`,
-                  display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:8
+                  display:'grid', gridTemplateColumns:'70px 1fr 1fr 1fr 1fr',
+                  padding:'9px 14px',
+                  background: i % 2 === 0 ? 'transparent' : '#ffffff04',
+                  borderBottom: i < recentClosed.length - 1 ? `1px solid ${C.border}` : 'none',
+                  borderLeft:`2px solid ${isWin ? C.green : C.red}`,
+                  fontSize:11,
                 }}>
-                  <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
-                    <span style={{ fontSize:15, fontWeight:700, fontFamily:'monospace', color:C.text }}>{t.ticker}</span>
-                    <span style={{ fontSize:10, color:C.muted }}>
-                      {t.exitDate
-                        ? <>cierre {t.exitDate}</>
-                        : <>apertura {t.date}<span style={{ color:C.muted, opacity:0.5 }}> *</span></>
-                      }
-                    </span>
-                    <span style={{ fontSize:10, color:C.muted }}>
-                      {fmt(t.entryPrice)} → {fmt(t.exitPrice)}
-                      {shares > 0 && <span style={{ marginLeft:6 }}>{shares} acc.</span>}
-                    </span>
-                  </div>
-                  <div style={{ textAlign:'right' }}>
-                    <div style={{ fontSize:14, fontWeight:700, fontFamily:'monospace', color: isWin ? C.green : C.red }}>
-                      {fmtPct(pnlPct)}
-                    </div>
-                    <div style={{ fontSize:11, fontFamily:'monospace', color: isWin ? C.green : C.red }}>
-                      {fmtUsd(pnlUsd)}
-                    </div>
-                  </div>
+                  <span style={{ fontWeight:700, fontFamily:'monospace', color:C.text }}>{t.ticker}</span>
+                  <span style={{ color:C.muted, fontSize:10 }}>
+                    {t.exitDate || <>{t.date}<span style={{ opacity:0.4 }}> *</span></>}
+                  </span>
+                  <span style={{ textAlign:'right', color:C.muted, fontFamily:'monospace', fontSize:10 }}>
+                    {fmt(t.entryPrice)} → {fmt(t.exitPrice)}
+                  </span>
+                  <span style={{ textAlign:'right', fontFamily:'monospace', fontWeight:700,
+                    color: isWin ? C.green : C.red }}>
+                    {fmtPct(pnlPct)}
+                  </span>
+                  <span style={{ textAlign:'right', fontFamily:'monospace',
+                    color: isWin ? C.green : C.red }}>
+                    {fmtUsd(pnlUsd)}
+                  </span>
                 </div>
               )
             })}
           </div>
-          <div style={{ fontSize:9, color:C.muted, marginTop:8, opacity:0.6 }}>
-            * Trades cerrados antes de esta versión muestran fecha de apertura — la fecha de cierre real no estaba disponible.
-          </div>
+          {hasLegacyTrades && (
+            <div style={{ fontSize:9, color:C.muted, marginTop:6, opacity:0.6 }}>
+              * Trades cerrados antes de v17 muestran fecha de apertura.
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -310,6 +468,6 @@ function dbToTrade(r) {
     stopLoss:     r.stop_loss,
     realStopLoss: r.real_stop_loss,
     price:        r.price,
-    exitDate:     r.exit_date || null,  // null para trades cerrados antes de esta feature
+    exitDate:     r.exit_date || null,
   }
 }
