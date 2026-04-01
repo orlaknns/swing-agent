@@ -455,16 +455,6 @@ export default function StockCard({ ticker, onRemove, session, onMonitor, onAnal
           </div>
         </div>
 
-        {/* MONITOREAR — botón para mover a En Seguimiento */}
-        {data.signal === 'monitor' && onMonitor && (
-          <button onClick={() => onMonitor(ticker, !isInMonitorTab)}
-            style={{ width:'100%', background: isInMonitorTab ? '#00aaff11' : '#00aaff22',
-              border:'1px solid #00aaff55', borderRadius:6,
-              color:'#00aaff', fontSize:11, fontWeight:700, padding:'7px', cursor:'pointer' }}>
-            {isInMonitorTab ? '← Volver a Watchlist activa' : '+ Mover a En Seguimiento'}
-          </button>
-        )}
-
         {/* Indicators */}
         <div style={{ display:'flex', flexDirection:'column', gap:7, fontSize:11 }}>
           <div style={{ display:'flex', justifyContent:'space-between' }}>
@@ -595,7 +585,7 @@ export default function StockCard({ ticker, onRemove, session, onMonitor, onAnal
             {data.analysis}
           </div>
         )}
-        {/* Save to journal button + IBKR config note */}
+        {/* Botones de acción: Journal + En Seguimiento */}
         {data && !data.error && !loading && (
           <>
             <button onClick={activeTrade ? undefined : saveToJournal}
@@ -609,6 +599,20 @@ export default function StockCard({ ticker, onRemove, session, onMonitor, onAnal
                 transition:'all 0.2s', display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
               {activeTrade ? '📈 Ya tienes un trade activo' : journalSaved ? '✓ Guardado en journal' : '📋 Guardar en journal'}
             </button>
+
+            {/* Botón En Seguimiento */}
+            {onMonitor && (
+              <button onClick={() => onMonitor(ticker)}
+                style={{ width:'100%', marginTop:5,
+                  background: isInMonitorTab ? '#00aaff11' : '#00aaff08',
+                  border:`1px solid ${isInMonitorTab ? '#00aaff66' : '#00aaff33'}`,
+                  borderRadius:7,
+                  color: isInMonitorTab ? '#00aaff' : '#00aaff88',
+                  fontSize:11, fontWeight:700, padding:'7px 10px', cursor:'pointer',
+                  display:'flex', alignItems:'center', justifyContent:'center', gap:5 }}>
+                {isInMonitorTab ? '← Quitar del seguimiento' : '👁 Agregar a En Seguimiento'}
+              </button>
+            )}
 
             {/* IBKR OCO config note — shown after saving */}
             {showIBKR && data.entryLow && data.stopLoss && data.target && (() => {
