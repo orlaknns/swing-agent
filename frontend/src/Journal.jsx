@@ -130,6 +130,7 @@ function TradeModal({ trade, onSave, onClose }) {
     status:       trade.status       || 'open',
     notes:        trade.notes        || '',
     exitDate:     trade.exitDate     || null,  // no editable — se calcula al cerrar
+    _originalStatus: trade.status    || 'open', // para saber si ya estaba cerrado
   })
   const set = (k,v) => setForm(f=>({...f,[k]:v}))
 
@@ -435,11 +436,19 @@ export default function Journal({ session }) {
 
 // ── DB mappers ─────────────────────────────────────────────────────────
 function tradeToDb(t, userId) {
-  // exit_date: se setea al cerrar (solo si no tenía ya una — preserva fecha original)
-  // se limpia si el trade vuelve a estado no-cerrado
+  // exit_date: se asigna solo cuando el trade PASA a closed por primera vez
+  // si ya tenía exit_date (cerrado previamente), se preserva
+  // si se reabre (status != closed), se limpia a null
   let exit_date = null
   if (t.status === 'closed') {
-    exit_date = t.exitDate || new Date().toISOString().slice(0, 10)
+    if (t.exitDate) {
+      // ya tenía fecha — preservar siempre, sin importar cuándo se edite
+      exit_date = t.exitDate
+    } else if (t._originalStatus !== 'closed') {
+      // está siendo cerrado ahora por primera vez → asignar hoy
+      exit_date = new Date().toISOString().slice(0, 10)
+    }
+    // si era legacy (cerrado sin exit_date), no asignar fecha nueva
   }
   return {
     id: t.id, user_id: userId, date: t.date, ticker: t.ticker,
