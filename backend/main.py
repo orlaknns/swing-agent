@@ -805,14 +805,16 @@ async def _analyze_inner(ticker: str):
 
     # ── Momento A/B: dónde está el precio respecto al rango de entrada real ───
     # Compara contra entryLow/entryHigh reales (anclados a SMA21 ± 1%)
-    # para que sea consistente con los niveles que se muestran en la tarjeta
-    if entry_low and entry_high:
+    # 4 estados: in_zone / wait_pullback / approaching / below_zone
+    if entry_low and entry_high and sma21:
         if entry_low <= price <= entry_high:
-            entry_zone = "in_zone"       # precio dentro del rango — entrar con mercado
+            entry_zone = "in_zone"         # dentro del rango — entrar con mercado
         elif price > entry_high:
-            entry_zone = "wait_pullback" # precio sobre el rango — poner orden límite y esperar
+            entry_zone = "wait_pullback"   # sobre el rango — esperar pullback
+        elif price >= sma21 * 0.98:
+            entry_zone = "approaching"     # bajo el rango pero cerca de SMA21 — preparar orden
         else:
-            entry_zone = "below_zone"    # precio bajo el rango — setup invalidado
+            entry_zone = "below_zone"      # bajo SMA21 — setup invalidado
     else:
         entry_zone = "unknown"
 

@@ -391,7 +391,8 @@ export default function StockCard({ ticker, onRemove, session, onMonitor, onAnal
           const zones = {
             in_zone:       { bg:'#00e09618', border:`#00e09644`, color:C.green,  icon:'●', title:'Precio en rango de entrada', desc:`Precio dentro de $${data.entryLow?.toFixed(2)}–$${data.entryHigh?.toFixed(2)} — entra con orden de mercado ahora` },
             wait_pullback: { bg:'#ffb80018', border:`#ffb80044`, color:C.amber,  icon:'◎', title:'Espera pullback', desc:`Precio sobre el rango. Pon orden límite en $${data.entryLow?.toFixed(2)}–$${data.entryHigh?.toFixed(2)} y espera` },
-            below_zone:    { bg:'#ff406018', border:`#ff406044`, color:C.red,    icon:'○', title:'Precio bajo el rango', desc:`Bajo SMA21 ($${data.sma21?.toFixed(2)}) — setup invalidado, no entrar` },
+            approaching:   { bg:'#00d4ff12', border:`#00d4ff33`, color:C.accent, icon:'◑', title:'Precio acercándose al rango', desc:`Por debajo del rango ($${data.entryLow?.toFixed(2)}–$${data.entryHigh?.toFixed(2)}) pero cerca de SMA21 — prepara la orden` },
+            below_zone:    { bg:'#ff406018', border:`#ff406044`, color:C.red,    icon:'○', title:'Precio bajo soporte', desc:`Bajo SMA21 ($${data.sma21?.toFixed(2)}) — setup invalidado, no entrar` },
           }
           const z = zones[data.entryZone]
           if (!z) return null
