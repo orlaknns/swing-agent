@@ -389,9 +389,9 @@ export default function StockCard({ ticker, onRemove, session, onMonitor, onAnal
         {/* Momento A/B — dónde está el precio respecto a la zona de entrada */}
         {data.signal === 'buy' && data.entryZone && (() => {
           const zones = {
-            in_zone:       { bg:'#00e09618', border:`#00e09644`, color:C.green,  icon:'●', title:'Precio en zona de entrada', desc:`Cerca de SMA21 ($${data.sma21?.toFixed(2)}) — usa el rango $${data.entryLow?.toFixed(2)}–$${data.entryHigh?.toFixed(2)} para entrar` },
-            wait_pullback: { bg:'#ffb80018', border:`#ffb80044`, color:C.amber,  icon:'◎', title:'Espera pullback', desc:`Precio por encima de zona. Pon orden límite en $${data.entryLow?.toFixed(2)}–$${data.entryHigh?.toFixed(2)} y espera` },
-            below_zone:    { bg:'#ff406018', border:`#ff406044`, color:C.red,    icon:'○', title:'Precio fuera de zona', desc:`Bajo SMA21 ($${data.sma21?.toFixed(2)}) — setup invalidado, no es momento de entrar` },
+            in_zone:       { bg:'#00e09618', border:`#00e09644`, color:C.green,  icon:'●', title:'Precio en rango de entrada', desc:`Precio dentro de $${data.entryLow?.toFixed(2)}–$${data.entryHigh?.toFixed(2)} — entra con orden de mercado ahora` },
+            wait_pullback: { bg:'#ffb80018', border:`#ffb80044`, color:C.amber,  icon:'◎', title:'Espera pullback', desc:`Precio sobre el rango. Pon orden límite en $${data.entryLow?.toFixed(2)}–$${data.entryHigh?.toFixed(2)} y espera` },
+            below_zone:    { bg:'#ff406018', border:`#ff406044`, color:C.red,    icon:'○', title:'Precio bajo el rango', desc:`Bajo SMA21 ($${data.sma21?.toFixed(2)}) — setup invalidado, no entrar` },
           }
           const z = zones[data.entryZone]
           if (!z) return null
@@ -530,12 +530,19 @@ export default function StockCard({ ticker, onRemove, session, onMonitor, onAnal
         {/* Barra de score técnico */}
         {data.successRate != null && (
           <div>
-            <div style={{ height:4, background:C.border, borderRadius:3, overflow:'hidden' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
+              <div style={{ fontSize:9, color:C.muted }}>Score técnico</div>
+              <div style={{ fontSize:12, fontWeight:700, fontFamily:'monospace',
+                color: data.successRate >= 65 ? C.green : data.successRate >= 45 ? C.amber : C.red }}>
+                {data.successRate}/100
+              </div>
+            </div>
+            <div style={{ height:5, background:C.border, borderRadius:3, overflow:'hidden' }}>
               <div style={{ width:`${data.successRate}%`, height:'100%', borderRadius:3,
                 background: data.successRate >= 65 ? C.green : data.successRate >= 45 ? C.amber : C.red }}/>
             </div>
             <div style={{ fontSize:9, color:C.muted, marginTop:3 }}>
-              Score técnico: SMA21/SMA50, RSI, SMA200, Mansfield RS, volumen, momentum
+              SMA21/SMA50, RSI, SMA200, Mansfield RS, volumen, momentum
             </div>
           </div>
         )}

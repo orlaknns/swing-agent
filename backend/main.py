@@ -803,17 +803,16 @@ async def _analyze_inner(ticker: str):
         rsi=rsi
     )
 
-    # ── Momento A/B: dónde está el precio respecto a la zona de entrada ───
-    # Usa min/max para funcionar correctamente en tendencia alcista (SMA21 > SMA50)
-    if sma21 and sma50:
-        zone_low  = min(sma21, sma50)
-        zone_high = max(sma21, sma50)
-        if zone_low * 0.98 <= price <= zone_high * 1.02:
-            entry_zone = "in_zone"       # precio dentro o muy cerca de la zona SMA21-SMA50
-        elif price > zone_high * 1.02:
-            entry_zone = "wait_pullback" # precio por encima de la zona, esperar pullback
+    # ── Momento A/B: dónde está el precio respecto al rango de entrada real ───
+    # Compara contra entryLow/entryHigh reales (anclados a SMA21 ± 1%)
+    # para que sea consistente con los niveles que se muestran en la tarjeta
+    if entry_low and entry_high:
+        if entry_low <= price <= entry_high:
+            entry_zone = "in_zone"       # precio dentro del rango — entrar con mercado
+        elif price > entry_high:
+            entry_zone = "wait_pullback" # precio sobre el rango — poner orden límite y esperar
         else:
-            entry_zone = "below_zone"    # precio bajo la zona, setup invalidado
+            entry_zone = "below_zone"    # precio bajo el rango — setup invalidado
     else:
         entry_zone = "unknown"
 

@@ -20,7 +20,7 @@ const SECTOR_COLORS = {
   'Utilities':           '#38bdf8',
 }
 
-export default function Discover({ watchlist, onAdd, onRemove, onAddAll }) {
+export default function Discover({ watchlist, monitorList = [], openTrades = {}, onAdd, onRemove, onAddAll }) {
   const [candidates, setCandidates] = useState([])
   const [loading, setLoading]       = useState(false)
   const [error, setError]           = useState(null)
@@ -71,6 +71,8 @@ export default function Discover({ watchlist, onAdd, onRemove, onAddAll }) {
   const sectors = ['all', ...new Set(candidates.map(c => c.sector).filter(Boolean))]
   const filtered = filter === 'all' ? candidates : candidates.filter(c => c.sector === filter)
   const inWatchlist = (ticker) => watchlist.includes(ticker)
+  const inMonitor   = (ticker) => monitorList.includes(ticker)
+  const hasOpenTrade = (ticker) => !!openTrades[ticker]
 
   return (
     <div style={{ maxWidth:960, margin:'0 auto', padding:'0 20px 48px' }}>
@@ -192,35 +194,62 @@ export default function Discover({ watchlist, onAdd, onRemove, onAddAll }) {
       {!loading && (
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))', gap:8 }}>
           {filtered.map(c => {
-            const added = inWatchlist(c.ticker)
+            const added      = inWatchlist(c.ticker)
+            const monitoring = inMonitor(c.ticker)
+            const openTrade  = hasOpenTrade(c.ticker)
             const sectorColor = SECTOR_COLORS[c.sector] || C.muted
+            // Color del borde izquierdo según estado
+            const leftBorder = openTrade ? C.green : monitoring ? '#00aaff' : added ? C.accent : sectorColor
             return (
               <div key={c.ticker} style={{
-                background:C.card, border:`1px solid ${added ? C.green+'66' : C.border}`,
+                background:C.card,
+                border:`1px solid ${openTrade ? C.green+'44' : monitoring ? '#00aaff33' : added ? C.accent+'44' : C.border}`,
                 borderRadius:10, padding:'12px 14px',
-                borderLeft:`3px solid ${added ? C.green : sectorColor}`
+                borderLeft:`3px solid ${leftBorder}`
               }}>
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:8 }}>
                   <div>
-                    <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
                       <span style={{ fontSize:16, fontWeight:700, color:C.text, fontFamily:'monospace' }}>{c.ticker}</span>
                       {c.price > 0 && <span style={{ fontSize:12, color:C.muted, fontFamily:'monospace' }}>${c.price}</span>}
+                      {openTrade && (
+                        <span style={{ fontSize:9, background:C.green+'22', color:C.green, padding:'2px 7px', borderRadius:99, fontWeight:700 }}>
+                          📈 Trade abierto
+                        </span>
+                      )}
+                      {monitoring && !openTrade && (
+                        <span style={{ fontSize:9, background:'#00aaff22', color:'#00aaff', padding:'2px 7px', borderRadius:99, fontWeight:700 }}>
+                          👁 En seguimiento
+                        </span>
+                      )}
+                      {added && !openTrade && !monitoring && (
+                        <span style={{ fontSize:9, background:C.accent+'22', color:C.accent, padding:'2px 7px', borderRadius:99, fontWeight:700 }}>
+                          ✓ En watchlist
+                        </span>
+                      )}
                     </div>
                     <div style={{ fontSize:11, color:C.muted, marginTop:2, maxWidth:160, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                       {c.company}
                     </div>
                   </div>
-                  <button
-                    onClick={() => added ? onRemove(c.ticker) : onAdd(c.ticker)}
-                    style={{
-                      background: added ? C.red+'22' : C.accent,
-                      border: added ? `1px solid ${C.red}66` : 'none',
-                      borderRadius:7, color: added ? C.red : '#000',
-                      fontWeight:700, padding:'5px 12px', cursor:'pointer',
-                      fontSize:11, whiteSpace:'nowrap', flexShrink:0
-                    }}>
-                    {added ? '− Quitar' : '+ Agregar'}
-                  </button>
+                  {/* Botón: deshabilitado si ya tiene trade abierto o está en seguimiento */}
+                  {openTrade || monitoring ? (
+                    <span style={{ fontSize:10, color:C.muted, padding:'5px 8px', flexShrink:0 }}>
+                      {openTrade ? 'Trade activo' : 'En seguimiento'}
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => added ? onRemove(c.ticker) : onAdd(c.ticker)}
+                      style={{
+                        background: added ? C.red+'22' : C.accent,
+                        border: added ? `1px solid ${C.red}66` : 'none',
+                        borderRadius:7, color: added ? C.red : '#000',
+                        fontWeight:700, padding:'5px 12px', cursor:'pointer',
+                        fontSize:11, whiteSpace:'nowrap', flexShrink:0
+                      }}>
+                      {added ? '− Quitar' : '+ Agregar'}
+                    </button>
+                  )}
                 </div>
 
                 <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>

@@ -4,6 +4,7 @@ import Auth from './Auth.jsx'
 import StockCard from './StockCard.jsx'
 import Journal from './Journal.jsx'
 import Discover from './Discover.jsx'
+import Dashboard from './Dashboard.jsx'
 
 class ErrorBoundary extends Component {
   constructor(props) { super(props); this.state = { error: null } }
@@ -36,7 +37,7 @@ const C = {
 export default function App() {
   const [session,        setSession]        = useState(null)
   const [appLoading,     setAppLoading]     = useState(true)
-  const [tab,            setTab]            = useState('watchlist')
+  const [tab,            setTab]            = useState('dashboard')
 
   // null = not yet loaded from DB
   const [watchlist,      setWatchlist]      = useState(null)
@@ -150,12 +151,13 @@ export default function App() {
   const wl      = watchlist      || []
   const monitor = monitorTickers || []
 
+  // Listas mutuamente excluyentes — un ticker solo puede estar en una
   const activeWatchlist  = wl.filter(t => !monitor.includes(t))
-  const monitorWatchlist = wl.filter(t =>  monitor.includes(t))
+  const monitorWatchlist = monitor  // monitor es lista independiente
 
   const add = () => {
     const t = search.trim().toUpperCase().replace(/[^A-Z.]/g, '')
-    if (t && !wl.includes(t)) { setWatchlist(p => [t, ...(p||[])]); setSearch('') }
+    if (t && !wl.includes(t) && !monitor.includes(t)) { setWatchlist(p => [t, ...(p||[])]); setSearch('') }
   }
 
   const removeFromAll = (ticker) => {
@@ -163,12 +165,16 @@ export default function App() {
     setMonitorTickers(p => (p||[]).filter(v => v !== ticker))
   }
 
+  // Mover a seguimiento: sale de watchlist, entra en monitor
   const moveToMonitor = (ticker) => {
+    setWatchlist(p => (p||[]).filter(v => v !== ticker))
     if (!monitor.includes(ticker)) setMonitorTickers(p => [...(p||[]), ticker])
   }
 
+  // Quitar de seguimiento: vuelve a watchlist
   const removeFromMonitor = (ticker) => {
     setMonitorTickers(p => (p||[]).filter(v => v !== ticker))
+    if (!wl.includes(ticker)) setWatchlist(p => [ticker, ...(p||[])])
   }
 
   // Cache analysis data from StockCard
@@ -186,6 +192,7 @@ export default function App() {
   if (!session) return <Auth />
 
   const tabs = [
+    ['dashboard', 'Dashboard'],
     ['watchlist', `Watchlist · ${activeWatchlist.length}`],
     ['monitor',   monitorWatchlist.length > 0 ? `En Seguimiento · ${monitorWatchlist.length}` : 'En Seguimiento'],
     ['discover',  'Screener'],
@@ -259,6 +266,13 @@ export default function App() {
 
       {/* Content */}
       <div style={{ marginTop:20 }}>
+
+        {/* Dashboard */}
+        {tab === 'dashboard' && (
+          <ErrorBoundary>
+            <Dashboard session={session} />
+          </ErrorBoundary>
+        )}
 
         {/* Watchlist activa — display:none para preservar estado */}
         <div style={{ display: tab === 'watchlist' ? 'block' : 'none' }}>
@@ -339,8 +353,10 @@ export default function App() {
           <ErrorBoundary>
             <Discover
               watchlist={wl}
+              monitorList={monitor}
+              openTrades={openTrades}
               onAdd={ticker => {
-                if (!wl.includes(ticker)) setWatchlist(p => [ticker, ...(p||[])])
+                if (!wl.includes(ticker) && !monitor.includes(ticker)) setWatchlist(p => [ticker, ...(p||[])])
               }}
               onRemove={ticker => {
                 setWatchlist(p => (p||[]).filter(t => t !== ticker))
@@ -348,7 +364,7 @@ export default function App() {
               onAddAll={tickers => {
                 setWatchlist(p => {
                   const existing = p || []
-                  const toAdd = tickers.filter(t => !existing.includes(t))
+                  const toAdd = tickers.filter(t => !existing.includes(t) && !monitor.includes(t))
                   return [...toAdd, ...existing]
                 })
               }}
