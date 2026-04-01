@@ -132,7 +132,22 @@ function TradeModal({ trade, onSave, onClose }) {
     exitDate:     trade.exitDate     || null,  // no editable — se calcula al cerrar
     _originalStatus: trade.status    || 'open', // para saber si ya estaba cerrado
   })
+  const [statusConfirm, setStatusConfirm] = useState(null) // { newStatus, msg }
   const set = (k,v) => setForm(f=>({...f,[k]:v}))
+
+  const handleStatusChange = (newStatus) => {
+    const wasClosing   = form.status !== 'closed' && newStatus === 'closed'
+    const wasReopening = form.status === 'closed'  && newStatus !== 'closed'
+    const today = new Date().toISOString().slice(0, 10)
+    if (wasClosing) {
+      setStatusConfirm({ newStatus, msg: `¿Registrar cierre con fecha de hoy (${today})?` })
+    } else if (wasReopening) {
+      const fechaCierre = form.exitDate || '—'
+      setStatusConfirm({ newStatus, msg: `¿Reabrir trade? Se cancelará el cierre registrado (${fechaCierre}).` })
+    } else {
+      set('status', newStatus)
+    }
+  }
 
   const pnlPct = form.exitPrice && form.entryPrice
     ? (((parseFloat(form.exitPrice) - parseFloat(form.entryPrice)) / parseFloat(form.entryPrice)) * 100).toFixed(2)
@@ -223,13 +238,35 @@ function TradeModal({ trade, onSave, onClose }) {
               <label><div style={labelStyle}>Precio cierre real</div>
                 <input type="number" value={form.exitPrice} onChange={e=>set('exitPrice',e.target.value)} style={inputStyle}/></label>
               <label><div style={labelStyle}>Estado</div>
-                <select value={form.status} onChange={e=>set('status',e.target.value)}
+                <select value={form.status} onChange={e=>handleStatusChange(e.target.value)}
                   style={{...inputStyle, padding:'7px 10px'}}>
                   {Object.entries(STATUS_LABELS).map(([k,v])=><option key={k} value={k}>{v}</option>)}
                 </select></label>
             </div>
           </div>
         </div>
+
+        {/* Confirmación cambio de estado */}
+        {statusConfirm && (
+          <div style={{ background:C.amber+'11', border:`1px solid ${C.amber}44`, borderRadius:8,
+            padding:'10px 14px', marginBottom:12, fontSize:12 }}>
+            <div style={{ color:C.amber, marginBottom:8 }}>{statusConfirm.msg}</div>
+            <div style={{ display:'flex', gap:8 }}>
+              <button
+                onClick={() => { set('status', statusConfirm.newStatus); setStatusConfirm(null) }}
+                style={{ background:C.amber, border:'none', borderRadius:6, color:'#000',
+                  fontWeight:700, padding:'5px 14px', cursor:'pointer', fontSize:12 }}>
+                Confirmar
+              </button>
+              <button
+                onClick={() => setStatusConfirm(null)}
+                style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:6,
+                  color:C.muted, padding:'5px 14px', cursor:'pointer', fontSize:12 }}>
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* P&L */}
         {pnlPct && (
