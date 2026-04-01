@@ -54,7 +54,7 @@ check_range("Setup bajista → score bajo", s['score'], 0, 30)
 # SMA bajista → siempre penaliza
 s = calc_score(rsi=50, sma21=95, sma50=100, sma200=None, price=96,
                vol_ratio=100, mansfield_rs=0.5, momentum_4w=2.0, recent_high=105)
-check("SMA bajista → ema_trend = -10", s['breakdown']['ema_trend'], -10)
+check("SMA bajista → sma_trend = -10", s['breakdown']['sma_trend'], -10)
 
 # RSI sobrecompra extrema → penaliza
 s = calc_score(rsi=80, sma21=110, sma50=100, sma200=90, price=112,

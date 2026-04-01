@@ -545,7 +545,7 @@ export default function StockCard({ ticker, onRemove, session, onMonitor, onAnal
                 background: data.successRate >= 65 ? C.green : data.successRate >= 45 ? C.amber : C.red }}/>
             </div>
             <div style={{ fontSize:9, color:C.muted, marginTop:3 }}>
-              Score técnico: EMA, RSI, SMA200, Mansfield RS, volumen, momentum
+              Score técnico: SMA21/SMA50, RSI, SMA200, Mansfield RS, volumen, momentum
             </div>
           </div>
         )}

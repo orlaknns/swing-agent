@@ -45,15 +45,6 @@ TICKER_MAP = {
 }
 
 
-def calc_ema(closes: list, period: int) -> float:
-    if len(closes) < period:
-        return round(closes[-1], 2)
-    k = 2 / (period + 1)
-    ema = sum(closes[:period]) / period
-    for price in closes[period:]:
-        ema = price * k + ema * (1 - k)
-    return round(ema, 2)
-
 
 def calc_rsi(closes: list, period: int = 14) -> float:
     if len(closes) < period + 1:
@@ -346,9 +337,9 @@ def calc_score(rsi, sma21, sma50, sma200, price, vol_ratio, mansfield_rs,
     # ── SMA trend: tendencia de corto plazo (máx +10) ─────────────────────
     ema_cross_recent = sma21 > sma50 and (sma21 - sma50) / sma50 < 0.02
     if sma21 > sma50:
-        score += 10; breakdown['ema_trend'] = +10
+        score += 10; breakdown['sma_trend'] = +10
     else:
-        score -= 10; breakdown['ema_trend'] = -10
+        score -= 10; breakdown['sma_trend'] = -10
         alerts.append("SMA21 < SMA50 — tendencia bajista de corto plazo")
 
     # ── RSI: momentum y zona de entrada (máx +8) ──────────────────────────
@@ -815,13 +806,16 @@ async def _analyze_inner(ticker: str):
     )
 
     # ── Momento A/B: dónde está el precio respecto a la zona de entrada ───
+    # Usa min/max para funcionar correctamente en tendencia alcista (SMA21 > SMA50)
     if sma21 and sma50:
-        if price <= sma50 * 1.02 and price >= sma21 * 0.98:
-            entry_zone = "in_zone"       # precio dentro o muy cerca de SMA21-SMA50
-        elif price > sma50 * 1.02:
-            entry_zone = "wait_pullback" # precio por encima de la zona, esperar
+        zone_low  = min(sma21, sma50)
+        zone_high = max(sma21, sma50)
+        if zone_low * 0.98 <= price <= zone_high * 1.02:
+            entry_zone = "in_zone"       # precio dentro o muy cerca de la zona SMA21-SMA50
+        elif price > zone_high * 1.02:
+            entry_zone = "wait_pullback" # precio por encima de la zona, esperar pullback
         else:
-            entry_zone = "below_zone"    # precio bajo SMA21, fuera de zona
+            entry_zone = "below_zone"    # precio bajo la zona, setup invalidado
     else:
         entry_zone = "unknown"
 
