@@ -386,6 +386,25 @@ export default function StockCard({ ticker, onRemove, session, onMonitor, onAnal
           )
         })()}
 
+        {/* Momento A/B — dónde está el precio respecto a la zona de entrada */}
+        {data.signal === 'buy' && data.entryZone && (() => {
+          const zones = {
+            in_zone:       { bg:'#00e09618', border:`#00e09644`, color:C.green,  icon:'●', title:'Precio en zona de entrada', desc:`Entre SMA21 ($${data.sma21?.toFixed(2)}) y SMA50 ($${data.sma50?.toFixed(2)}) — entra con orden de mercado` },
+            wait_pullback: { bg:'#ffb80018', border:`#ffb80044`, color:C.amber,  icon:'◎', title:'Espera pullback', desc:`Precio por encima de zona. Pon orden límite en $${data.entryLow?.toFixed(2)}–$${data.entryHigh?.toFixed(2)} y espera` },
+            below_zone:    { bg:'#ff406018', border:`#ff406044`, color:C.red,    icon:'○', title:'Precio fuera de zona', desc:`Bajo SMA21 ($${data.sma21?.toFixed(2)}) — setup invalidado, no es momento de entrar` },
+          }
+          const z = zones[data.entryZone]
+          if (!z) return null
+          return (
+            <div style={{ background:z.bg, border:`1px solid ${z.border}`, borderRadius:8, padding:'8px 11px' }}>
+              <div style={{ fontSize:11, color:z.color, fontWeight:700, marginBottom:3 }}>
+                {z.icon} {z.title}
+              </div>
+              <div style={{ fontSize:10, color:z.color, opacity:0.85, lineHeight:1.5 }}>{z.desc}</div>
+            </div>
+          )
+        })()}
+
         {/* Rango entrada / SL — etiquetas según señal */}
         {(() => {
           const isSell = data.signal === 'sell'

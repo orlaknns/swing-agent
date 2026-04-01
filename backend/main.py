@@ -814,6 +814,17 @@ async def _analyze_inner(ticker: str):
         rsi=rsi
     )
 
+    # ── Momento A/B: dónde está el precio respecto a la zona de entrada ───
+    if sma21 and sma50:
+        if price <= sma50 * 1.02 and price >= sma21 * 0.98:
+            entry_zone = "in_zone"       # precio dentro o muy cerca de SMA21-SMA50
+        elif price > sma50 * 1.02:
+            entry_zone = "wait_pullback" # precio por encima de la zona, esperar
+        else:
+            entry_zone = "below_zone"    # precio bajo SMA21, fuera de zona
+    else:
+        entry_zone = "unknown"
+
     return JSONResponse(content={
         "ticker":       ticker,
         "price":        price,
@@ -851,6 +862,7 @@ async def _analyze_inner(ticker: str):
         "sma200":       sma200,
         "nextEarnings": next_earnings,
         "fundamentals": fundamentals,
+        "entryZone":    entry_zone,
     }, media_type="application/json; charset=utf-8")
 
 
