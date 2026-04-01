@@ -687,23 +687,21 @@ async def _analyze_inner(ticker: str):
     prices_20d  = [round(c, 2) for c in closes[-20:]]
     last_5      = [round(c, 2) for c in closes[-5:]]
 
-    # defaults set-and-forget
-
-    # Plazo dinámico basado en ATR y distancia al objetivo
-    # ATR como % del precio = movimiento diario real
-    avg_daily_move = (atr / price * 100) if price > 0 else 1.5
-    dist_to_target_pct = 12.5  # objetivo base ~12.5%
-    # Factor 2.5: el precio no se mueve linealmente hacia el objetivo
-    # En la práctica toma 2-3x más días que el movimiento puro sugiere
-    estimated_days = round(dist_to_target_pct / avg_daily_move * 2.5) if avg_daily_move > 0 else 20
-    max_days = max(10, min(30, estimated_days))  # entre 10 y 30 días
-
     # defaults set-and-forget — anclados a soportes/resistencias técnicas reales
+    # (calcular primero para usar tg_default en max_days)
     _lvl = calc_levels(price, recent_low, recent_high, sma21)
     el_default        = _lvl["el"]
     eh_default        = _lvl["eh"]
     sl_default        = _lvl["sl"]
     tg_default        = _lvl["tg"]
+
+    # Plazo dinámico basado en ATR y distancia real al objetivo
+    # ATR como % del precio = movimiento diario real
+    avg_daily_move = (atr / price * 100) if price > 0 else 1.5
+    dist_to_target_pct = ((tg_default - price) / price * 100) if price > 0 else 12.5
+    # Factor 2.5: el precio no se mueve linealmente — en la práctica toma 2-3x más días
+    estimated_days = round(dist_to_target_pct / avg_daily_move * 2.5) if avg_daily_move > 0 else 20
+    max_days = max(10, min(30, estimated_days))  # entre 10 y 30 días
 
     ex_dividend_date = (fundamentals or {}).get("exDividendDate")
 
