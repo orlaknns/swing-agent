@@ -684,7 +684,7 @@ async def _analyze_inner(ticker: str):
 
     recent_high = max(highs[-20:])
     recent_low  = min(lows[-20:])
-    prices_20d  = [round(c, 2) for c in closes[-20:]]
+    prices_20d  = [round(c, 2) for c in closes[-30:]]  # 30 días para chart más completo
     last_5      = [round(c, 2) for c in closes[-5:]]
 
     # defaults set-and-forget — anclados a soportes/resistencias técnicas reales
@@ -818,6 +818,14 @@ async def _analyze_inner(ticker: str):
     else:
         entry_zone = "unknown"
 
+    # SMA21 diaria para los últimos 30 días (para dibujar la línea en el chart)
+    sma21_series = []
+    for i in range(len(closes) - 30, len(closes)):
+        if i >= 21:
+            sma21_series.append(round(sum(closes[i-21:i]) / 21, 2))
+        else:
+            sma21_series.append(None)
+
     return JSONResponse(content={
         "ticker":       ticker,
         "price":        price,
@@ -830,6 +838,7 @@ async def _analyze_inner(ticker: str):
         "rsi":          rsi,
         "volRatio":     vol_ratio,
         "prices20d":    prices_20d,
+        "sma21Series":  sma21_series,
         "signal":       signal_result["signal"],
         "confidence":   signal_result["confidence"],
         "confidenceStars": signal_result["confidenceStars"],

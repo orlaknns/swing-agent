@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import { saveTradeToJournal } from './Journal.jsx'
-import { LineChart, Line, ResponsiveContainer, Tooltip } from 'recharts'
+import { LineChart, Line, ResponsiveContainer, Tooltip, ReferenceLine, YAxis } from 'recharts'
 
 const C = {
   bg:'#070d1a', card:'#0f1929', border:'#1a2d45',
@@ -46,22 +46,59 @@ function RRBar({ rr }) {
   )
 }
 
-function Sparkline({ prices, signal }) {
+function Sparkline({ prices, sma21Series, signal, entryLow, stopLoss }) {
   if (!prices || prices.length < 2) return null
-  const color  = signal === 'buy' ? C.green : signal === 'sell' ? C.red : C.accent
-  const data   = prices.map((v, i) => ({ i, v }))
+  const priceColor = signal === 'buy' ? C.green : signal === 'sell' ? C.red : C.accent
+  const data = prices.map((v, i) => ({
+    i,
+    price: v,
+    sma21: sma21Series?.[i] ?? null,
+  }))
+  // Dominio Y con margen para que las líneas de referencia sean visibles
+  const allVals = [
+    ...prices,
+    ...(sma21Series || []).filter(Boolean),
+    entryLow,
+    stopLoss,
+  ].filter(v => v != null)
+  const minY = Math.min(...allVals) * 0.998
+  const maxY = Math.max(...allVals) * 1.002
+
   return (
-    <div style={{ width:150, height:40 }}>
+    <div style={{ width:'100%', height:70, marginTop:4 }}>
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data}>
-          <Line type="monotone" dataKey="v" stroke={color} strokeWidth={1.5} dot={false} />
+        <LineChart data={data} margin={{ top:4, right:4, left:0, bottom:4 }}>
+          <YAxis domain={[minY, maxY]} hide />
+          {/* Rango de entrada — zona verde semitransparente */}
+          {entryLow && (
+            <ReferenceLine y={entryLow} stroke={C.green} strokeDasharray="3 3" strokeWidth={1} strokeOpacity={0.6} />
+          )}
+          {/* Stop-loss — línea roja */}
+          {stopLoss && (
+            <ReferenceLine y={stopLoss} stroke={C.red} strokeDasharray="3 3" strokeWidth={1} strokeOpacity={0.6} />
+          )}
+          {/* SMA21 — línea cyan */}
+          <Line type="monotone" dataKey="sma21" stroke={C.accent} strokeWidth={1}
+            dot={false} strokeOpacity={0.5} connectNulls={false} />
+          {/* Precio — línea principal */}
+          <Line type="monotone" dataKey="price" stroke={priceColor} strokeWidth={1.5}
+            dot={false} connectNulls />
           <Tooltip
-            contentStyle={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:6, fontSize:11 }}
-            formatter={v => [`$${v.toFixed(2)}`, '']}
+            contentStyle={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:6, fontSize:10, padding:'4px 8px' }}
+            formatter={(v, name) => [
+              `$${v?.toFixed(2)}`,
+              name === 'price' ? 'Precio' : 'SMA21'
+            ]}
             labelFormatter={() => ''}
           />
         </LineChart>
       </ResponsiveContainer>
+      {/* Leyenda minimal */}
+      <div style={{ display:'flex', gap:10, justifyContent:'flex-end', marginTop:2 }}>
+        <span style={{ fontSize:9, color:C.accent, opacity:0.7 }}>— SMA21</span>
+        {entryLow && <span style={{ fontSize:9, color:C.green, opacity:0.7 }}>– – Entrada</span>}
+        {stopLoss && <span style={{ fontSize:9, color:C.red, opacity:0.7 }}>– – SL</span>}
+      </div>
     </div>
   )
 }
@@ -338,17 +375,23 @@ export default function StockCard({ ticker, onRemove, session, onMonitor, onAnal
       {/* Data */}
       {data && !data.error && !loading && (<>
         {/* Price + chart */}
-        <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', gap:8 }}>
-          <div>
+        <div>
+          <div style={{ display:'flex', alignItems:'baseline', justifyContent:'space-between', gap:8 }}>
             <div style={{ fontSize:22, fontWeight:700, color:C.text, fontFamily:'monospace', lineHeight:1 }}>${data.price?.toFixed(2)}</div>
-            <div style={{ fontSize:11, color:data.change >= 0 ? C.green : C.red, fontFamily:'monospace', marginTop:3 }}>
+            <div style={{ fontSize:11, color:data.change >= 0 ? C.green : C.red, fontFamily:'monospace' }}>
               {data.change >= 0 ? '+' : ''}{data.change?.toFixed(2)}% hoy
             </div>
-            <div style={{ fontSize:9, color: data.isRealtime ? C.green : C.amber, marginTop:3, opacity:0.8 }}>
-              {data.isRealtime ? '⏱ Precio con 15 min de delay' : '⏱ Precio de cierre anterior · verifica en broker'}
-            </div>
           </div>
-          <Sparkline prices={data.prices20d} signal={data.signal} />
+          <div style={{ fontSize:9, color: data.isRealtime ? C.green : C.amber, marginTop:3, opacity:0.8 }}>
+            {data.isRealtime ? '⏱ Precio con 15 min de delay' : '⏱ Precio de cierre anterior · verifica en broker'}
+          </div>
+          <Sparkline
+            prices={data.prices20d}
+            sma21Series={data.sma21Series}
+            signal={data.signal}
+            entryLow={data.signal === 'buy' ? data.entryLow : null}
+            stopLoss={data.signal === 'buy' || data.signal === 'sell' ? data.stopLoss : null}
+          />
         </div>
 
         {/* Ex-dividend banner — visible solo cuando cae dentro del plazo del trade */}

@@ -226,6 +226,35 @@ check("Stop idéntico si mínimo 20d no cambió", lv_a['sl'], lv_b['sl'])
 check("Entrada idéntica si SMA21 no cambió", lv_a['el'], lv_b['el'])
 check("Target idéntico si máximo 20d no cambió", lv_a['tg'], lv_b['tg'])
 
+# ── 5. prices20d / sma21Series — longitud y estructura del chart ──────────────
+print("\n[5] prices20d / sma21Series — datos del chart")
+
+import sys, os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'backend'))
+from main import calc_sma
+
+# Simular 220 cierres (como fetch_prices devuelve) y extraer los últimos 30
+closes_mock = [100.0 + i * 0.1 for i in range(220)]
+
+prices_30d = [round(c, 2) for c in closes_mock[-30:]]
+check("prices20d contiene 30 valores", len(prices_30d), 30)
+check("prices20d todos son float", all(isinstance(v, float) for v in prices_30d), True)
+
+# sma21_series: últimos 30 valores de SMA21 diaria
+sma21_series = []
+for i in range(len(closes_mock) - 30, len(closes_mock)):
+    if i >= 21:
+        sma21_series.append(round(sum(closes_mock[i-21:i]) / 21, 2))
+    else:
+        sma21_series.append(None)
+check("sma21Series tiene 30 valores", len(sma21_series), 30)
+check("sma21Series todos son float (tenemos suficientes datos)", all(v is not None for v in sma21_series), True)
+
+# Con pocos datos (< 30 días disponibles), no rompe
+closes_short = [100.0 + i * 0.1 for i in range(25)]
+prices_short = [round(c, 2) for c in closes_short[-30:]]  # devuelve lo que hay
+check("prices20d con datos cortos no rompe", len(prices_short) <= 30, True)
+
 # ── Resultado final ───────────────────────────────────────────────────────────
 print(f"\n{'='*40}")
 total = PASS + FAIL
