@@ -34,6 +34,100 @@ const C = {
   amber:'#ffb800', text:'#dde6f0', muted:'#4a6080',
 }
 
+const SIGNAL_LABEL = { buy:'COMPRAR', sell:'VENDER', hold:'ESPERAR', avoid:'EVITAR', monitor:'MONITOREAR' }
+const SIGNAL_COLOR = { buy:'#00e096', sell:'#ff4060', hold:'#ffb800', avoid:'#888888', monitor:'#00aaff' }
+
+function WatchlistTable({ tickers, analysisCache, openTrades, lastClosedTrades, onRowClick }) {
+  const rows = tickers.map(ticker => {
+    const d = analysisCache[ticker]
+    return { ticker, d }
+  })
+
+  return (
+    <div style={{ overflowX:'auto' }}>
+      <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+        <thead>
+          <tr style={{ borderBottom:`1px solid ${C.border}` }}>
+            {['Ticker','Precio','Score','Señal','RSI','Zona entrada','Dist. rango','R:B'].map(h => (
+              <th key={h} style={{ padding:'8px 10px', textAlign:'left', fontSize:10, color:C.muted, letterSpacing:'0.07em', textTransform:'uppercase', fontWeight:600, whiteSpace:'nowrap' }}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(({ ticker, d }) => {
+            const analyzed = d && !d.error
+            const signalColor = analyzed ? (SIGNAL_COLOR[d.signal] || C.muted) : C.muted
+            const scoreColor  = analyzed ? (d.successRate >= 65 ? C.green : d.successRate >= 45 ? C.amber : C.red) : C.muted
+            const rrColor     = analyzed ? (d.rr >= 3 ? C.green : d.rr >= 2.5 ? C.amber : C.red) : C.muted
+            const hasActiveTrade = !!openTrades[ticker]
+
+            // Distancia al rango de entrada
+            let distLabel = '—'
+            let distColor = C.muted
+            if (analyzed && d.entryLow && d.entryHigh && d.price) {
+              const mid = (d.entryLow + d.entryHigh) / 2
+              const pct = ((d.price - mid) / mid * 100)
+              if (d.price >= d.entryLow && d.price <= d.entryHigh) {
+                distLabel = '● En rango'
+                distColor = C.green
+              } else if (pct > 0) {
+                distLabel = `+${pct.toFixed(1)}% arriba`
+                distColor = C.amber
+              } else {
+                distLabel = `${pct.toFixed(1)}% abajo`
+                distColor = C.accent
+              }
+            }
+
+            return (
+              <tr key={ticker}
+                onClick={() => onRowClick(ticker)}
+                style={{ borderBottom:`1px solid ${C.border}`, cursor:'pointer', transition:'background 0.15s' }}
+                onMouseEnter={e => e.currentTarget.style.background = '#1a2d4533'}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                <td style={{ padding:'10px 10px', fontFamily:'monospace', fontWeight:700, color:C.text, whiteSpace:'nowrap' }}>
+                  {ticker}
+                  {hasActiveTrade && <span style={{ marginLeft:5, fontSize:9, color:C.green }}>📈</span>}
+                </td>
+                <td style={{ padding:'10px 10px', fontFamily:'monospace', color:C.text }}>
+                  {analyzed ? `$${d.price?.toFixed(2)}` : <span style={{ color:C.muted }}>—</span>}
+                </td>
+                <td style={{ padding:'10px 10px', fontFamily:'monospace', fontWeight:700, color:scoreColor }}>
+                  {analyzed ? d.successRate : <span style={{ color:C.muted }}>—</span>}
+                </td>
+                <td style={{ padding:'10px 10px' }}>
+                  {analyzed
+                    ? <span style={{ background: signalColor+'18', color:signalColor, fontSize:10, fontWeight:700, padding:'2px 8px', borderRadius:99 }}>
+                        {SIGNAL_LABEL[d.signal] || d.signal?.toUpperCase() || '—'}
+                      </span>
+                    : <span style={{ color:C.muted }}>—</span>}
+                </td>
+                <td style={{ padding:'10px 10px', fontFamily:'monospace', color: analyzed && d.rsi < 30 ? C.green : analyzed && d.rsi > 70 ? C.red : C.text }}>
+                  {analyzed ? d.rsi?.toFixed(0) : <span style={{ color:C.muted }}>—</span>}
+                </td>
+                <td style={{ padding:'10px 10px', fontFamily:'monospace', color:C.green, fontSize:11 }}>
+                  {analyzed && d.entryLow ? `$${d.entryLow?.toFixed(2)}–$${d.entryHigh?.toFixed(2)}` : <span style={{ color:C.muted }}>—</span>}
+                </td>
+                <td style={{ padding:'10px 10px', fontFamily:'monospace', fontSize:11, color:distColor, whiteSpace:'nowrap' }}>
+                  {distLabel}
+                </td>
+                <td style={{ padding:'10px 10px', fontFamily:'monospace', fontWeight:700, color:rrColor }}>
+                  {analyzed ? `${(d.rr||0).toFixed(1)}x` : <span style={{ color:C.muted }}>—</span>}
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+      {rows.every(r => !r.d) && (
+        <div style={{ textAlign:'center', padding:'40px', color:C.muted, fontSize:13 }}>
+          Analiza los tickers primero para ver la tabla comparativa
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function App() {
   const [session,        setSession]        = useState(null)
   const [appLoading,     setAppLoading]     = useState(true)
@@ -50,6 +144,8 @@ export default function App() {
   const [refreshKey,     setRefreshKey]     = useState(0)
   const [saved,          setSaved]          = useState(false)
   const [journalCount,   setJournalCount]   = useState(0)
+  const [viewMode,       setViewMode]       = useState('cards')   // 'cards' | 'table'
+  const [tableModal,     setTableModal]     = useState(null)       // ticker string | null
   const saveTimer = useRef(null)
   const dbLoaded  = useRef(false)  // true después de la primera carga desde Supabase
 
@@ -243,6 +339,14 @@ export default function App() {
                 style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:9, color:C.muted, padding:'10px 13px', cursor:'pointer', fontSize:13 }}>
                 ↻
               </button>
+              <button onClick={() => setViewMode(v => v === 'cards' ? 'table' : 'cards')}
+                title={viewMode === 'cards' ? 'Ver tabla' : 'Ver tarjetas'}
+                style={{ background: viewMode === 'table' ? C.accent+'22' : 'none',
+                  border:`1px solid ${viewMode === 'table' ? C.accent : C.border}`,
+                  borderRadius:9, color: viewMode === 'table' ? C.accent : C.muted,
+                  padding:'10px 13px', cursor:'pointer', fontSize:13 }}>
+                {viewMode === 'cards' ? '☰' : '⊞'}
+              </button>
             </div>
           )}
 
@@ -281,22 +385,34 @@ export default function App() {
               <div style={{ textAlign:'center', padding:'60px', color:C.muted, fontSize:13 }}>Cargando watchlist...</div>
             ) : (
               <>
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(268px, 1fr))', gap:11 }}>
-                  {activeWatchlist.map(t => (
-                    <ErrorBoundary key={`${t}-${refreshKey}`}>
-                      <StockCard
-                        ticker={t}
-                        session={session}
-                        cachedData={analysisCache[t] || null}
-                        onAnalysed={cacheAnalysis}
-                        onRemove={removeFromAll}
-                        onMonitor={moveToMonitor}
-                        activeTrade={openTrades[t] || null}
-                        lastClosedTrade={!openTrades[t] ? (lastClosedTrades[t] || null) : null}
-                      />
-                    </ErrorBoundary>
-                  ))}
-                </div>
+                {viewMode === 'table' ? (
+                  <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:12 }}>
+                    <WatchlistTable
+                      tickers={activeWatchlist}
+                      analysisCache={analysisCache}
+                      openTrades={openTrades}
+                      lastClosedTrades={lastClosedTrades}
+                      onRowClick={setTableModal}
+                    />
+                  </div>
+                ) : (
+                  <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(268px, 1fr))', gap:11 }}>
+                    {activeWatchlist.map(t => (
+                      <ErrorBoundary key={`${t}-${refreshKey}`}>
+                        <StockCard
+                          ticker={t}
+                          session={session}
+                          cachedData={analysisCache[t] || null}
+                          onAnalysed={cacheAnalysis}
+                          onRemove={removeFromAll}
+                          onMonitor={moveToMonitor}
+                          activeTrade={openTrades[t] || null}
+                          lastClosedTrade={!openTrades[t] ? (lastClosedTrades[t] || null) : null}
+                        />
+                      </ErrorBoundary>
+                    ))}
+                  </div>
+                )}
                 {activeWatchlist.length === 0 && wl.length === 0 && (
                   <div style={{ textAlign:'center', padding:'60px', color:C.muted, fontSize:14 }}>
                     Agrega tickers con el buscador de arriba
@@ -323,26 +439,48 @@ export default function App() {
               </div>
             ) : (
               <>
-                <div style={{ marginBottom:14, padding:'10px 14px', background:'#001a2a', border:'1px solid #00aaff33', borderRadius:9, fontSize:11, color:'#4a8080' }}>
-                  Acciones con buenas condiciones técnicas esperando el momento de entrada. Re-analiza después del evento.
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
+                  <div style={{ padding:'10px 14px', background:'#001a2a', border:'1px solid #00aaff33', borderRadius:9, fontSize:11, color:'#4a8080', flex:1 }}>
+                    Acciones con buenas condiciones técnicas esperando el momento de entrada. Re-analiza después del evento.
+                  </div>
+                  <button onClick={() => setViewMode(v => v === 'cards' ? 'table' : 'cards')}
+                    title={viewMode === 'cards' ? 'Ver tabla' : 'Ver tarjetas'}
+                    style={{ marginLeft:10, background: viewMode === 'table' ? C.accent+'22' : 'none',
+                      border:`1px solid ${viewMode === 'table' ? C.accent : C.border}`,
+                      borderRadius:9, color: viewMode === 'table' ? C.accent : C.muted,
+                      padding:'10px 13px', cursor:'pointer', fontSize:13, flexShrink:0 }}>
+                    {viewMode === 'cards' ? '☰' : '⊞'}
+                  </button>
                 </div>
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(268px, 1fr))', gap:11 }}>
-                  {monitorWatchlist.map(t => (
-                    <ErrorBoundary key={`${t}-${refreshKey}`}>
-                      <StockCard
-                        ticker={t}
-                        session={session}
-                        cachedData={analysisCache[t] || null}
-                        onAnalysed={cacheAnalysis}
-                        onRemove={removeFromAll}
-                        onMonitor={removeFromMonitor}
-                        isInMonitorTab={true}
-                        activeTrade={openTrades[t] || null}
-                        lastClosedTrade={!openTrades[t] ? (lastClosedTrades[t] || null) : null}
-                      />
-                    </ErrorBoundary>
-                  ))}
-                </div>
+                {viewMode === 'table' ? (
+                  <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:12 }}>
+                    <WatchlistTable
+                      tickers={monitorWatchlist}
+                      analysisCache={analysisCache}
+                      openTrades={openTrades}
+                      lastClosedTrades={lastClosedTrades}
+                      onRowClick={setTableModal}
+                    />
+                  </div>
+                ) : (
+                  <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(268px, 1fr))', gap:11 }}>
+                    {monitorWatchlist.map(t => (
+                      <ErrorBoundary key={`${t}-${refreshKey}`}>
+                        <StockCard
+                          ticker={t}
+                          session={session}
+                          cachedData={analysisCache[t] || null}
+                          onAnalysed={cacheAnalysis}
+                          onRemove={removeFromAll}
+                          onMonitor={removeFromMonitor}
+                          isInMonitorTab={true}
+                          activeTrade={openTrades[t] || null}
+                          lastClosedTrade={!openTrades[t] ? (lastClosedTrades[t] || null) : null}
+                        />
+                      </ErrorBoundary>
+                    ))}
+                  </div>
+                )}
               </>
             )}
           </div>
@@ -379,6 +517,35 @@ export default function App() {
           </ErrorBoundary>
         )}
       </div>
+
+      {/* Modal StockCard desde tabla */}
+      {tableModal && (
+        <div onClick={() => setTableModal(null)}
+          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.75)', zIndex:2000,
+            display:'flex', alignItems:'flex-start', justifyContent:'center', padding:'40px 16px', overflowY:'auto' }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ width:'100%', maxWidth:380 }}>
+            <ErrorBoundary>
+              <StockCard
+                ticker={tableModal}
+                session={session}
+                cachedData={analysisCache[tableModal] || null}
+                onAnalysed={cacheAnalysis}
+                onRemove={t => { removeFromAll(t); setTableModal(null) }}
+                onMonitor={tab === 'monitor' ? t => { removeFromMonitor(t); setTableModal(null) } : t => { moveToMonitor(t); setTableModal(null) }}
+                isInMonitorTab={tab === 'monitor'}
+                activeTrade={openTrades[tableModal] || null}
+                lastClosedTrade={!openTrades[tableModal] ? (lastClosedTrades[tableModal] || null) : null}
+              />
+            </ErrorBoundary>
+            <button onClick={() => setTableModal(null)}
+              style={{ marginTop:10, width:'100%', background:'none', border:`1px solid ${C.border}`,
+                borderRadius:8, color:C.muted, padding:'8px', cursor:'pointer', fontSize:12 }}>
+              Cerrar
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
