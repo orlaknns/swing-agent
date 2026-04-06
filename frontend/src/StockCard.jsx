@@ -48,56 +48,51 @@ function RRBar({ rr }) {
 
 function Sparkline({ prices, sma21Series, signal, entryLow, stopLoss }) {
   if (!prices || prices.length < 2) return null
-  const priceColor = signal === 'buy' ? C.green : signal === 'sell' ? C.red : C.accent
   const data = prices.map((v, i) => ({
     i,
     price: v,
     sma21: sma21Series?.[i] ?? null,
   }))
-  // Dominio Y con margen para que las líneas de referencia sean visibles
   const allVals = [
     ...prices,
     ...(sma21Series || []).filter(Boolean),
     entryLow,
     stopLoss,
   ].filter(v => v != null)
-  const minY = Math.min(...allVals) * 0.998
-  const maxY = Math.max(...allVals) * 1.002
+  const minY = Math.min(...allVals) * 0.997
+  const maxY = Math.max(...allVals) * 1.003
 
   return (
-    <div style={{ width:'100%', height:70, marginTop:4 }}>
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data} margin={{ top:4, right:4, left:0, bottom:4 }}>
-          <YAxis domain={[minY, maxY]} hide />
-          {/* Rango de entrada — zona verde semitransparente */}
-          {entryLow && (
-            <ReferenceLine y={entryLow} stroke={C.green} strokeDasharray="3 3" strokeWidth={1} strokeOpacity={0.6} />
-          )}
-          {/* Stop-loss — línea roja */}
-          {stopLoss && (
-            <ReferenceLine y={stopLoss} stroke={C.red} strokeDasharray="3 3" strokeWidth={1} strokeOpacity={0.6} />
-          )}
-          {/* SMA21 — línea cyan */}
-          <Line type="monotone" dataKey="sma21" stroke={C.accent} strokeWidth={1}
-            dot={false} strokeOpacity={0.5} connectNulls={false} />
-          {/* Precio — línea principal */}
-          <Line type="monotone" dataKey="price" stroke={priceColor} strokeWidth={1.5}
-            dot={false} connectNulls />
-          <Tooltip
-            contentStyle={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:6, fontSize:10, padding:'4px 8px' }}
-            formatter={(v, name) => [
-              `$${v?.toFixed(2)}`,
-              name === 'price' ? 'Precio' : 'SMA21'
-            ]}
-            labelFormatter={() => ''}
-          />
-        </LineChart>
-      </ResponsiveContainer>
-      {/* Leyenda minimal */}
-      <div style={{ display:'flex', gap:10, justifyContent:'flex-end', marginTop:2 }}>
-        <span style={{ fontSize:9, color:C.accent, opacity:0.7 }}>— SMA21</span>
-        {entryLow && <span style={{ fontSize:9, color:C.green, opacity:0.7 }}>– – Entrada</span>}
-        {stopLoss && <span style={{ fontSize:9, color:C.red, opacity:0.7 }}>– – SL</span>}
+    <div style={{ width:'100%', marginTop:4, position:'relative' }}>
+      <div style={{ height:72 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data} margin={{ top:4, right:4, left:0, bottom:4 }}>
+            <YAxis domain={[minY, maxY]} hide />
+            {entryLow && (
+              <ReferenceLine y={entryLow} stroke={C.green} strokeDasharray="3 3" strokeWidth={1} strokeOpacity={0.7} />
+            )}
+            {stopLoss && (
+              <ReferenceLine y={stopLoss} stroke={C.red} strokeDasharray="3 3" strokeWidth={1} strokeOpacity={0.7} />
+            )}
+            {/* SMA21 — gris azulado, claramente distinto al precio */}
+            <Line type="monotone" dataKey="sma21" stroke="#6b8caa" strokeWidth={1}
+              dot={false} strokeOpacity={0.8} connectNulls={false} />
+            {/* Precio — siempre blanco, la señal ya la comunica el badge */}
+            <Line type="monotone" dataKey="price" stroke={C.text} strokeWidth={1.8}
+              dot={false} connectNulls />
+            <Tooltip
+              contentStyle={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:6, fontSize:10, padding:'4px 8px' }}
+              formatter={(v, name) => [`$${v?.toFixed(2)}`, name === 'price' ? 'Precio' : 'SMA21']}
+              labelFormatter={() => ''}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+      {/* Labels pegados al borde derecho, fuera del área del chart */}
+      <div style={{ display:'flex', justifyContent:'flex-end', gap:8, marginTop:3 }}>
+        <span style={{ fontSize:9, color:'#6b8caa' }}>— SMA21</span>
+        {entryLow && <span style={{ fontSize:9, color:C.green, opacity:0.8 }}>– – Entrada</span>}
+        {stopLoss && <span style={{ fontSize:9, color:C.red, opacity:0.8 }}>– – SL</span>}
       </div>
     </div>
   )
