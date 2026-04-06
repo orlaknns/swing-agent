@@ -144,7 +144,8 @@ export default function App() {
   const [refreshKey,     setRefreshKey]     = useState(0)
   const [saved,          setSaved]          = useState(false)
   const [journalCount,   setJournalCount]   = useState(0)
-  const [viewMode,       setViewMode]       = useState('cards')   // 'cards' | 'table'
+  const [viewModeWatchlist, setViewModeWatchlist] = useState('cards')  // 'cards' | 'table'
+  const [viewModeMonitor,   setViewModeMonitor]   = useState('cards')  // 'cards' | 'table'
   const [tableModal,     setTableModal]     = useState(null)       // ticker string | null
   const saveTimer = useRef(null)
   const dbLoaded  = useRef(false)  // true después de la primera carga desde Supabase
@@ -339,13 +340,13 @@ export default function App() {
                 style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:9, color:C.muted, padding:'10px 13px', cursor:'pointer', fontSize:13 }}>
                 ↻
               </button>
-              <button onClick={() => setViewMode(v => v === 'cards' ? 'table' : 'cards')}
-                title={viewMode === 'cards' ? 'Ver tabla' : 'Ver tarjetas'}
-                style={{ background: viewMode === 'table' ? C.accent+'22' : 'none',
-                  border:`1px solid ${viewMode === 'table' ? C.accent : C.border}`,
-                  borderRadius:9, color: viewMode === 'table' ? C.accent : C.muted,
+              <button onClick={() => setViewModeWatchlist(v => v === 'cards' ? 'table' : 'cards')}
+                title={viewModeWatchlist === 'cards' ? 'Ver tabla' : 'Ver tarjetas'}
+                style={{ background: viewModeWatchlist === 'table' ? C.accent+'22' : 'none',
+                  border:`1px solid ${viewModeWatchlist === 'table' ? C.accent : C.border}`,
+                  borderRadius:9, color: viewModeWatchlist === 'table' ? C.accent : C.muted,
                   padding:'10px 13px', cursor:'pointer', fontSize:13 }}>
-                {viewMode === 'cards' ? '☰' : '⊞'}
+                {viewModeWatchlist === 'cards' ? '☰' : '⊞'}
               </button>
             </div>
           )}
@@ -385,7 +386,7 @@ export default function App() {
               <div style={{ textAlign:'center', padding:'60px', color:C.muted, fontSize:13 }}>Cargando watchlist...</div>
             ) : (
               <>
-                {viewMode === 'table' ? (
+                {viewModeWatchlist === 'table' ? (
                   <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:12 }}>
                     <WatchlistTable
                       tickers={activeWatchlist}
@@ -443,16 +444,16 @@ export default function App() {
                   <div style={{ padding:'10px 14px', background:'#001a2a', border:'1px solid #00aaff33', borderRadius:9, fontSize:11, color:'#4a8080', flex:1 }}>
                     Acciones con buenas condiciones técnicas esperando el momento de entrada. Re-analiza después del evento.
                   </div>
-                  <button onClick={() => setViewMode(v => v === 'cards' ? 'table' : 'cards')}
-                    title={viewMode === 'cards' ? 'Ver tabla' : 'Ver tarjetas'}
-                    style={{ marginLeft:10, background: viewMode === 'table' ? C.accent+'22' : 'none',
-                      border:`1px solid ${viewMode === 'table' ? C.accent : C.border}`,
-                      borderRadius:9, color: viewMode === 'table' ? C.accent : C.muted,
+                  <button onClick={() => setViewModeMonitor(v => v === 'cards' ? 'table' : 'cards')}
+                    title={viewModeMonitor === 'cards' ? 'Ver tabla' : 'Ver tarjetas'}
+                    style={{ marginLeft:10, background: viewModeMonitor === 'table' ? C.accent+'22' : 'none',
+                      border:`1px solid ${viewModeMonitor === 'table' ? C.accent : C.border}`,
+                      borderRadius:9, color: viewModeMonitor === 'table' ? C.accent : C.muted,
                       padding:'10px 13px', cursor:'pointer', fontSize:13, flexShrink:0 }}>
-                    {viewMode === 'cards' ? '☰' : '⊞'}
+                    {viewModeMonitor === 'cards' ? '☰' : '⊞'}
                   </button>
                 </div>
-                {viewMode === 'table' ? (
+                {viewModeMonitor === 'table' ? (
                   <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:12 }}>
                     <WatchlistTable
                       tickers={monitorWatchlist}
