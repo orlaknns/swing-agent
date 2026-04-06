@@ -290,7 +290,7 @@ function FundamentalsBlock({ f, nextEarnings }) {
 
 const round2 = (n) => Math.round(n * 100) / 100
 
-export default function StockCard({ ticker, onRemove, session, onMonitor, onAnalysed, cachedData, isInMonitorTab, activeTrade, lastClosedTrade }) {
+export default function StockCard({ ticker, onRemove, session, onMonitor, onAnalysed, cachedData, isInMonitorTab, activeTrade, lastClosedTrade, hideRemove }) {
   const [data,         setData]         = useState(cachedData || null)
   const [loading,      setLoading]      = useState(false)
   const [expanded,     setExpanded]     = useState(false)
@@ -338,7 +338,7 @@ export default function StockCard({ ticker, onRemove, session, onMonitor, onAnal
       <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:12, padding:16, display:'flex', flexDirection:'column', gap:10 }}>
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
           <span style={{ fontFamily:'monospace', fontWeight:700, fontSize:15, color:C.text, letterSpacing:'0.05em' }}>{ticker}</span>
-          <button onClick={() => onRemove(ticker)} style={{ background:'none', border:'none', color:C.muted, cursor:'pointer', fontSize:17 }}>×</button>
+          {!hideRemove && <button onClick={() => onRemove(ticker)} style={{ background:'none', border:'none', color:C.muted, cursor:'pointer', fontSize:17 }}>×</button>}
         </div>
         <button onClick={() => { setReady(true); run() }}
           style={{ background:`${C.accent}15`, border:`1px solid ${C.accent}55`, borderRadius:8, color:C.accent, cursor:'pointer', padding:9, fontSize:12, fontWeight:700, letterSpacing:'0.06em' }}>
@@ -364,8 +364,8 @@ export default function StockCard({ ticker, onRemove, session, onMonitor, onAnal
         <div style={{ display:'flex', gap:4, alignItems:'center', flexShrink:0 }}>
           <button onClick={run} disabled={loading}
             style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:6, color:C.muted, cursor:loading?'not-allowed':'pointer', padding:'3px 7px', fontSize:11 }}>↻</button>
-          <button onClick={() => onRemove(ticker)}
-            style={{ background:'none', border:'none', color:C.muted, cursor:'pointer', fontSize:17, padding:'0 3px' }}>×</button>
+          {!hideRemove && <button onClick={() => onRemove(ticker)}
+            style={{ background:'none', border:'none', color:C.muted, cursor:'pointer', fontSize:17, padding:'0 3px' }}>×</button>}
         </div>
       </div>
 

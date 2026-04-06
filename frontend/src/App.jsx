@@ -536,6 +536,7 @@ export default function App() {
                 isInMonitorTab={tab === 'monitor'}
                 activeTrade={openTrades[tableModal] || null}
                 lastClosedTrade={!openTrades[tableModal] ? (lastClosedTrades[tableModal] || null) : null}
+                hideRemove
               />
             </ErrorBoundary>
             <button onClick={() => setTableModal(null)}
