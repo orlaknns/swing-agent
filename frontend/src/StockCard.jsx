@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import { saveTradeToJournal } from './Journal.jsx'
-import { LineChart, Line, ResponsiveContainer, Tooltip, ReferenceLine, YAxis } from 'recharts'
+import { LineChart, Line, ResponsiveContainer, Tooltip, ReferenceLine, ReferenceArea, YAxis } from 'recharts'
 
 const C = {
   bg:'#070d1a', card:'#0f1929', border:'#1a2d45',
@@ -46,7 +46,7 @@ function RRBar({ rr }) {
   )
 }
 
-function Sparkline({ prices, sma21Series, signal, entryLow, stopLoss }) {
+function Sparkline({ prices, sma21Series, signal, entryLow, entryHigh, stopLoss }) {
   if (!prices || prices.length < 2) return null
   const data = prices.map((v, i) => ({
     i,
@@ -57,6 +57,7 @@ function Sparkline({ prices, sma21Series, signal, entryLow, stopLoss }) {
     ...prices,
     ...(sma21Series || []).filter(Boolean),
     entryLow,
+    entryHigh,
     stopLoss,
   ].filter(v => v != null)
   const minY = Math.min(...allVals) * 0.997
@@ -68,8 +69,8 @@ function Sparkline({ prices, sma21Series, signal, entryLow, stopLoss }) {
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top:4, right:4, left:0, bottom:4 }}>
             <YAxis domain={[minY, maxY]} hide />
-            {entryLow && (
-              <ReferenceLine y={entryLow} stroke={C.green} strokeDasharray="3 3" strokeWidth={1} strokeOpacity={0.7} />
+            {entryLow && entryHigh && (
+              <ReferenceArea y1={entryLow} y2={entryHigh} fill={C.green} fillOpacity={0.12} stroke={C.green} strokeOpacity={0.35} strokeWidth={1} />
             )}
             {stopLoss && (
               <ReferenceLine y={stopLoss} stroke={C.red} strokeDasharray="3 3" strokeWidth={1} strokeOpacity={0.7} />
@@ -91,7 +92,7 @@ function Sparkline({ prices, sma21Series, signal, entryLow, stopLoss }) {
       {/* Labels pegados al borde derecho, fuera del área del chart */}
       <div style={{ display:'flex', justifyContent:'flex-end', gap:8, marginTop:3 }}>
         <span style={{ fontSize:9, color:'#6b8caa' }}>— SMA21</span>
-        {entryLow && <span style={{ fontSize:9, color:C.green, opacity:0.8 }}>– – Entrada</span>}
+        {entryLow && entryHigh && <span style={{ fontSize:9, color:C.green, opacity:0.8 }}>▪ Zona entrada</span>}
         {stopLoss && <span style={{ fontSize:9, color:C.red, opacity:0.8 }}>– – SL</span>}
       </div>
     </div>
@@ -385,6 +386,7 @@ export default function StockCard({ ticker, onRemove, session, onMonitor, onAnal
             sma21Series={data.sma21Series}
             signal={data.signal}
             entryLow={data.signal === 'buy' ? data.entryLow : null}
+            entryHigh={data.signal === 'buy' ? data.entryHigh : null}
             stopLoss={data.signal === 'buy' || data.signal === 'sell' ? data.stopLoss : null}
           />
         </div>
