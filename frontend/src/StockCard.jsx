@@ -46,55 +46,107 @@ function RRBar({ rr }) {
   )
 }
 
-function Sparkline({ prices, sma21Series, signal, entryLow, entryHigh, stopLoss }) {
-  if (!prices || prices.length < 2) return null
-  const data = prices.map((v, i) => ({
-    i,
-    price: v,
-    sma21: sma21Series?.[i] ?? null,
-  }))
-  const allVals = [
-    ...prices,
-    ...(sma21Series || []).filter(Boolean),
-    entryLow,
-    entryHigh,
-    stopLoss,
-  ].filter(v => v != null)
-  const minY = Math.min(...allVals) * 0.997
-  const maxY = Math.max(...allVals) * 1.003
-
+function ChartContent({ data, minY, maxY, entryLow, entryHigh, stopLoss, large }) {
   return (
-    <div style={{ width:'100%', marginTop:4, position:'relative' }}>
-      <div style={{ height:72 }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top:4, right:4, left:0, bottom:4 }}>
-            <YAxis domain={[minY, maxY]} hide />
-            {entryLow && entryHigh && (
-              <ReferenceArea y1={entryLow} y2={entryHigh} fill={C.green} fillOpacity={0.12} stroke={C.green} strokeOpacity={0.35} strokeWidth={1} />
-            )}
-            {stopLoss && (
-              <ReferenceLine y={stopLoss} stroke={C.red} strokeDasharray="3 3" strokeWidth={1} strokeOpacity={0.7} />
-            )}
-            {/* SMA21 — gris azulado, claramente distinto al precio */}
-            <Line type="monotone" dataKey="sma21" stroke="#6b8caa" strokeWidth={1}
-              dot={false} strokeOpacity={0.8} connectNulls={false} />
-            {/* Precio — siempre blanco, la señal ya la comunica el badge */}
-            <Line type="monotone" dataKey="price" stroke={C.text} strokeWidth={1.8}
-              dot={false} connectNulls />
-            <Tooltip
-              contentStyle={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:6, fontSize:10, padding:'4px 8px' }}
-              formatter={(v, name) => [`$${v?.toFixed(2)}`, name === 'price' ? 'Precio' : 'SMA21']}
-              labelFormatter={() => ''}
-            />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-      {/* Labels pegados al borde derecho, fuera del área del chart */}
-      <div style={{ display:'flex', justifyContent:'flex-end', gap:8, marginTop:3 }}>
+    <LineChart data={data} margin={{ top:6, right: large ? 12 : 4, left: large ? 4 : 0, bottom:4 }}>
+      <YAxis domain={[minY, maxY]} hide={!large}
+        tick={{ fontSize:9, fill:C.muted }} axisLine={false} tickLine={false}
+        tickFormatter={v => `$${v.toFixed(0)}`} width={36} />
+      {entryLow && entryHigh && (
+        <ReferenceArea y1={entryLow} y2={entryHigh}
+          fill={C.green} fillOpacity={0.15}
+          stroke={C.green} strokeOpacity={0.4} strokeWidth={1} />
+      )}
+      {stopLoss && (
+        <ReferenceLine y={stopLoss} stroke={C.red}
+          strokeDasharray="4 3" strokeWidth={large ? 1.5 : 1} strokeOpacity={0.8} />
+      )}
+      <Line type="monotone" dataKey="sma21" stroke="#6b8caa"
+        strokeWidth={large ? 1.5 : 1} dot={false} strokeOpacity={0.8} connectNulls={false} />
+      <Line type="monotone" dataKey="price" stroke={C.text}
+        strokeWidth={large ? 2 : 1.8} dot={false} connectNulls />
+      <Tooltip
+        contentStyle={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:6, fontSize:10, padding:'4px 8px' }}
+        formatter={(v, name) => [`$${v?.toFixed(2)}`, name === 'price' ? 'Precio' : 'SMA21']}
+        labelFormatter={() => ''}
+      />
+    </LineChart>
+  )
+}
+
+function ChartLegend({ entryLow, entryHigh, stopLoss, onExpand }) {
+  return (
+    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:3 }}>
+      <div style={{ display:'flex', gap:8 }}>
         <span style={{ fontSize:9, color:'#6b8caa' }}>— SMA21</span>
         {entryLow && entryHigh && <span style={{ fontSize:9, color:C.green, opacity:0.8 }}>▪ Zona entrada</span>}
         {stopLoss && <span style={{ fontSize:9, color:C.red, opacity:0.8 }}>– – SL</span>}
       </div>
+      <button onClick={onExpand}
+        style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:4,
+          color:C.muted, fontSize:10, padding:'1px 6px', cursor:'pointer', lineHeight:1.4 }}
+        title="Ver gráfico ampliado">
+        ⤢
+      </button>
+    </div>
+  )
+}
+
+function ChartModal({ ticker, data, minY, maxY, entryLow, entryHigh, stopLoss, onClose }) {
+  return (
+    <div onClick={onClose}
+      style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.75)', zIndex:1500,
+        display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+      <div onClick={e => e.stopPropagation()}
+        style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:14,
+          padding:20, width:'100%', maxWidth:540 }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
+          <span style={{ fontSize:14, fontWeight:700, color:C.text, fontFamily:'monospace' }}>{ticker} · 30 días</span>
+          <button onClick={onClose}
+            style={{ background:'none', border:'none', color:C.muted, fontSize:20, cursor:'pointer' }}>×</button>
+        </div>
+        <div style={{ height:240 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <ChartContent data={data} minY={minY} maxY={maxY}
+              entryLow={entryLow} entryHigh={entryHigh} stopLoss={stopLoss} large />
+          </ResponsiveContainer>
+        </div>
+        <div style={{ display:'flex', gap:12, marginTop:10, justifyContent:'center' }}>
+          <span style={{ fontSize:10, color:'#6b8caa' }}>— SMA21</span>
+          {entryLow && entryHigh && (
+            <span style={{ fontSize:10, color:C.green, opacity:0.9 }}>▪ Zona entrada ${entryLow?.toFixed(2)}–${entryHigh?.toFixed(2)}</span>
+          )}
+          {stopLoss && <span style={{ fontSize:10, color:C.red, opacity:0.9 }}>– – SL ${stopLoss?.toFixed(2)}</span>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Sparkline({ prices, sma21Series, signal, entryLow, entryHigh, stopLoss, ticker }) {
+  const [showModal, setShowModal] = useState(false)
+  if (!prices || prices.length < 2) return null
+
+  const data = prices.map((v, i) => ({ i, price: v, sma21: sma21Series?.[i] ?? null }))
+  const allVals = [...prices, ...(sma21Series||[]).filter(Boolean), entryLow, entryHigh, stopLoss].filter(v => v != null)
+  const minY = Math.min(...allVals) * 0.997
+  const maxY = Math.max(...allVals) * 1.003
+
+  return (
+    <div style={{ width:'100%', marginTop:4 }}>
+      <div style={{ height:72 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <ChartContent data={data} minY={minY} maxY={maxY}
+            entryLow={entryLow} entryHigh={entryHigh} stopLoss={stopLoss} large={false} />
+        </ResponsiveContainer>
+      </div>
+      <ChartLegend entryLow={entryLow} entryHigh={entryHigh} stopLoss={stopLoss}
+        onExpand={() => setShowModal(true)} />
+      {showModal && (
+        <ChartModal ticker={ticker} data={data} minY={minY} maxY={maxY}
+          entryLow={entryLow} entryHigh={entryHigh} stopLoss={stopLoss}
+          onClose={() => setShowModal(false)} />
+      )}
     </div>
   )
 }
@@ -388,6 +440,7 @@ export default function StockCard({ ticker, onRemove, session, onMonitor, onAnal
             entryLow={data.signal === 'buy' ? data.entryLow : null}
             entryHigh={data.signal === 'buy' ? data.entryHigh : null}
             stopLoss={data.signal === 'buy' || data.signal === 'sell' ? data.stopLoss : null}
+            ticker={ticker}
           />
         </div>
 
