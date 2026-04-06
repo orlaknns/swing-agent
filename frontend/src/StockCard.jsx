@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import { saveTradeToJournal } from './Journal.jsx'
-import { LineChart, Line, ResponsiveContainer, Tooltip, ReferenceLine, ReferenceArea, YAxis } from 'recharts'
+import { LineChart, Line, ResponsiveContainer, Tooltip, ReferenceLine, ReferenceArea, YAxis, Label } from 'recharts'
 
 const C = {
   bg:'#070d1a', card:'#0f1929', border:'#1a2d45',
@@ -46,12 +46,12 @@ function RRBar({ rr }) {
   )
 }
 
-function Sparkline({ prices, sma21Series, signal, entryLow, entryHigh, stopLoss, ticker }) {
+function Sparkline({ prices, sma21Series, signal, entryLow, entryHigh, stopLoss, target, ticker }) {
   const [showModal, setShowModal] = useState(false)
   if (!prices || prices.length < 2) return null
 
   const data = prices.map((v, i) => ({ i, price: v, sma21: sma21Series?.[i] ?? null }))
-  const allVals = [...prices, ...(sma21Series||[]).filter(Boolean), entryLow, entryHigh, stopLoss].filter(v => v != null)
+  const allVals = [...prices, ...(sma21Series||[]).filter(Boolean), entryLow, entryHigh, stopLoss, target].filter(v => v != null)
   const minY = Math.min(...allVals) * 0.997
   const maxY = Math.max(...allVals) * 1.003
 
@@ -60,7 +60,7 @@ function Sparkline({ prices, sma21Series, signal, entryLow, entryHigh, stopLoss,
 
   return (
     <div style={{ width:'100%', marginTop:4 }}>
-      {/* Sparkline pequeño */}
+      {/* Sparkline pequeño — sin labels para no saturar */}
       <div style={{ height:72 }}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top:4, right:4, left:0, bottom:4 }}>
@@ -68,11 +68,10 @@ function Sparkline({ prices, sma21Series, signal, entryLow, entryHigh, stopLoss,
             {entryLow && entryHigh && (
               <ReferenceArea y1={entryLow} y2={entryHigh} fill={C.green} fillOpacity={0.15} stroke={C.green} strokeOpacity={0.4} strokeWidth={1} />
             )}
-            {stopLoss && (
-              <ReferenceLine y={stopLoss} stroke={C.red} strokeDasharray="4 3" strokeWidth={1} strokeOpacity={0.8} />
-            )}
-            <Line type="monotone" dataKey="sma21" stroke="#6b8caa" strokeWidth={1} dot={false} strokeOpacity={0.8} connectNulls={false} />
-            <Line type="monotone" dataKey="price" stroke={C.text} strokeWidth={1.8} dot={false} connectNulls />
+            {stopLoss && <ReferenceLine y={stopLoss} stroke={C.red} strokeDasharray="4 3" strokeWidth={1} strokeOpacity={0.8} />}
+            {target && <ReferenceLine y={target} stroke={C.green} strokeDasharray="4 3" strokeWidth={1} strokeOpacity={0.5} />}
+            <Line type="monotone" dataKey="sma21" stroke="#fb923c" strokeWidth={1} dot={false} strokeOpacity={0.8} connectNulls={false} />
+            <Line type="monotone" dataKey="price" stroke={C.accent} strokeWidth={1.8} dot={false} connectNulls />
             <Tooltip contentStyle={tooltipStyle} formatter={tooltipFmt} labelFormatter={() => ''} />
           </LineChart>
         </ResponsiveContainer>
@@ -81,9 +80,11 @@ function Sparkline({ prices, sma21Series, signal, entryLow, entryHigh, stopLoss,
       {/* Leyenda + botón expandir */}
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:3 }}>
         <div style={{ display:'flex', gap:8 }}>
-          <span style={{ fontSize:9, color:'#6b8caa' }}>— SMA21</span>
-          {entryLow && entryHigh && <span style={{ fontSize:9, color:C.green, opacity:0.8 }}>▪ Zona entrada</span>}
-          {stopLoss && <span style={{ fontSize:9, color:C.red, opacity:0.8 }}>– – SL</span>}
+          <span style={{ fontSize:9, color:C.accent }}>— Precio</span>
+          <span style={{ fontSize:9, color:'#fb923c' }}>— SMA21</span>
+          {entryLow && entryHigh && <span style={{ fontSize:9, color:C.green, opacity:0.8 }}>▪ Entrada</span>}
+          {stopLoss && <span style={{ fontSize:9, color:C.red, opacity:0.8 }}>– SL</span>}
+          {target && <span style={{ fontSize:9, color:C.green, opacity:0.6 }}>– TP</span>}
         </div>
         <button onClick={() => setShowModal(true)}
           style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:4,
@@ -93,42 +94,57 @@ function Sparkline({ prices, sma21Series, signal, entryLow, entryHigh, stopLoss,
         </button>
       </div>
 
-      {/* Modal con chart ampliado */}
+      {/* Modal con chart ampliado + labels */}
       {showModal && (
         <div onClick={() => setShowModal(false)}
           style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.75)', zIndex:1500,
             display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
           <div onClick={e => e.stopPropagation()}
             style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:14,
-              padding:20, width:'100%', maxWidth:540 }}>
+              padding:20, width:'100%', maxWidth:560 }}>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
               <span style={{ fontSize:14, fontWeight:700, color:C.text, fontFamily:'monospace' }}>{ticker} · 30 días</span>
               <button onClick={() => setShowModal(false)}
                 style={{ background:'none', border:'none', color:C.muted, fontSize:20, cursor:'pointer' }}>×</button>
             </div>
-            <div style={{ height:240 }}>
+            <div style={{ height:260 }}>
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={data} margin={{ top:6, right:12, left:4, bottom:4 }}>
+                <LineChart data={data} margin={{ top:8, right:70, left:4, bottom:4 }}>
                   <YAxis domain={[minY, maxY]} tick={{ fontSize:9, fill:C.muted }}
                     axisLine={false} tickLine={false} tickFormatter={v => `$${v.toFixed(0)}`} width={40} />
+                  {/* Zona entrada — banda verde con label */}
                   {entryLow && entryHigh && (
-                    <ReferenceArea y1={entryLow} y2={entryHigh} fill={C.green} fillOpacity={0.15} stroke={C.green} strokeOpacity={0.4} strokeWidth={1} />
+                    <ReferenceArea y1={entryLow} y2={entryHigh} fill={C.green} fillOpacity={0.15} stroke={C.green} strokeOpacity={0.4} strokeWidth={1}>
+                      <Label value={`Entrada $${entryLow?.toFixed(2)}–$${entryHigh?.toFixed(2)}`}
+                        position="insideRight" fontSize={9} fill={C.green} fontWeight={700} />
+                    </ReferenceArea>
                   )}
+                  {/* Stop-loss */}
                   {stopLoss && (
-                    <ReferenceLine y={stopLoss} stroke={C.red} strokeDasharray="4 3" strokeWidth={1.5} strokeOpacity={0.8} />
+                    <ReferenceLine y={stopLoss} stroke={C.red} strokeDasharray="4 3" strokeWidth={1.5} strokeOpacity={0.9}>
+                      <Label value={`SL $${stopLoss?.toFixed(2)}`}
+                        position="insideRight" fontSize={9} fill={C.red} fontWeight={700} />
+                    </ReferenceLine>
                   )}
-                  <Line type="monotone" dataKey="sma21" stroke="#6b8caa" strokeWidth={1.5} dot={false} strokeOpacity={0.8} connectNulls={false} />
-                  <Line type="monotone" dataKey="price" stroke={C.text} strokeWidth={2} dot={false} connectNulls />
+                  {/* Take profit */}
+                  {target && (
+                    <ReferenceLine y={target} stroke={C.green} strokeDasharray="4 3" strokeWidth={1.5} strokeOpacity={0.7}>
+                      <Label value={`TP $${target?.toFixed(2)}`}
+                        position="insideRight" fontSize={9} fill={C.green} fontWeight={700} />
+                    </ReferenceLine>
+                  )}
+                  <Line type="monotone" dataKey="sma21" stroke="#fb923c" strokeWidth={1.5} dot={false} strokeOpacity={0.9} connectNulls={false} />
+                  <Line type="monotone" dataKey="price" stroke={C.accent} strokeWidth={2} dot={false} connectNulls />
                   <Tooltip contentStyle={tooltipStyle} formatter={tooltipFmt} labelFormatter={() => ''} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
-            <div style={{ display:'flex', gap:12, marginTop:10, justifyContent:'center' }}>
-              <span style={{ fontSize:10, color:'#6b8caa' }}>— SMA21</span>
-              {entryLow && entryHigh && (
-                <span style={{ fontSize:10, color:C.green, opacity:0.9 }}>▪ Zona entrada ${entryLow?.toFixed(2)}–${entryHigh?.toFixed(2)}</span>
-              )}
+            <div style={{ display:'flex', gap:12, marginTop:10, justifyContent:'center', flexWrap:'wrap' }}>
+              <span style={{ fontSize:10, color:C.accent }}>— Precio</span>
+              <span style={{ fontSize:10, color:'#fb923c' }}>— SMA21</span>
+              {entryLow && entryHigh && <span style={{ fontSize:10, color:C.green, opacity:0.9 }}>▪ Zona entrada</span>}
               {stopLoss && <span style={{ fontSize:10, color:C.red, opacity:0.9 }}>– – SL ${stopLoss?.toFixed(2)}</span>}
+              {target && <span style={{ fontSize:10, color:C.green, opacity:0.7 }}>– – TP ${target?.toFixed(2)}</span>}
             </div>
           </div>
         </div>
@@ -426,6 +442,7 @@ export default function StockCard({ ticker, onRemove, session, onMonitor, onAnal
             entryLow={data.signal === 'buy' ? data.entryLow : null}
             entryHigh={data.signal === 'buy' ? data.entryHigh : null}
             stopLoss={data.signal === 'buy' || data.signal === 'sell' ? data.stopLoss : null}
+            target={data.signal === 'buy' ? data.target : null}
             ticker={ticker}
           />
         </div>
