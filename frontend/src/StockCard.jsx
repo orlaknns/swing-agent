@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import { saveTradeToJournal } from './Journal.jsx'
-import { LineChart, Line, ResponsiveContainer, Tooltip, ReferenceLine, ReferenceArea, YAxis, Label } from 'recharts'
+import { LineChart, Line, ResponsiveContainer, Tooltip, ReferenceLine, ReferenceArea, YAxis, CartesianGrid, Label } from 'recharts'
 
 const C = {
   bg:'#070d1a', card:'#0f1929', border:'#1a2d45',
@@ -48,6 +48,7 @@ function RRBar({ rr }) {
 
 function Sparkline({ prices, sma21Series, signal, entryLow, entryHigh, stopLoss, target, ticker }) {
   const [showModal, setShowModal] = useState(false)
+  const [hoverY, setHoverY] = useState(null)
   if (!prices || prices.length < 2) return null
 
   const data = prices.map((v, i) => ({ i, price: v, sma21: sma21Series?.[i] ?? null }))
@@ -58,13 +59,34 @@ function Sparkline({ prices, sma21Series, signal, entryLow, entryHigh, stopLoss,
   const tooltipStyle = { background:C.card, border:`1px solid ${C.border}`, borderRadius:6, fontSize:10, padding:'4px 8px' }
   const tooltipFmt   = (v, name) => [`$${v?.toFixed(2)}`, name === 'price' ? 'Precio' : 'SMA21']
 
+  function CrosshairTooltip({ active, payload }) {
+    if (!active || !payload || !payload.length) return null
+    const priceEntry = payload.find(p => p.dataKey === 'price')
+    const smaEntry   = payload.find(p => p.dataKey === 'sma21')
+    if (!priceEntry) return null
+    return (
+      <div style={{ background:'rgba(7,13,26,0.92)', border:`1px solid ${C.border}`, borderRadius:6, padding:'6px 10px', fontSize:11 }}>
+        <div style={{ color:C.accent, fontFamily:'monospace', fontWeight:700 }}>
+          ${priceEntry.value?.toFixed(2)}
+        </div>
+        {smaEntry?.value != null && (
+          <div style={{ color:'#fb923c', fontFamily:'monospace', fontSize:10, marginTop:2 }}>
+            SMA21 ${smaEntry.value?.toFixed(2)}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div style={{ width:'100%', marginTop:4 }}>
-      {/* Sparkline pequeño — sin labels para no saturar */}
+      {/* Sparkline pequeño — escala derecha discreta */}
       <div style={{ height:72 }}>
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top:4, right:4, left:0, bottom:4 }}>
-            <YAxis domain={[minY, maxY]} hide />
+          <LineChart data={data} margin={{ top:4, right:36, left:0, bottom:4 }}>
+            <YAxis domain={[minY, maxY]} orientation="right" tickCount={3}
+              tick={{ fontSize:8, fill:C.muted }} axisLine={false} tickLine={false}
+              tickFormatter={v => `$${v.toFixed(0)}`} width={34} />
             {entryLow && entryHigh && (
               <ReferenceArea y1={entryLow} y2={entryHigh} fill={C.green} fillOpacity={0.15} stroke={C.green} strokeOpacity={0.4} strokeWidth={1} />
             )}
@@ -109,33 +131,45 @@ function Sparkline({ prices, sma21Series, signal, entryLow, entryHigh, stopLoss,
             </div>
             <div style={{ height:260 }}>
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={data} margin={{ top:8, right:70, left:4, bottom:4 }}>
-                  <YAxis domain={[minY, maxY]} tick={{ fontSize:9, fill:C.muted }}
-                    axisLine={false} tickLine={false} tickFormatter={v => `$${v.toFixed(0)}`} width={40} />
+                <LineChart data={data} margin={{ top:8, right:48, left:0, bottom:4 }}
+                  style={{ cursor:'crosshair' }}
+                  onMouseMove={e => { if (e?.activePayload?.[0]) setHoverY(e.activePayload[0].value) }}
+                  onMouseLeave={() => setHoverY(null)}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false} />
+                  <YAxis domain={[minY, maxY]} orientation="right" tickCount={7}
+                    tick={{ fontSize:9, fill:C.muted }} axisLine={false} tickLine={false}
+                    tickFormatter={v => `$${v.toFixed(0)}`} width={44} />
                   {/* Zona entrada — banda verde con label */}
                   {entryLow && entryHigh && (
                     <ReferenceArea y1={entryLow} y2={entryHigh} fill={C.green} fillOpacity={0.15} stroke={C.green} strokeOpacity={0.4} strokeWidth={1}>
                       <Label value={`Entrada $${entryLow?.toFixed(2)}–$${entryHigh?.toFixed(2)}`}
-                        position="insideRight" fontSize={9} fill={C.green} fontWeight={700} />
+                        position="insideLeft" fontSize={9} fill={C.green} fontWeight={700} />
                     </ReferenceArea>
                   )}
                   {/* Stop-loss */}
                   {stopLoss && (
                     <ReferenceLine y={stopLoss} stroke={C.red} strokeDasharray="4 3" strokeWidth={1.5} strokeOpacity={0.9}>
                       <Label value={`SL $${stopLoss?.toFixed(2)}`}
-                        position="insideRight" fontSize={9} fill={C.red} fontWeight={700} />
+                        position="insideLeft" fontSize={9} fill={C.red} fontWeight={700} />
                     </ReferenceLine>
                   )}
                   {/* Take profit */}
                   {target && (
                     <ReferenceLine y={target} stroke={C.green} strokeDasharray="4 3" strokeWidth={1.5} strokeOpacity={0.7}>
                       <Label value={`TP $${target?.toFixed(2)}`}
-                        position="insideRight" fontSize={9} fill={C.green} fontWeight={700} />
+                        position="insideLeft" fontSize={9} fill={C.green} fontWeight={700} />
                     </ReferenceLine>
+                  )}
+                  {/* Crosshair horizontal dinámico */}
+                  {hoverY != null && (
+                    <ReferenceLine y={hoverY} stroke={C.muted} strokeWidth={1} strokeDasharray="4 3" strokeOpacity={0.7} />
                   )}
                   <Line type="monotone" dataKey="sma21" stroke="#fb923c" strokeWidth={1.5} dot={false} strokeOpacity={0.9} connectNulls={false} />
                   <Line type="monotone" dataKey="price" stroke={C.accent} strokeWidth={2} dot={false} connectNulls />
-                  <Tooltip contentStyle={tooltipStyle} formatter={tooltipFmt} labelFormatter={() => ''} />
+                  <Tooltip
+                    content={<CrosshairTooltip />}
+                    cursor={{ stroke: C.muted, strokeWidth: 1, strokeDasharray: '4 3' }}
+                  />
                 </LineChart>
               </ResponsiveContainer>
             </div>
