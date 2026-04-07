@@ -206,6 +206,7 @@ export default function App() {
         }
         setWatchlist(data?.tickers?.length ? data.tickers : DEFAULT_WATCHLIST)
         setMonitorTickers(data?.monitor_tickers?.length ? data.monitor_tickers : [])
+        console.log('[load] analysis_cache keys:', Object.keys(data?.analysis_cache || {}))
         if (data?.analysis_cache && Object.keys(data.analysis_cache).length > 0) {
           setAnalysisCache(data.analysis_cache)
           analysisCacheRef.current = data.analysis_cache
@@ -312,6 +313,12 @@ export default function App() {
         analysis_cache: next,
         updated_at:     new Date().toISOString()
       }, { onConflict: 'user_id' })
+      .then(({ error }) => {
+        if (error) console.error('[cacheAnalysis] upsert error:', error)
+        else console.log('[cacheAnalysis] guardado OK para', ticker)
+      })
+    } else {
+      console.warn('[cacheAnalysis] no guardado — session:', !!session, 'dbLoaded:', dbLoaded.current)
     }
   }
 
