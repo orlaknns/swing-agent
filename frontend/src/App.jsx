@@ -262,8 +262,9 @@ export default function App() {
   const [viewModeWatchlist, setViewModeWatchlist] = useState('cards')  // 'cards' | 'table'
   const [viewModeMonitor,   setViewModeMonitor]   = useState('cards')  // 'cards' | 'table'
   const [tableModal,     setTableModal]     = useState(null)       // ticker string | null
-  const saveTimer = useRef(null)
-  const dbLoaded  = useRef(false)  // true después de la primera carga desde Supabase
+  const saveTimer    = useRef(null)
+  const dbLoaded     = useRef(false)  // true después de la primera carga desde Supabase
+  const listsReady   = useRef(false)  // true después de que el primer useEffect de listas se ejecuta tras la carga
 
   // ── Auth ──────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -291,6 +292,7 @@ export default function App() {
   useEffect(() => {
     if (!session) return
     dbLoaded.current = false
+    listsReady.current = false
     supabase.from('watchlist')
       .select('tickers, monitor_tickers, analysis_cache')
       .eq('user_id', session.user.id)
@@ -342,6 +344,8 @@ export default function App() {
   useEffect(() => {
     if (watchlist === null || monitorTickers === null) return
     if (!dbLoaded.current) return
+    // La primera vez que corre tras la carga inicial, solo marca listsReady sin guardar
+    if (!listsReady.current) { listsReady.current = true; return }
     saveToSupabase(watchlist, monitorTickers)
   }, [watchlist, monitorTickers, session]) // eslint-disable-line
 
