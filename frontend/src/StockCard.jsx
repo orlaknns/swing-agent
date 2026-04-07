@@ -471,8 +471,16 @@ export default function StockCard({ ticker, onRemove, session, onMonitor, onAnal
               {data.isRealtime ? '⏱ Precio con 15 min de delay' : '⏱ Precio de cierre anterior · verifica en broker'}
             </div>
             {data._savedAt && (() => {
-              const days = Math.floor((Date.now() - new Date(data._savedAt)) / (1000*60*60*24))
-              const label = days === 0 ? 'Actualizado hoy' : days === 1 ? 'Actualizado ayer' : `Actualizado hace ${days}d`
+              const d = new Date(data._savedAt)
+              const days = Math.floor((Date.now() - d) / (1000*60*60*24))
+              let label
+              if (days === 0) {
+                const h = d.getHours().toString().padStart(2,'0')
+                const m = d.getMinutes().toString().padStart(2,'0')
+                label = `Actualizado hoy ${h}:${m}`
+              } else {
+                label = days === 1 ? 'Actualizado ayer' : `Actualizado hace ${days}d`
+              }
               return <div style={{ fontSize:9, color:C.muted, opacity:0.7 }}>{label}</div>
             })()}
           </div>

@@ -39,6 +39,20 @@ const SIGNAL_COLOR = { buy:'#00e096', sell:'#ff4060', hold:'#ffb800', avoid:'#88
 
 const SIGNAL_ORDER = { buy:0, monitor:1, hold:2, avoid:3, sell:4 }
 
+function savedAtLabel(savedAt) {
+  if (!savedAt) return null
+  const d = new Date(savedAt)
+  const now = new Date()
+  const days = Math.floor((now - d) / (1000*60*60*24))
+  if (days === 0) {
+    const h = d.getHours().toString().padStart(2,'0')
+    const m = d.getMinutes().toString().padStart(2,'0')
+    return `hoy ${h}:${m}`
+  }
+  if (days === 1) return 'ayer'
+  return `hace ${days}d`
+}
+
 function WatchlistTable({ tickers, analysisCache, openTrades, lastClosedTrades, onRowClick, onRemove, onRefresh, refreshingTickers }) {
   const [sortCol, setSortCol] = useState(null)   // 'ticker'|'score'|'signal'|'rsi'|'dist'|'rr'
   const [sortDir, setSortDir] = useState('desc')
@@ -171,10 +185,7 @@ function WatchlistTable({ tickers, analysisCache, openTrades, lastClosedTrades, 
                   <td style={{ padding:'10px 10px', whiteSpace:'nowrap' }}>
                     <span style={{ fontFamily:'monospace', fontWeight:700, color:C.text }}>{ticker}</span>
                     {hasActiveTrade && <span style={{ marginLeft:5, fontSize:9, color:C.green }}>📈</span>}
-                    {d?._savedAt && (() => {
-                      const days = Math.floor((Date.now() - new Date(d._savedAt)) / (1000*60*60*24))
-                      return <div style={{ fontSize:9, color:C.muted, marginTop:1 }}>{days === 0 ? 'hoy' : days === 1 ? 'ayer' : `hace ${days}d`}</div>
-                    })()}
+                    {d?._savedAt && <div style={{ fontSize:9, color:C.muted, marginTop:1 }}>{savedAtLabel(d._savedAt)}</div>}
                   </td>
                   <td style={{ padding:'10px 10px', fontFamily:'monospace', color:C.text }}>
                     {analyzed ? `$${d.price?.toFixed(2)}` : <span style={{ color:C.muted }}>—</span>}
