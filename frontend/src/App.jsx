@@ -85,9 +85,14 @@ function WatchlistTable({ tickers, analysisCache, openTrades, lastClosedTrades, 
                 style={{ borderBottom:`1px solid ${C.border}`, cursor:'pointer', transition:'background 0.15s' }}
                 onMouseEnter={e => e.currentTarget.style.background = '#1a2d4533'}
                 onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                <td style={{ padding:'10px 10px', fontFamily:'monospace', fontWeight:700, color:C.text, whiteSpace:'nowrap' }}>
-                  {ticker}
+                <td style={{ padding:'10px 10px', whiteSpace:'nowrap' }}>
+                  <span style={{ fontFamily:'monospace', fontWeight:700, color:C.text }}>{ticker}</span>
                   {hasActiveTrade && <span style={{ marginLeft:5, fontSize:9, color:C.green }}>📈</span>}
+                  {d?._savedAt && (() => {
+                    const days = Math.floor((Date.now() - new Date(d._savedAt)) / (1000*60*60*24))
+                    const label = days === 0 ? 'hoy' : days === 1 ? 'ayer' : `hace ${days}d`
+                    return <div style={{ fontSize:9, color:C.muted, marginTop:1 }}>{label}</div>
+                  })()}
                 </td>
                 <td style={{ padding:'10px 10px', fontFamily:'monospace', color:C.text }}>
                   {analyzed ? `$${d.price?.toFixed(2)}` : <span style={{ color:C.muted }}>—</span>}
@@ -183,24 +188,28 @@ export default function App() {
     return () => subscription.unsubscribe()
   }, [])
 
+  // Ref para acceder al cache actual dentro de callbacks sin stale closure
+  const analysisCacheRef = useRef({})
+
   // ── Load from Supabase (single source of truth) ───────────────────────
   useEffect(() => {
     if (!session) return
     dbLoaded.current = false
     supabase.from('watchlist')
-      .select('tickers, monitor_tickers')
+      .select('tickers, monitor_tickers, analysis_cache')
       .eq('user_id', session.user.id)
       .single()
       .then(({ data, error }) => {
         if (error && error.code !== 'PGRST116') {
-          // Error real de red/BD — NO sobrescribir con defaults, dejar null
-          // El save useEffect no dispara porque dbLoaded sigue false
           console.error('Supabase watchlist load error:', error)
           return
         }
-        // PGRST116 = no existe fila todavía (usuario nuevo) → usar defaults
-        setWatchlist(data?.tickers?.length     ? data.tickers         : DEFAULT_WATCHLIST)
+        setWatchlist(data?.tickers?.length ? data.tickers : DEFAULT_WATCHLIST)
         setMonitorTickers(data?.monitor_tickers?.length ? data.monitor_tickers : [])
+        if (data?.analysis_cache && Object.keys(data.analysis_cache).length > 0) {
+          setAnalysisCache(data.analysis_cache)
+          analysisCacheRef.current = data.analysis_cache
+        }
         dbLoaded.current = true
       })
   }, [session])
@@ -214,6 +223,7 @@ export default function App() {
         user_id:         session.user.id,
         tickers,
         monitor_tickers: monitorList,
+        analysis_cache:  analysisCacheRef.current,
         updated_at:      new Date().toISOString()
       }, { onConflict: 'user_id' })
       setSaved(true)
@@ -224,7 +234,7 @@ export default function App() {
   // Trigger save when either list changes (but only after DB load completes)
   useEffect(() => {
     if (watchlist === null || monitorTickers === null) return
-    if (!dbLoaded.current) return  // evitar sobrescribir datos reales con el state inicial
+    if (!dbLoaded.current) return
     saveToSupabase(watchlist, monitorTickers)
   }, [watchlist, monitorTickers, session]) // eslint-disable-line
 
@@ -290,9 +300,19 @@ export default function App() {
     if (!wl.includes(ticker)) setWatchlist(p => [ticker, ...(p||[])])
   }
 
-  // Cache analysis data from StockCard
+  // Cache analysis data from StockCard — persiste en Supabase
   const cacheAnalysis = (ticker, data) => {
-    setAnalysisCache(prev => ({ ...prev, [ticker]: data }))
+    const entry = { ...data, _savedAt: new Date().toISOString() }
+    const next = { ...analysisCacheRef.current, [ticker]: entry }
+    analysisCacheRef.current = next
+    setAnalysisCache(next)
+    if (session && dbLoaded.current) {
+      supabase.from('watchlist').upsert({
+        user_id:        session.user.id,
+        analysis_cache: next,
+        updated_at:     new Date().toISOString()
+      }, { onConflict: 'user_id' })
+    }
   }
 
   const [refreshingTickers, setRefreshingTickers] = useState({})  // { AAPL: true }
@@ -304,7 +324,7 @@ export default function App() {
       const res = await fetch(`/api/analyze/${ticker}`)
       if (res.ok) {
         const json = await res.json()
-        setAnalysisCache(prev => ({ ...prev, [ticker]: json }))
+        cacheAnalysis(ticker, json)
       }
     } catch {}
     setRefreshingTickers(prev => { const n = {...prev}; delete n[ticker]; return n })

@@ -466,8 +466,15 @@ export default function StockCard({ ticker, onRemove, session, onMonitor, onAnal
               {data.change >= 0 ? '+' : ''}{data.change?.toFixed(2)}% hoy
             </div>
           </div>
-          <div style={{ fontSize:9, color: data.isRealtime ? C.green : C.amber, marginTop:3, opacity:0.8 }}>
-            {data.isRealtime ? '⏱ Precio con 15 min de delay' : '⏱ Precio de cierre anterior · verifica en broker'}
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:3 }}>
+            <div style={{ fontSize:9, color: data.isRealtime ? C.green : C.amber, opacity:0.8 }}>
+              {data.isRealtime ? '⏱ Precio con 15 min de delay' : '⏱ Precio de cierre anterior · verifica en broker'}
+            </div>
+            {data._savedAt && (() => {
+              const days = Math.floor((Date.now() - new Date(data._savedAt)) / (1000*60*60*24))
+              const label = days === 0 ? 'Actualizado hoy' : days === 1 ? 'Actualizado ayer' : `Actualizado hace ${days}d`
+              return <div style={{ fontSize:9, color:C.muted, opacity:0.7 }}>{label}</div>
+            })()}
           </div>
           <Sparkline
             prices={data.prices20d}
