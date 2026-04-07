@@ -37,114 +37,197 @@ const C = {
 const SIGNAL_LABEL = { buy:'COMPRAR', sell:'VENDER', hold:'ESPERAR', avoid:'EVITAR', monitor:'MONITOREAR' }
 const SIGNAL_COLOR = { buy:'#00e096', sell:'#ff4060', hold:'#ffb800', avoid:'#888888', monitor:'#00aaff' }
 
+const SIGNAL_ORDER = { buy:0, monitor:1, hold:2, avoid:3, sell:4 }
+
 function WatchlistTable({ tickers, analysisCache, openTrades, lastClosedTrades, onRowClick, onRemove, onRefresh, refreshingTickers }) {
-  const rows = tickers.map(ticker => {
+  const [sortCol, setSortCol] = useState(null)   // 'ticker'|'score'|'signal'|'rsi'|'dist'|'rr'
+  const [sortDir, setSortDir] = useState('desc')
+  const [filterSignal, setFilterSignal] = useState('all')
+  const [filterText,   setFilterText]   = useState('')
+
+  const handleSort = (col) => {
+    if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortCol(col); setSortDir('desc') }
+  }
+
+  const distPct = (d) => {
+    if (!d?.entryLow || !d?.entryHigh || !d?.price) return null
+    const mid = (d.entryLow + d.entryHigh) / 2
+    return (d.price - mid) / mid * 100
+  }
+
+  let rows = tickers.map(ticker => {
     const d = analysisCache[ticker]
-    return { ticker, d }
+    return { ticker, d, analyzed: !!(d && !d.error) }
   })
 
+  // Filtro texto
+  if (filterText) rows = rows.filter(r => r.ticker.includes(filterText.toUpperCase()))
+
+  // Filtro señal
+  if (filterSignal !== 'all') rows = rows.filter(r => r.d?.signal === filterSignal)
+
+  // Ordenamiento
+  if (sortCol) {
+    rows = [...rows].sort((a, b) => {
+      let va, vb
+      if (sortCol === 'ticker')  { va = a.ticker;            vb = b.ticker }
+      if (sortCol === 'score')   { va = a.d?.successRate??-1; vb = b.d?.successRate??-1 }
+      if (sortCol === 'signal')  { va = SIGNAL_ORDER[a.d?.signal]??99; vb = SIGNAL_ORDER[b.d?.signal]??99 }
+      if (sortCol === 'rsi')     { va = a.d?.rsi??-1;        vb = b.d?.rsi??-1 }
+      if (sortCol === 'rr')      { va = a.d?.rr??-1;         vb = b.d?.rr??-1 }
+      if (sortCol === 'dist')    { va = distPct(a.d)??999;   vb = distPct(b.d)??999 }
+      if (va < vb) return sortDir === 'asc' ? -1 : 1
+      if (va > vb) return sortDir === 'asc' ? 1 : -1
+      return 0
+    })
+  }
+
+  const SortIcon = ({ col }) => {
+    if (sortCol !== col) return <span style={{ opacity:0.3, marginLeft:3 }}>↕</span>
+    return <span style={{ marginLeft:3, color:C.accent }}>{sortDir === 'asc' ? '↑' : '↓'}</span>
+  }
+
+  const thStyle = (col) => ({
+    padding:'8px 10px', textAlign:'left', fontSize:10, color: sortCol===col ? C.accent : C.muted,
+    letterSpacing:'0.07em', textTransform:'uppercase', fontWeight:600, whiteSpace:'nowrap',
+    cursor: col ? 'pointer' : 'default', userSelect:'none'
+  })
+
+  const SIGNALS = ['buy','monitor','hold','avoid','sell']
+
   return (
-    <div style={{ overflowX:'auto' }}>
-      <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
-        <thead>
-          <tr style={{ borderBottom:`1px solid ${C.border}` }}>
-            {['Ticker','Precio','Score','Señal','RSI','Zona entrada','Dist. rango','R:B',''].map(h => (
-              <th key={h} style={{ padding:'8px 10px', textAlign:'left', fontSize:10, color:C.muted, letterSpacing:'0.07em', textTransform:'uppercase', fontWeight:600, whiteSpace:'nowrap' }}>{h}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(({ ticker, d }) => {
-            const analyzed = d && !d.error
-            const signalColor = analyzed ? (SIGNAL_COLOR[d.signal] || C.muted) : C.muted
-            const scoreColor  = analyzed ? (d.successRate >= 65 ? C.green : d.successRate >= 45 ? C.amber : C.red) : C.muted
-            const rrColor     = analyzed ? (d.rr >= 3 ? C.green : d.rr >= 2.5 ? C.amber : C.red) : C.muted
-            const hasActiveTrade = !!openTrades[ticker]
-
-            // Distancia al rango de entrada
-            let distLabel = '—'
-            let distColor = C.muted
-            if (analyzed && d.entryLow && d.entryHigh && d.price) {
-              const mid = (d.entryLow + d.entryHigh) / 2
-              const pct = ((d.price - mid) / mid * 100)
-              if (d.price >= d.entryLow && d.price <= d.entryHigh) {
-                distLabel = '● En rango'
-                distColor = C.green
-              } else if (pct > 0) {
-                distLabel = `+${pct.toFixed(1)}% arriba`
-                distColor = C.amber
-              } else {
-                distLabel = `${pct.toFixed(1)}% abajo`
-                distColor = C.accent
-              }
-            }
-
-            return (
-              <tr key={ticker}
-                onClick={() => onRowClick(ticker)}
-                style={{ borderBottom:`1px solid ${C.border}`, cursor:'pointer', transition:'background 0.15s' }}
-                onMouseEnter={e => e.currentTarget.style.background = '#1a2d4533'}
-                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                <td style={{ padding:'10px 10px', whiteSpace:'nowrap' }}>
-                  <span style={{ fontFamily:'monospace', fontWeight:700, color:C.text }}>{ticker}</span>
-                  {hasActiveTrade && <span style={{ marginLeft:5, fontSize:9, color:C.green }}>📈</span>}
-                  {d?._savedAt && (() => {
-                    const days = Math.floor((Date.now() - new Date(d._savedAt)) / (1000*60*60*24))
-                    const label = days === 0 ? 'hoy' : days === 1 ? 'ayer' : `hace ${days}d`
-                    return <div style={{ fontSize:9, color:C.muted, marginTop:1 }}>{label}</div>
-                  })()}
-                </td>
-                <td style={{ padding:'10px 10px', fontFamily:'monospace', color:C.text }}>
-                  {analyzed ? `$${d.price?.toFixed(2)}` : <span style={{ color:C.muted }}>—</span>}
-                </td>
-                <td style={{ padding:'10px 10px', fontFamily:'monospace', fontWeight:700, color:scoreColor }}>
-                  {analyzed ? d.successRate : <span style={{ color:C.muted }}>—</span>}
-                </td>
-                <td style={{ padding:'10px 10px' }}>
-                  {analyzed
-                    ? <span style={{ background: signalColor+'18', color:signalColor, fontSize:10, fontWeight:700, padding:'2px 8px', borderRadius:99 }}>
-                        {SIGNAL_LABEL[d.signal] || d.signal?.toUpperCase() || '—'}
-                      </span>
-                    : <span style={{ color:C.muted }}>—</span>}
-                </td>
-                <td style={{ padding:'10px 10px', fontFamily:'monospace', color: analyzed && d.rsi < 30 ? C.green : analyzed && d.rsi > 70 ? C.red : C.text }}>
-                  {analyzed ? d.rsi?.toFixed(0) : <span style={{ color:C.muted }}>—</span>}
-                </td>
-                <td style={{ padding:'10px 10px', fontFamily:'monospace', color:C.green, fontSize:11 }}>
-                  {analyzed && d.entryLow ? `$${d.entryLow?.toFixed(2)}–$${d.entryHigh?.toFixed(2)}` : <span style={{ color:C.muted }}>—</span>}
-                </td>
-                <td style={{ padding:'10px 10px', fontFamily:'monospace', fontSize:11, color:distColor, whiteSpace:'nowrap' }}>
-                  {distLabel}
-                </td>
-                <td style={{ padding:'10px 10px', fontFamily:'monospace', fontWeight:700, color:rrColor }}>
-                  {analyzed ? `${(d.rr||0).toFixed(1)}x` : <span style={{ color:C.muted }}>—</span>}
-                </td>
-                <td style={{ padding:'10px 8px', whiteSpace:'nowrap' }} onClick={e => e.stopPropagation()}>
-                  <button onClick={() => onRefresh(ticker)} title="Actualizar análisis"
-                    disabled={!!refreshingTickers?.[ticker]}
-                    style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:5,
-                      color: refreshingTickers?.[ticker] ? C.accent : C.muted,
-                      cursor: refreshingTickers?.[ticker] ? 'not-allowed' : 'pointer',
-                      padding:'3px 7px', fontSize:11, marginRight:4,
-                      animation: refreshingTickers?.[ticker] ? 'spin 0.7s linear infinite' : 'none' }}>
-                    ↻
-                  </button>
-                  <button onClick={() => onRemove(ticker)} title="Eliminar de watchlist"
-                    style={{ background:'none', border:`1px solid ${C.red}44`, borderRadius:5,
-                      color:C.red, cursor:'pointer', padding:'3px 7px', fontSize:11, opacity:0.7 }}>
-                    ×
-                  </button>
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-      {rows.every(r => !r.d) && (
-        <div style={{ textAlign:'center', padding:'40px', color:C.muted, fontSize:13 }}>
-          Analiza los tickers primero para ver la tabla comparativa
+    <div>
+      {/* Barra de filtros */}
+      <div style={{ display:'flex', gap:8, padding:'10px 12px', borderBottom:`1px solid ${C.border}`, flexWrap:'wrap', alignItems:'center' }}>
+        <input
+          value={filterText}
+          onChange={e => setFilterText(e.target.value)}
+          placeholder="Buscar ticker…"
+          style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:7, padding:'5px 10px',
+            color:C.text, fontSize:11, outline:'none', width:120 }}
+        />
+        <div style={{ display:'flex', gap:4 }}>
+          <button onClick={() => setFilterSignal('all')}
+            style={{ background: filterSignal==='all' ? C.accent+'22' : 'none',
+              border:`1px solid ${filterSignal==='all' ? C.accent : C.border}`,
+              borderRadius:6, color: filterSignal==='all' ? C.accent : C.muted,
+              padding:'4px 10px', cursor:'pointer', fontSize:10, fontWeight:600 }}>
+            Todas
+          </button>
+          {SIGNALS.map(s => (
+            <button key={s} onClick={() => setFilterSignal(f => f===s ? 'all' : s)}
+              style={{ background: filterSignal===s ? SIGNAL_COLOR[s]+'22' : 'none',
+                border:`1px solid ${filterSignal===s ? SIGNAL_COLOR[s] : C.border}`,
+                borderRadius:6, color: filterSignal===s ? SIGNAL_COLOR[s] : C.muted,
+                padding:'4px 10px', cursor:'pointer', fontSize:10, fontWeight:600 }}>
+              {SIGNAL_LABEL[s]}
+            </button>
+          ))}
         </div>
-      )}
+        {(filterText || filterSignal !== 'all') && (
+          <button onClick={() => { setFilterText(''); setFilterSignal('all') }}
+            style={{ background:'none', border:'none', color:C.muted, cursor:'pointer', fontSize:11 }}>
+            ✕ Limpiar
+          </button>
+        )}
+        <span style={{ marginLeft:'auto', fontSize:10, color:C.muted }}>{rows.length} / {tickers.length}</span>
+      </div>
+
+      <div style={{ overflowX:'auto' }}>
+        <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+          <thead>
+            <tr style={{ borderBottom:`1px solid ${C.border}` }}>
+              <th style={thStyle('ticker')} onClick={() => handleSort('ticker')}>Ticker <SortIcon col="ticker"/></th>
+              <th style={thStyle(null)}>Precio</th>
+              <th style={thStyle('score')} onClick={() => handleSort('score')}>Score <SortIcon col="score"/></th>
+              <th style={thStyle('signal')} onClick={() => handleSort('signal')}>Señal <SortIcon col="signal"/></th>
+              <th style={thStyle('rsi')} onClick={() => handleSort('rsi')}>RSI <SortIcon col="rsi"/></th>
+              <th style={thStyle(null)}>Zona entrada</th>
+              <th style={thStyle('dist')} onClick={() => handleSort('dist')}>Dist. rango <SortIcon col="dist"/></th>
+              <th style={thStyle('rr')} onClick={() => handleSort('rr')}>R:B <SortIcon col="rr"/></th>
+              <th style={thStyle(null)}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(({ ticker, d, analyzed }) => {
+              const signalColor = analyzed ? (SIGNAL_COLOR[d.signal] || C.muted) : C.muted
+              const scoreColor  = analyzed ? (d.successRate >= 65 ? C.green : d.successRate >= 45 ? C.amber : C.red) : C.muted
+              const rrColor     = analyzed ? (d.rr >= 3 ? C.green : d.rr >= 2.5 ? C.amber : C.red) : C.muted
+              const hasActiveTrade = !!openTrades[ticker]
+              const pct = distPct(d)
+              let distLabel = '—', distColor = C.muted
+              if (pct !== null) {
+                if (d.price >= d.entryLow && d.price <= d.entryHigh) { distLabel = '● En rango'; distColor = C.green }
+                else if (pct > 0) { distLabel = `+${pct.toFixed(1)}% arriba`; distColor = C.amber }
+                else              { distLabel = `${pct.toFixed(1)}% abajo`;   distColor = C.accent }
+              }
+              return (
+                <tr key={ticker}
+                  onClick={() => onRowClick(ticker)}
+                  style={{ borderBottom:`1px solid ${C.border}`, cursor:'pointer', transition:'background 0.15s' }}
+                  onMouseEnter={e => e.currentTarget.style.background = '#1a2d4533'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                  <td style={{ padding:'10px 10px', whiteSpace:'nowrap' }}>
+                    <span style={{ fontFamily:'monospace', fontWeight:700, color:C.text }}>{ticker}</span>
+                    {hasActiveTrade && <span style={{ marginLeft:5, fontSize:9, color:C.green }}>📈</span>}
+                    {d?._savedAt && (() => {
+                      const days = Math.floor((Date.now() - new Date(d._savedAt)) / (1000*60*60*24))
+                      return <div style={{ fontSize:9, color:C.muted, marginTop:1 }}>{days === 0 ? 'hoy' : days === 1 ? 'ayer' : `hace ${days}d`}</div>
+                    })()}
+                  </td>
+                  <td style={{ padding:'10px 10px', fontFamily:'monospace', color:C.text }}>
+                    {analyzed ? `$${d.price?.toFixed(2)}` : <span style={{ color:C.muted }}>—</span>}
+                  </td>
+                  <td style={{ padding:'10px 10px', fontFamily:'monospace', fontWeight:700, color:scoreColor }}>
+                    {analyzed ? d.successRate : <span style={{ color:C.muted }}>—</span>}
+                  </td>
+                  <td style={{ padding:'10px 10px' }}>
+                    {analyzed
+                      ? <span style={{ background:signalColor+'18', color:signalColor, fontSize:10, fontWeight:700, padding:'2px 8px', borderRadius:99 }}>
+                          {SIGNAL_LABEL[d.signal] || d.signal?.toUpperCase() || '—'}
+                        </span>
+                      : <span style={{ color:C.muted }}>—</span>}
+                  </td>
+                  <td style={{ padding:'10px 10px', fontFamily:'monospace', color: analyzed && d.rsi < 30 ? C.green : analyzed && d.rsi > 70 ? C.red : C.text }}>
+                    {analyzed ? d.rsi?.toFixed(0) : <span style={{ color:C.muted }}>—</span>}
+                  </td>
+                  <td style={{ padding:'10px 10px', fontFamily:'monospace', color:C.green, fontSize:11 }}>
+                    {analyzed && d.entryLow ? `$${d.entryLow?.toFixed(2)}–$${d.entryHigh?.toFixed(2)}` : <span style={{ color:C.muted }}>—</span>}
+                  </td>
+                  <td style={{ padding:'10px 10px', fontFamily:'monospace', fontSize:11, color:distColor, whiteSpace:'nowrap' }}>
+                    {distLabel}
+                  </td>
+                  <td style={{ padding:'10px 10px', fontFamily:'monospace', fontWeight:700, color:rrColor }}>
+                    {analyzed ? `${(d.rr||0).toFixed(1)}x` : <span style={{ color:C.muted }}>—</span>}
+                  </td>
+                  <td style={{ padding:'10px 8px', whiteSpace:'nowrap' }} onClick={e => e.stopPropagation()}>
+                    <button onClick={() => onRefresh(ticker)} title="Actualizar análisis"
+                      disabled={!!refreshingTickers?.[ticker]}
+                      style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:5,
+                        color: refreshingTickers?.[ticker] ? C.accent : C.muted,
+                        cursor: refreshingTickers?.[ticker] ? 'not-allowed' : 'pointer',
+                        padding:'3px 7px', fontSize:11, marginRight:4,
+                        animation: refreshingTickers?.[ticker] ? 'spin 0.7s linear infinite' : 'none' }}>
+                      ↻
+                    </button>
+                    <button onClick={() => onRemove(ticker)} title="Eliminar de watchlist"
+                      style={{ background:'none', border:`1px solid ${C.red}44`, borderRadius:5,
+                        color:C.red, cursor:'pointer', padding:'3px 7px', fontSize:11, opacity:0.7 }}>
+                      ×
+                    </button>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+        {rows.length === 0 && (
+          <div style={{ textAlign:'center', padding:'40px', color:C.muted, fontSize:13 }}>
+            {filterText || filterSignal !== 'all' ? 'Sin resultados para este filtro' : 'Analiza los tickers primero para ver la tabla comparativa'}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
