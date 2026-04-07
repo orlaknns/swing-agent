@@ -305,6 +305,7 @@ export default function App() {
         const tickers       = data?.tickers?.length         ? data.tickers         : DEFAULT_WATCHLIST
         const monitorList   = data?.monitor_tickers?.length ? data.monitor_tickers : []
         const cachedAnalysis = data?.analysis_cache || {}
+        console.log('[load] tickers:', tickers.length, '— cache keys:', Object.keys(cachedAnalysis))
         setWatchlist(tickers)
         setMonitorTickers(monitorList)
         watchlistRef.current      = tickers
@@ -345,7 +346,8 @@ export default function App() {
     if (watchlist === null || monitorTickers === null) return
     if (!dbLoaded.current) return
     // La primera vez que corre tras la carga inicial, solo marca listsReady sin guardar
-    if (!listsReady.current) { listsReady.current = true; return }
+    if (!listsReady.current) { listsReady.current = true; console.log('[lists useEffect] skip inicial, cache keys:', Object.keys(analysisCacheRef.current).length); return }
+    console.log('[lists useEffect] guardando, cache keys:', Object.keys(analysisCacheRef.current).length)
     saveToSupabase(watchlist, monitorTickers)
   }, [watchlist, monitorTickers, session]) // eslint-disable-line
 
@@ -417,7 +419,15 @@ export default function App() {
     const next = { ...analysisCacheRef.current, [ticker]: entry }
     analysisCacheRef.current = next
     setAnalysisCache(next)
-    if (dbLoaded.current) upsertAll(null, null, next)
+    if (dbLoaded.current) {
+      console.log('[cacheAnalysis] guardando', ticker, '— keys en cache:', Object.keys(next).length)
+      upsertAll(null, null, next).then(({ error }) => {
+        if (error) console.error('[cacheAnalysis] upsert ERROR:', error)
+        else console.log('[cacheAnalysis] upsert OK para', ticker)
+      })
+    } else {
+      console.warn('[cacheAnalysis] dbLoaded=false, NO guardado para', ticker)
+    }
   }
 
   const [refreshingTickers, setRefreshingTickers] = useState({})  // { AAPL: true }
