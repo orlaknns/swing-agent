@@ -37,7 +37,7 @@ const C = {
 const SIGNAL_LABEL = { buy:'COMPRAR', sell:'VENDER', hold:'ESPERAR', avoid:'EVITAR', monitor:'MONITOREAR' }
 const SIGNAL_COLOR = { buy:'#00e096', sell:'#ff4060', hold:'#ffb800', avoid:'#888888', monitor:'#00aaff' }
 
-function WatchlistTable({ tickers, analysisCache, openTrades, lastClosedTrades, onRowClick }) {
+function WatchlistTable({ tickers, analysisCache, openTrades, lastClosedTrades, onRowClick, onRemove, onRefresh }) {
   const rows = tickers.map(ticker => {
     const d = analysisCache[ticker]
     return { ticker, d }
@@ -48,7 +48,7 @@ function WatchlistTable({ tickers, analysisCache, openTrades, lastClosedTrades, 
       <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
         <thead>
           <tr style={{ borderBottom:`1px solid ${C.border}` }}>
-            {['Ticker','Precio','Score','Señal','RSI','Zona entrada','Dist. rango','R:B'].map(h => (
+            {['Ticker','Precio','Score','Señal','RSI','Zona entrada','Dist. rango','R:B',''].map(h => (
               <th key={h} style={{ padding:'8px 10px', textAlign:'left', fontSize:10, color:C.muted, letterSpacing:'0.07em', textTransform:'uppercase', fontWeight:600, whiteSpace:'nowrap' }}>{h}</th>
             ))}
           </tr>
@@ -113,6 +113,18 @@ function WatchlistTable({ tickers, analysisCache, openTrades, lastClosedTrades, 
                 </td>
                 <td style={{ padding:'10px 10px', fontFamily:'monospace', fontWeight:700, color:rrColor }}>
                   {analyzed ? `${(d.rr||0).toFixed(1)}x` : <span style={{ color:C.muted }}>—</span>}
+                </td>
+                <td style={{ padding:'10px 8px', whiteSpace:'nowrap' }} onClick={e => e.stopPropagation()}>
+                  <button onClick={() => onRefresh(ticker)} title="Actualizar análisis"
+                    style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:5,
+                      color:C.muted, cursor:'pointer', padding:'3px 7px', fontSize:11, marginRight:4 }}>
+                    ↻
+                  </button>
+                  <button onClick={() => onRemove(ticker)} title="Eliminar de watchlist"
+                    style={{ background:'none', border:`1px solid ${C.red}44`, borderRadius:5,
+                      color:C.red, cursor:'pointer', padding:'3px 7px', fontSize:11, opacity:0.7 }}>
+                    ×
+                  </button>
                 </td>
               </tr>
             )
@@ -279,6 +291,12 @@ export default function App() {
     setAnalysisCache(prev => ({ ...prev, [ticker]: data }))
   }
 
+  // Refresh desde tabla: limpia cache y abre el modal para re-analizar
+  const refreshFromTable = (ticker) => {
+    setAnalysisCache(prev => { const n = {...prev}; delete n[ticker]; return n })
+    setTableModal(ticker)
+  }
+
   const signOut = async () => { await supabase.auth.signOut() }
 
   if (appLoading) return (
@@ -394,6 +412,8 @@ export default function App() {
                       openTrades={openTrades}
                       lastClosedTrades={lastClosedTrades}
                       onRowClick={setTableModal}
+                      onRemove={removeFromAll}
+                      onRefresh={refreshFromTable}
                     />
                   </div>
                 ) : (
@@ -461,6 +481,8 @@ export default function App() {
                       openTrades={openTrades}
                       lastClosedTrades={lastClosedTrades}
                       onRowClick={setTableModal}
+                      onRemove={removeFromAll}
+                      onRefresh={refreshFromTable}
                     />
                   </div>
                 ) : (
