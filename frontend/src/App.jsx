@@ -188,8 +188,10 @@ export default function App() {
     return () => subscription.unsubscribe()
   }, [])
 
-  // Ref para acceder al cache actual dentro de callbacks sin stale closure
-  const analysisCacheRef = useRef({})
+  // Refs para acceder a valores actuales dentro de callbacks sin stale closure
+  const analysisCacheRef  = useRef({})
+  const watchlistRef      = useRef([])
+  const monitorTickersRef = useRef([])
 
   // ── Load from Supabase (single source of truth) ───────────────────────
   useEffect(() => {
@@ -204,29 +206,39 @@ export default function App() {
           console.error('Supabase watchlist load error:', error)
           return
         }
-        setWatchlist(data?.tickers?.length ? data.tickers : DEFAULT_WATCHLIST)
-        setMonitorTickers(data?.monitor_tickers?.length ? data.monitor_tickers : [])
-        console.log('[load] analysis_cache keys:', Object.keys(data?.analysis_cache || {}))
-        if (data?.analysis_cache && Object.keys(data.analysis_cache).length > 0) {
-          setAnalysisCache(data.analysis_cache)
-          analysisCacheRef.current = data.analysis_cache
-        }
+        const tickers       = data?.tickers?.length         ? data.tickers         : DEFAULT_WATCHLIST
+        const monitorList   = data?.monitor_tickers?.length ? data.monitor_tickers : []
+        const cachedAnalysis = data?.analysis_cache || {}
+        setWatchlist(tickers)
+        setMonitorTickers(monitorList)
+        watchlistRef.current      = tickers
+        monitorTickersRef.current = monitorList
+        analysisCacheRef.current  = cachedAnalysis
+        if (Object.keys(cachedAnalysis).length > 0) setAnalysisCache(cachedAnalysis)
         dbLoaded.current = true
       })
   }, [session])
 
-  // ── Save to Supabase — debounced, only when both are loaded ───────────
-  // Solo guarda tickers y monitor_tickers — el analysis_cache lo guarda cacheAnalysis por separado
+  // Helper: upsert completo con todos los campos siempre
+  const upsertAll = (tickers, monitorList, cache) => {
+    if (!session) return
+    return supabase.from('watchlist').upsert({
+      user_id:         session.user.id,
+      tickers:         tickers         ?? watchlistRef.current,
+      monitor_tickers: monitorList     ?? monitorTickersRef.current,
+      analysis_cache:  cache           ?? analysisCacheRef.current,
+      updated_at:      new Date().toISOString()
+    }, { onConflict: 'user_id' })
+  }
+
+  // ── Save listas — debounced ────────────────────────────────────────────
   const saveToSupabase = (tickers, monitorList) => {
     if (!session || tickers === null || monitorList === null) return
+    watchlistRef.current      = tickers
+    monitorTickersRef.current = monitorList
     if (saveTimer.current) clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(async () => {
-      await supabase.from('watchlist').upsert({
-        user_id:         session.user.id,
-        tickers,
-        monitor_tickers: monitorList,
-        updated_at:      new Date().toISOString()
-      }, { onConflict: 'user_id' })
+      await upsertAll(tickers, monitorList, null)
       setSaved(true)
       setTimeout(() => setSaved(false), 1500)
     }, 800)
@@ -307,19 +319,7 @@ export default function App() {
     const next = { ...analysisCacheRef.current, [ticker]: entry }
     analysisCacheRef.current = next
     setAnalysisCache(next)
-    if (session && dbLoaded.current) {
-      supabase.from('watchlist').upsert({
-        user_id:        session.user.id,
-        analysis_cache: next,
-        updated_at:     new Date().toISOString()
-      }, { onConflict: 'user_id' })
-      .then(({ error }) => {
-        if (error) console.error('[cacheAnalysis] upsert error:', error)
-        else console.log('[cacheAnalysis] guardado OK para', ticker)
-      })
-    } else {
-      console.warn('[cacheAnalysis] no guardado — session:', !!session, 'dbLoaded:', dbLoaded.current)
-    }
+    if (dbLoaded.current) upsertAll(null, null, next)
   }
 
   const [refreshingTickers, setRefreshingTickers] = useState({})  // { AAPL: true }
