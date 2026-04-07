@@ -1,0 +1,97 @@
+SWING TRADING AGENT — MEJORAS POTENCIALES
+Última revisión: 2026-04-05 (actualizado)
+========================================
+
+ESTADO LEYENDA
+[ ] Pendiente de evaluar
+[~] En evaluación / discutida
+[x] Implementada
+
+
+------------------------------------------------------------------------
+PRIORIDAD ALTA — Alto impacto, baja complejidad
+------------------------------------------------------------------------
+
+[x] 1. MINI CHART EN TARJETA (sparkline 7–30 días)
+    Impacto usuario: Alto
+    Complejidad: Baja (datos ya disponibles en Alpha Vantage TIME_SERIES_DAILY)
+    Ver detalle en sección inferior.
+
+[~] 2. POSITION SIZING INTEGRADO
+    Impacto usuario: Alto
+    Complejidad: Baja
+    Ver detalle en sección inferior.
+
+[x] 3. VISTA TABLA COMPARATIVA DE WATCHLIST
+    Impacto usuario: Medio-alto
+    Complejidad: Baja
+    Ver detalle en sección inferior.
+
+------------------------------------------------------------------------
+PRIORIDAD MEDIA — Alto impacto, complejidad media
+------------------------------------------------------------------------
+
+[ ] 4. ALERTAS DE PRECIO
+    Impacto usuario: Muy alto
+    Complejidad: Media
+    Descripción: Notificar al usuario cuando el precio de una acción entra
+    al rango de entrada (entryLow–entryHigh), cuando se activa el stop-loss,
+    o cuando el setup decay llega a zona roja.
+    Canales posibles: email (Supabase Edge Functions + Resend/SendGrid),
+    notificación push (Web Push API o servicio externo).
+    Transforma la app de "consulta manual" a "agente proactivo".
+
+[ ] 5. ANALYTICS DEL JOURNAL (patrones personales)
+    Impacto usuario: Alto
+    Complejidad: Media
+    Descripción: Extraer patrones del historial propio del usuario.
+    Win rate por sector, por señal (buy/watch), por rango de RSI, por día
+    de la semana. Mostrar "tus mejores condiciones de entrada" calculado
+    desde sus propios trades. Convierte el journal en un coach personal
+    basado en datos reales.
+
+[ ] 6. CONTEXTO MACRO / CLIMA DE MERCADO
+    Impacto usuario: Medio
+    Complejidad: Baja
+    Descripción: Barra de contexto visible en todas las tarjetas con
+    indicadores de mercado: VIX, tendencia S&P500, Fear & Greed index.
+    El análisis técnico no vive en un vacío — un trade antes de datos
+    de inflación o reunión Fed tiene más riesgo.
+
+------------------------------------------------------------------------
+PRIORIDAD MEDIA-ALTA — Alto impacto, complejidad alta
+------------------------------------------------------------------------
+
+[ ] 7. BACKTESTING BÁSICO DEL SCREENER
+    Impacto usuario: Alto
+    Complejidad: Alta
+    Descripción: Para cada candidato del screener, mostrar cuántas veces
+    históricamente esa acción cumplió los mismos criterios (SMA21>SMA50,
+    RSI 30–60) y cuál fue el resultado promedio. Da confianza cuantificada
+    en el setup, no solo señales técnicas.
+
+[ ] 8. MODO MULTI-USUARIO / PORTAFOLIO COMPARTIDO
+    Impacto industria: Alto
+    Complejidad: Alta
+    Descripción: Workspaces compartidos para fondos pequeños, grupos de
+    inversión familiar, o mentores con alumnos. Un usuario "admin" edita,
+    otros "viewer" solo ven. Comentarios por acción visibles para todos.
+    Abre la app a un segmento de mercado completamente nuevo (B2B pequeño).
+
+------------------------------------------------------------------------
+RESUMEN TABLA
+------------------------------------------------------------------------
+
+#  Funcionalidad                  Impacto usuario   Complejidad   Estado
+-  ------------------------------  ----------------  ------------  ------
+1  Mini chart en tarjeta           Alto              Baja          [x]
+2  Position sizing integrado       Alto              Baja          [~]
+3  Vista tabla comparativa         Medio-alto        Baja          [x]
+4  Alertas de precio               Muy alto          Media         [ ]
+5  Analytics del journal           Alto              Media         [ ]
+6  Contexto macro / VIX            Medio             Baja          [ ]
+7  Backtesting screener            Alto              Alta          [ ]
+8  Multi-usuario / compartido      Alto (industria)  Alta          [ ]
+
+========================================
+FIN DEL DOCUMENTO
