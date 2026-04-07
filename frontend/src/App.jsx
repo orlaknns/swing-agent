@@ -215,6 +215,7 @@ export default function App() {
   }, [session])
 
   // ── Save to Supabase — debounced, only when both are loaded ───────────
+  // Solo guarda tickers y monitor_tickers — el analysis_cache lo guarda cacheAnalysis por separado
   const saveToSupabase = (tickers, monitorList) => {
     if (!session || tickers === null || monitorList === null) return
     if (saveTimer.current) clearTimeout(saveTimer.current)
@@ -223,7 +224,6 @@ export default function App() {
         user_id:         session.user.id,
         tickers,
         monitor_tickers: monitorList,
-        analysis_cache:  analysisCacheRef.current,
         updated_at:      new Date().toISOString()
       }, { onConflict: 'user_id' })
       setSaved(true)
