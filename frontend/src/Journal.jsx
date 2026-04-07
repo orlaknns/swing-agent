@@ -316,6 +316,7 @@ export default function Journal({ session }) {
   const [loading,       setLoading]       = useState(true)
   const [selected,      setSelected]      = useState(null)
   const [filter,        setFilter]        = useState('open')
+  const [searchTicker,  setSearchTicker]  = useState('')
   const [confirmDelete, setConfirmDelete] = useState(null) // trade a eliminar
 
   useEffect(() => {
@@ -340,7 +341,9 @@ export default function Journal({ session }) {
     setConfirmDelete(null)
   }
 
-  const filtered = filter === 'all' ? trades : trades.filter(t => t.status === filter)
+  const filtered = trades
+    .filter(t => filter === 'all' || t.status === filter)
+    .filter(t => !searchTicker || t.ticker.includes(searchTicker.toUpperCase().trim()))
   const stats = {
     total:  trades.length,
     open:   trades.filter(t => ['open','breakeven','partial'].includes(t.status)).length,
@@ -381,13 +384,33 @@ export default function Journal({ session }) {
       )}
 
       {trades.length > 0 && (
-        <div style={{ display:'flex', gap:6, marginBottom:14 }}>
+        <div style={{ display:'flex', gap:6, marginBottom:14, flexWrap:'wrap', alignItems:'center' }}>
           {[['all','Todas'],['open','Abiertas'],['breakeven','Breakeven'],['partial','Parciales'],['closed','Cerradas']].map(([k,l])=>(
             <button key={k} onClick={()=>setFilter(k)}
               style={{background:filter===k?C.accent:'none',border:`1px solid ${filter===k?C.accent:C.border}`,borderRadius:6,
                 color:filter===k?'#000':C.muted,padding:'4px 12px',cursor:'pointer',fontSize:11,fontWeight:filter===k?700:400}}>
               {l}</button>
           ))}
+          <div style={{ marginLeft:'auto', position:'relative' }}>
+            <input
+              value={searchTicker}
+              onChange={e => setSearchTicker(e.target.value)}
+              placeholder="Buscar ticker…"
+              style={{ background:C.bg, border:`1px solid ${searchTicker ? C.accent : C.border}`,
+                borderRadius:7, padding:'4px 28px 4px 10px', color:C.text, fontSize:11,
+                outline:'none', width:130 }}
+            />
+            {searchTicker && (
+              <button onClick={() => setSearchTicker('')}
+                style={{ position:'absolute', right:6, top:'50%', transform:'translateY(-50%)',
+                  background:'none', border:'none', color:C.muted, cursor:'pointer', fontSize:13, lineHeight:1, padding:0 }}>
+                ×
+              </button>
+            )}
+          </div>
+          {searchTicker && (
+            <span style={{ fontSize:10, color:C.muted }}>{filtered.length} resultado{filtered.length !== 1 ? 's' : ''}</span>
+          )}
         </div>
       )}
 
