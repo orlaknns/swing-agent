@@ -37,7 +37,7 @@ const C = {
 const SIGNAL_LABEL = { buy:'COMPRAR', sell:'VENDER', hold:'ESPERAR', avoid:'EVITAR', monitor:'MONITOREAR' }
 const SIGNAL_COLOR = { buy:'#00e096', sell:'#ff4060', hold:'#ffb800', avoid:'#888888', monitor:'#00aaff' }
 
-function WatchlistTable({ tickers, analysisCache, openTrades, lastClosedTrades, onRowClick, onRemove, onRefresh }) {
+function WatchlistTable({ tickers, analysisCache, openTrades, lastClosedTrades, onRowClick, onRemove, onRefresh, refreshingTickers }) {
   const rows = tickers.map(ticker => {
     const d = analysisCache[ticker]
     return { ticker, d }
@@ -116,8 +116,12 @@ function WatchlistTable({ tickers, analysisCache, openTrades, lastClosedTrades, 
                 </td>
                 <td style={{ padding:'10px 8px', whiteSpace:'nowrap' }} onClick={e => e.stopPropagation()}>
                   <button onClick={() => onRefresh(ticker)} title="Actualizar análisis"
+                    disabled={!!refreshingTickers?.[ticker]}
                     style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:5,
-                      color:C.muted, cursor:'pointer', padding:'3px 7px', fontSize:11, marginRight:4 }}>
+                      color: refreshingTickers?.[ticker] ? C.accent : C.muted,
+                      cursor: refreshingTickers?.[ticker] ? 'not-allowed' : 'pointer',
+                      padding:'3px 7px', fontSize:11, marginRight:4,
+                      animation: refreshingTickers?.[ticker] ? 'spin 0.7s linear infinite' : 'none' }}>
                     ↻
                   </button>
                   <button onClick={() => onRemove(ticker)} title="Eliminar de watchlist"
@@ -291,10 +295,19 @@ export default function App() {
     setAnalysisCache(prev => ({ ...prev, [ticker]: data }))
   }
 
-  // Refresh desde tabla: limpia cache y abre el modal para re-analizar
-  const refreshFromTable = (ticker) => {
-    setAnalysisCache(prev => { const n = {...prev}; delete n[ticker]; return n })
-    setTableModal(ticker)
+  const [refreshingTickers, setRefreshingTickers] = useState({})  // { AAPL: true }
+
+  // Refresh desde tabla: llama la API directamente y actualiza el cache
+  const refreshFromTable = async (ticker) => {
+    setRefreshingTickers(prev => ({ ...prev, [ticker]: true }))
+    try {
+      const res = await fetch(`/api/analyze/${ticker}`)
+      if (res.ok) {
+        const json = await res.json()
+        setAnalysisCache(prev => ({ ...prev, [ticker]: json }))
+      }
+    } catch {}
+    setRefreshingTickers(prev => { const n = {...prev}; delete n[ticker]; return n })
   }
 
   const signOut = async () => { await supabase.auth.signOut() }
@@ -414,6 +427,7 @@ export default function App() {
                       onRowClick={setTableModal}
                       onRemove={removeFromAll}
                       onRefresh={refreshFromTable}
+                      refreshingTickers={refreshingTickers}
                     />
                   </div>
                 ) : (
@@ -483,6 +497,7 @@ export default function App() {
                       onRowClick={setTableModal}
                       onRemove={removeFromAll}
                       onRefresh={refreshFromTable}
+                      refreshingTickers={refreshingTickers}
                     />
                   </div>
                 ) : (
