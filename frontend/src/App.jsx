@@ -89,6 +89,7 @@ function WatchlistTable({ tickers, analysisCache, openTrades, lastClosedTrades, 
       if (sortCol === 'score')   { va = a.d?.successRate??-1; vb = b.d?.successRate??-1 }
       if (sortCol === 'signal')  { va = SIGNAL_ORDER[a.d?.signal]??99; vb = SIGNAL_ORDER[b.d?.signal]??99 }
       if (sortCol === 'rsi')     { va = a.d?.rsi??-1;        vb = b.d?.rsi??-1 }
+      if (sortCol === 'stars')   { va = a.d?.confidenceStars??-1; vb = b.d?.confidenceStars??-1 }
       if (sortCol === 'rr')      { va = a.d?.rr??-1;         vb = b.d?.rr??-1 }
       if (sortCol === 'dist')    { va = distPct(a.d)??999;   vb = distPct(b.d)??999 }
       if (va < vb) return sortDir === 'asc' ? -1 : 1
@@ -156,6 +157,7 @@ function WatchlistTable({ tickers, analysisCache, openTrades, lastClosedTrades, 
               <th style={thStyle(null)}>Precio</th>
               <th style={thStyle('score')} onClick={() => handleSort('score')}>Score <SortIcon col="score"/></th>
               <th style={thStyle('signal')} onClick={() => handleSort('signal')}>Señal <SortIcon col="signal"/></th>
+              <th style={thStyle('stars')} onClick={() => handleSort('stars')}>Ctx <SortIcon col="stars"/></th>
               <th style={thStyle('rsi')} onClick={() => handleSort('rsi')}>RSI <SortIcon col="rsi"/></th>
               <th style={thStyle(null)}>Zona entrada</th>
               <th style={thStyle('dist')} onClick={() => handleSort('dist')}>Dist. rango <SortIcon col="dist"/></th>
@@ -198,6 +200,15 @@ function WatchlistTable({ tickers, analysisCache, openTrades, lastClosedTrades, 
                       ? <span style={{ background:signalColor+'18', color:signalColor, fontSize:10, fontWeight:700, padding:'2px 8px', borderRadius:99 }}>
                           {SIGNAL_LABEL[d.signal] || d.signal?.toUpperCase() || '—'}
                         </span>
+                      : <span style={{ color:C.muted }}>—</span>}
+                  </td>
+                  <td style={{ padding:'10px 10px', whiteSpace:'nowrap' }}>
+                    {analyzed
+                      ? (() => {
+                          const s = d.confidenceStars || 0
+                          const sc = s === 3 ? C.green : s === 2 ? C.amber : C.red
+                          return <span style={{ color:sc, fontSize:12 }}>{'★'.repeat(s)}{'☆'.repeat(3-s)}</span>
+                        })()
                       : <span style={{ color:C.muted }}>—</span>}
                   </td>
                   <td style={{ padding:'10px 10px', fontFamily:'monospace', color: analyzed && d.rsi < 30 ? C.green : analyzed && d.rsi > 70 ? C.red : C.text }}>
@@ -305,7 +316,6 @@ export default function App() {
         const tickers       = data?.tickers?.length         ? data.tickers         : DEFAULT_WATCHLIST
         const monitorList   = data?.monitor_tickers?.length ? data.monitor_tickers : []
         const cachedAnalysis = data?.analysis_cache || {}
-        console.log('[load] tickers:', tickers.length, '— cache keys:', Object.keys(cachedAnalysis))
         setWatchlist(tickers)
         setMonitorTickers(monitorList)
         watchlistRef.current      = tickers
@@ -346,8 +356,7 @@ export default function App() {
     if (watchlist === null || monitorTickers === null) return
     if (!dbLoaded.current) return
     // La primera vez que corre tras la carga inicial, solo marca listsReady sin guardar
-    if (!listsReady.current) { listsReady.current = true; console.log('[lists useEffect] skip inicial, cache keys:', Object.keys(analysisCacheRef.current).length); return }
-    console.log('[lists useEffect] guardando, cache keys:', Object.keys(analysisCacheRef.current).length)
+    if (!listsReady.current) { listsReady.current = true; return }
     saveToSupabase(watchlist, monitorTickers)
   }, [watchlist, monitorTickers, session]) // eslint-disable-line
 
@@ -420,13 +429,9 @@ export default function App() {
     analysisCacheRef.current = next
     setAnalysisCache(next)
     if (dbLoaded.current) {
-      console.log('[cacheAnalysis] guardando', ticker, '— keys en cache:', Object.keys(next).length)
       upsertAll(null, null, next).then(({ error }) => {
         if (error) console.error('[cacheAnalysis] upsert ERROR:', error)
-        else console.log('[cacheAnalysis] upsert OK para', ticker)
       })
-    } else {
-      console.warn('[cacheAnalysis] dbLoaded=false, NO guardado para', ticker)
     }
   }
 
