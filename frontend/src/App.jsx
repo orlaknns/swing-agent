@@ -43,13 +43,16 @@ function savedAtLabel(savedAt) {
   if (!savedAt) return null
   const d = new Date(savedAt)
   const now = new Date()
-  const days = Math.floor((now - d) / (1000*60*60*24))
-  if (days === 0) {
+  const dDate   = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
+  const nowDate = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`
+  const yesterDate = (() => { const y = new Date(now); y.setDate(y.getDate()-1); return `${y.getFullYear()}-${y.getMonth()}-${y.getDate()}` })()
+  if (dDate === nowDate) {
     const h = d.getHours().toString().padStart(2,'0')
     const m = d.getMinutes().toString().padStart(2,'0')
     return `hoy ${h}:${m}`
   }
-  if (days === 1) return 'ayer'
+  if (dDate === yesterDate) return 'ayer'
+  const days = Math.floor((now - d) / (1000*60*60*24))
   return `hace ${days}d`
 }
 
