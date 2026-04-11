@@ -1228,12 +1228,22 @@ def calc_position_scorecard(data: dict) -> dict:
         "justificacion": "Evalúa si existe un catalizador estructural de crecimiento (IA, regulación, ciclo de producto, expansión geográfica, etc.)"
     }
 
-    # 2. Precio > SMA200 x3 — binario automático
+    # 2. Precio vs SMA200 x3 — gradual (no binario)
+    # La distancia importa: acabar de cruzar SMA200 no es igual que llevar meses sobre ella
     if sma200 and price > sma200:
+        dist_sma200 = (price - sma200) / sma200 * 100
+        if dist_sma200 >= 15:
+            sma200_score = 3
+            sma200_desc  = f"Precio {dist_sma200:.1f}% sobre SMA200 — tendencia madura y confirmada"
+        elif dist_sma200 >= 5:
+            sma200_score = 2
+            sma200_desc  = f"Precio {dist_sma200:.1f}% sobre SMA200 — tendencia alcista establecida"
+        else:
+            sma200_score = 1
+            sma200_desc  = f"Precio {dist_sma200:.1f}% sobre SMA200 — recién sobre la media, confirmar sostenibilidad"
         criteria["precio_sma200"] = {
-            "peso": 3, "score_sugerido": 3, "es_automatico": True,
-            "justificacion": f"Precio ${price} sobre SMA200 ${sma200} — tendencia estructural alcista",
-            "es_veto": False
+            "peso": 3, "score_sugerido": sma200_score, "es_automatico": True,
+            "justificacion": sma200_desc, "es_veto": False
         }
     else:
         criteria["precio_sma200"] = {
@@ -1269,7 +1279,7 @@ def calc_position_scorecard(data: dict) -> dict:
         "justificacion": rs_desc
     }
 
-    # 5. Calidad fundamental x2 — semi-automático
+    # 5. Calidad fundamental x3 — semi-automático (peso aumentado: fundamentales > timing exacto)
     rev_growth     = fundamentals.get("revenueGrowth")    # % YoY
     eps_growth     = fundamentals.get("epsGrowth")        # % YoY
     profit_margin  = fundamentals.get("profitMargin")     # % neto
@@ -1324,7 +1334,7 @@ def calc_position_scorecard(data: dict) -> dict:
 
     fund_score = min(3, fund_score)
     criteria["calidad_fundamental"] = {
-        "peso": 2, "score_sugerido": fund_score, "es_automatico": True,
+        "peso": 3, "score_sugerido": fund_score, "es_automatico": True,
         "justificacion": " | ".join(fund_points) if fund_points else "Datos fundamentales insuficientes — revisar manualmente"
     }
 
@@ -1384,7 +1394,7 @@ def calc_position_scorecard(data: dict) -> dict:
             entry_score = 1
             entry_desc = f"Precio {abs(dist_sma50):.1f}% bajo SMA50 — debilidad temporal o cambio de tendencia{base_suffix}"
     criteria["punto_entrada"] = {
-        "peso": 2, "score_sugerido": entry_score, "es_automatico": True,
+        "peso": 1, "score_sugerido": entry_score, "es_automatico": True,
         "justificacion": entry_desc
     }
 
@@ -1491,25 +1501,28 @@ async def _analyze_position_inner(ticker: str):
     # Entrada: breakout → precio actual | pullback → SMA50
     entry_sug = round(price, 2) if near_high else (round(sma50, 2) if sma50 else round(price, 2))
 
-    # Stop: en breakout usamos mínimo de la base semanal (más representativo del soporte real)
-    #       en pullback usamos mínimo de 20 días (soporte inmediato del pullback)
-    # En ambos casos aplicamos -2% de margen para evitar stops por ruido
-    if near_high:
-        # Para breakout: soporte = mínimo de las últimas 10 semanas diarias (~50 días)
-        base_lows_b = lows[-50:] if len(lows) >= 50 else lows
-        base_low    = min(base_lows_b)
-        stop_sug    = round(base_low * 0.98, 2)
-    else:
-        # Para pullback: soporte = mínimo de los últimos 20 días
-        base_lows_p = lows[-20:] if len(lows) >= 20 else lows
-        base_low    = min(base_lows_p)
-        stop_sug    = round(base_low * 0.98, 2)
+    # Stop: usar el low de la base semanal detectada por analyze_base() con -2% de margen.
+    # Esto es técnicamente correcto: el stop va por debajo del soporte de la base,
+    # no a una distancia arbitraria de días diarios.
+    # Fallback: mínimo de los últimos 10 días si no hay base semanal disponible.
+    base_low_weekly = None
+    if base_data and base_data.get("base_quality") in ("sound", "short"):
+        # Calcular el low real de la base a partir de las velas semanales
+        n = base_data.get("weeks_in_base", 0)
+        if n > 0 and len(weekly_candles) >= n:
+            base_low_weekly = min(c["low"] for c in weekly_candles[-n:])
 
-    # Target: proyección de 2× el riesgo desde la entrada (R/R mínimo objetivo = 2)
-    # Más conservador y consistente que proyectar el ancho de la base
+    if base_low_weekly:
+        stop_sug = round(base_low_weekly * 0.98, 2)
+    else:
+        # Fallback: mínimo de los últimos 10 días hábiles
+        fallback_lows = lows[-10:] if len(lows) >= 10 else lows
+        stop_sug = round(min(fallback_lows) * 0.98, 2)
+
+    # Target: R/R 2.5x desde la entrada
     if entry_sug and stop_sug and entry_sug > stop_sug:
         risk_amt   = entry_sug - stop_sug
-        target_sug = round(entry_sug + risk_amt * 2.5, 2)   # objetivo R/R 2.5x
+        target_sug = round(entry_sug + risk_amt * 2.5, 2)
     else:
         target_sug = round(entry_sug * 1.20, 2) if entry_sug else None
 
@@ -1561,6 +1574,14 @@ async def _analyze_position_inner(ticker: str):
         for v in scorecard.values()
     )
 
+    # Ajuste macro: en mercado bajista (SPY < SMA200) aplicar penalización
+    # Weinstein: nunca comprar Stage 2 en mercado Stage 4
+    # -4 pts en bear baja el umbral efectivo de CONVICCIÓN de 32 a 36
+    market_penalty = 0
+    if spy_above is False:
+        market_penalty = 4
+        score_total = max(0, score_total - market_penalty)
+
     return JSONResponse(content={
         "ticker":          ticker,
         "company_name":    (fundamentals or {}).get("name"),
@@ -1586,6 +1607,7 @@ async def _analyze_position_inner(ticker: str):
         "rr_suggested":    rr_suggested,
         "scorecard":       scorecard,
         "score_total_suggested": score_total,
+        "market_penalty":  market_penalty,
         "fundamentals":    fundamentals,
         "cashflow":        cashflow,
     }, media_type="application/json; charset=utf-8")

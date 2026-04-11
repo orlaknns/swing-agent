@@ -271,9 +271,9 @@ sc2 = calc_position_scorecard({
     "fundamentals": {
         "revenueGrowth": 5,
         "epsGrowth":     8,
-        "profitMargin":  8,   # <10 → no activa quality_ok por margen
+        "profitMargin":  6,   # <10 → no activa quality_ok por margen
     },
-    "cashflow":     {"fcf_positive": True},   # activa quality_ok → +1
+    "cashflow":     {"fcf_positive": False},  # sin FCF → quality_ok=False → fund_score=1
     "vol_ratio":    90,
     "rr_suggested": 2.0,
     "next_earnings": None,

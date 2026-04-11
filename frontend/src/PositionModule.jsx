@@ -13,14 +13,14 @@ const C = {
 
 const WEIGHTS = {
   narrativa: 3, precio_sma200: 3, estructura_hh_hl: 2,
-  rs_relativa: 2, calidad_fundamental: 2, punto_entrada: 2,
+  rs_relativa: 2, calidad_fundamental: 3, punto_entrada: 1,
   ratio_rr: 2,
 }
-const MAX_SCORE = 48 // suma de todos los pesos × 3
+const MAX_SCORE = 48 // (3+3+2+2+3+1+2) × 3 = 16 × 3 = 48
 
 const CRITERIA_LABELS = {
   narrativa:           'Narrativa activa',
-  precio_sma200:       'Precio > SMA200',
+  precio_sma200:       'Distancia SMA200',
   estructura_hh_hl:    'Estructura HH/HL',
   rs_relativa:         'RS vs sector/SPY',
   calidad_fundamental: 'Calidad fundamental',
@@ -765,6 +765,8 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove }) {
   const [loading,    setLoading]    = useState(false)
   const [error,      setError]      = useState(null)
   const [expanded,   setExpanded]   = useState(false)
+  const [capital,    setCapital]    = useState('')
+  const [riskPct,    setRiskPct]    = useState('1')
   // Si cachedData cambia (e.g. tras ↻ manual), sincronizar
   useEffect(() => {
     if (cachedData) setData(cachedData)
@@ -946,6 +948,14 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove }) {
             </div>
           )}
 
+          {/* Mercado bajista — warning Weinstein */}
+          {data.macro_context?.spy_above_sma200 === false && (
+            <div style={{ fontSize:10, color:C.red, background:'#ff406015',
+              border:`1px solid ${C.red}55`, borderRadius:6, padding:'7px 10px', fontWeight:600 }}>
+              ⚠️ Mercado bajista (SPY &lt; SMA200) — score ajustado -4 pts · Weinstein: evitar compras en Stage 4 de mercado
+            </div>
+          )}
+
           {/* Score bar + decisión */}
           {scoreTotal != null && (
             <div>
@@ -1016,6 +1026,72 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove }) {
               R/R sugerido: {data.rr_suggested}x {data.rr_suggested < 1 ? '⛔' : data.rr_suggested >= 2 ? '✓' : '⚠'}
             </div>
           )}
+
+          {/* Sizing Calculator */}
+          {data.entry_suggested && data.stop_suggested && data.entry_suggested > data.stop_suggested && (() => {
+            const entry   = data.entry_suggested
+            const stop    = data.stop_suggested
+            const target  = data.target_suggested
+            const riskPer = entry - stop
+            const cap     = parseFloat(capital)
+            const rsk     = parseFloat(riskPct) / 100
+            const shares  = (cap > 0 && rsk > 0 && riskPer > 0)
+              ? Math.floor((cap * rsk) / riskPer) : null
+            const invested = shares ? (shares * entry) : null
+            const pctPort  = (invested && cap) ? ((invested / cap) * 100).toFixed(1) : null
+            const potGain  = (shares && target) ? ((target - entry) * shares).toFixed(0) : null
+            const potLoss  = shares ? (riskPer * shares).toFixed(0) : null
+            return (
+              <div style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:8, padding:'10px 12px' }}>
+                <div style={{ fontSize:10, color:C.muted, fontWeight:600, marginBottom:8, textTransform:'uppercase', letterSpacing:'0.05em' }}>
+                  Sizing Calculator
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6, marginBottom:8 }}>
+                  <div>
+                    <div style={{ fontSize:9, color:C.muted, marginBottom:3 }}>Capital disponible ($)</div>
+                    <input type="number" value={capital} onChange={e => setCapital(e.target.value)}
+                      placeholder="ej: 50000"
+                      style={{ width:'100%', background:C.card, border:`1px solid ${C.border}`, borderRadius:5,
+                        padding:'5px 8px', color:C.text, fontSize:11, outline:'none', boxSizing:'border-box' }}
+                      onFocus={e => e.target.style.borderColor=C.accent}
+                      onBlur={e  => e.target.style.borderColor=C.border}
+                    />
+                  </div>
+                  <div>
+                    <div style={{ fontSize:9, color:C.muted, marginBottom:3 }}>Riesgo por operación (%)</div>
+                    <input type="number" value={riskPct} onChange={e => setRiskPct(e.target.value)}
+                      placeholder="ej: 1"
+                      style={{ width:'100%', background:C.card, border:`1px solid ${C.border}`, borderRadius:5,
+                        padding:'5px 8px', color:C.text, fontSize:11, outline:'none', boxSizing:'border-box' }}
+                      onFocus={e => e.target.style.borderColor=C.accent}
+                      onBlur={e  => e.target.style.borderColor=C.border}
+                    />
+                  </div>
+                </div>
+                {shares != null ? (
+                  <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:5 }}>
+                    {[
+                      ['Acciones',     shares,                    C.accent],
+                      ['Monto inv.',   `$${invested?.toLocaleString()}`, C.text],
+                      ['% portafolio', `${pctPort}%`,             pctPort > 20 ? C.red : pctPort > 10 ? C.amber : C.green],
+                      ['Riesgo max.',  `-$${potLoss}`,            C.red],
+                      ['Ganancia obj.',`+$${potGain}`,            C.green],
+                      ['R/R real',     data.rr_suggested ? `${data.rr_suggested}x` : '—', C.muted],
+                    ].map(([label, val, color]) => (
+                      <div key={label} style={{ background:C.card, borderRadius:5, padding:'5px 7px' }}>
+                        <div style={{ fontSize:8, color:C.muted, marginBottom:1 }}>{label}</div>
+                        <div style={{ fontSize:11, fontFamily:'monospace', fontWeight:700, color }}>{val}</div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ fontSize:10, color:C.muted, textAlign:'center', padding:'4px 0' }}>
+                    Ingresa capital y % de riesgo para calcular
+                  </div>
+                )}
+              </div>
+            )
+          })()}
 
           {/* Base Analysis */}
           {data.base?.base_quality !== 'none' && data.base?.weeks_in_base > 0 && (() => {
