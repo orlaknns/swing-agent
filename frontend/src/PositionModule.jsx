@@ -195,7 +195,7 @@ function PositionJournal({ session }) {
                   <td style={{ padding:'10px', fontWeight:700, color:C.text }}>{t.ticker}</td>
                   <td style={{ padding:'10px', color:C.muted, fontSize:11 }}>{t.company_name || '—'}</td>
                   <td style={{ padding:'10px', fontFamily:'monospace', fontWeight:700,
-                    color: t.score_total >= 38 ? C.green : t.score_total >= 28 ? C.amber : C.red }}>
+                    color: t.score_total >= 32 ? C.green : t.score_total >= 22 ? C.amber : C.red }}>
                     {t.score_total}/{MAX_SCORE}
                   </td>
                   <td style={{ padding:'10px' }}>
@@ -467,7 +467,7 @@ function PositionDashboard({ session }) {
                       </span>
                     </td>
                     <td style={{ padding:'9px 10px', fontFamily:'monospace',
-                      color: t.score_total >= 38 ? C.green : t.score_total >= 28 ? C.amber : C.red }}>
+                      color: t.score_total >= 32 ? C.green : t.score_total >= 22 ? C.amber : C.red }}>
                       {t.score_total}
                     </td>
                     <td style={{ padding:'9px 10px', fontFamily:'monospace' }}>${t.entry_price}</td>
@@ -787,8 +787,8 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove }) {
     ? Object.entries(data.scorecard).reduce((s, [k, v]) => s + (v.score_sugerido ?? 0) * (WEIGHTS[k] || 1), 0)
     : null
   const decision = scoreTotal == null ? null :
-    scoreTotal >= 38 ? 'OPERAR_CONVICCION' :
-    scoreTotal >= 28 ? 'OPERAR_CAUTELA' : 'NO_OPERAR'
+    scoreTotal >= 32 ? 'OPERAR_CONVICCION' :
+    scoreTotal >= 22 ? 'OPERAR_CAUTELA' : 'NO_OPERAR'
   const hasVeto = data?.scorecard?.precio_sma200?.score_sugerido === 0
   const hasRRVeto = data?.rr_suggested != null && data.rr_suggested < 2
 
@@ -1194,8 +1194,8 @@ function PositionWatchlistTable({ tickers, cache, onRemove, onRefresh, refreshin
           <tbody>
             {rows.map(({ ticker, d, scoreTotal, analyzed }) => {
               const decision = scoreTotal == null ? null :
-                scoreTotal >= 38 ? 'OPERAR_CONVICCION' :
-                scoreTotal >= 28 ? 'OPERAR_CAUTELA' : 'NO_OPERAR'
+                scoreTotal >= 32 ? 'OPERAR_CONVICCION' :
+                scoreTotal >= 22 ? 'OPERAR_CAUTELA' : 'NO_OPERAR'
               const dc = DECISION_COLOR[decision] || C.muted
               const hasVeto = d?.scorecard?.precio_sma200?.score_sugerido === 0
               return (
@@ -1219,7 +1219,7 @@ function PositionWatchlistTable({ tickers, cache, onRemove, onRefresh, refreshin
                     {analyzed ? `$${d.price?.toFixed(2)}` : <span style={{ color:C.muted }}>—</span>}
                   </td>
                   <td style={{ padding:'10px', fontFamily:'monospace', fontWeight:700,
-                    color: scoreTotal >= 38 ? C.green : scoreTotal >= 28 ? C.amber : scoreTotal != null ? C.red : C.muted }}>
+                    color: scoreTotal >= 32 ? C.green : scoreTotal >= 22 ? C.amber : scoreTotal != null ? C.red : C.muted }}>
                     {scoreTotal != null ? `${scoreTotal}/${MAX_SCORE}` : '—'}
                   </td>
                   <td style={{ padding:'10px' }}>
