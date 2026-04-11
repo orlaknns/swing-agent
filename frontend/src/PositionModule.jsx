@@ -1,0 +1,917 @@
+import { useState, useEffect } from 'react'
+import { supabase } from './supabase.js'
+import {
+  ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid,
+  Tooltip, ResponsiveContainer, ReferenceLine, Cell,
+} from 'recharts'
+
+const C = {
+  bg:'#070d1a', card:'#0f1929', border:'#1a2d45',
+  accent:'#00d4ff', green:'#00e096', red:'#ff4060',
+  amber:'#ffb800', text:'#dde6f0', muted:'#4a6080',
+}
+
+const WEIGHTS = {
+  narrativa: 3, precio_sma200: 3, estructura_hh_hl: 2,
+  rs_relativa: 2, calidad_fundamental: 2, punto_entrada: 2,
+  ratio_rr: 2, catalizador: 1,
+}
+const MAX_SCORE = 51 // suma de todos los pesos × 3
+
+const CRITERIA_LABELS = {
+  narrativa:           'Narrativa activa',
+  precio_sma200:       'Precio > SMA200',
+  estructura_hh_hl:    'Estructura HH/HL',
+  rs_relativa:         'RS vs sector/SPY',
+  calidad_fundamental: 'Calidad fundamental',
+  punto_entrada:       'Punto de entrada',
+  ratio_rr:            'Ratio R/R',
+  catalizador:         'Catalizador próximo',
+}
+
+const ENTRY_SIGNALS = [
+  'Retroceso a SMA50',
+  'Retroceso a SMA200',
+  'Ruptura de resistencia',
+  'Consolidación en soporte',
+  'Otro',
+]
+
+const STATUS_LABELS = { planning:'Planificando', open:'Activo', closed:'Cerrado' }
+const STATUS_COLORS = { planning: C.amber, open: C.green, closed: C.muted }
+const DECISION_COLOR = { OPERAR_CONVICCION: C.green, OPERAR_CAUTELA: C.amber, NO_OPERAR: C.red }
+const DECISION_LABEL = {
+  OPERAR_CONVICCION: 'OPERAR CON CONVICCIÓN',
+  OPERAR_CAUTELA:    'OPERAR CON CAUTELA',
+  NO_OPERAR:         'NO OPERAR',
+}
+
+function fmtUsd(n) {
+  if (n == null) return '—'
+  const abs = Math.abs(n)
+  const sign = n >= 0 ? '+' : '-'
+  if (abs >= 1000) return `${sign}$${(abs/1000).toFixed(1)}k`
+  return `${sign}$${abs.toFixed(0)}`
+}
+function fmtUsdShort(n) {
+  if (n == null) return '—'
+  const abs = Math.abs(n)
+  const sign = n >= 0 ? '+' : '-'
+  if (abs >= 1000) return `${sign}$${(abs/1000).toFixed(1)}k`
+  return `${sign}$${abs.toFixed(2)}`
+}
+
+// ── Criterio Slider ──────────────────────────────────────────────────────────
+function CriterioSlider({ id, value, onChange, justificacion, esAutomatico, esVeto }) {
+  const label = CRITERIA_LABELS[id]
+  const peso  = WEIGHTS[id]
+  const scoreColors = ['#4a6080','#ffb800','#00aaff','#00e096']
+  const color = esVeto && value === 0 ? C.red : scoreColors[value]
+  return (
+    <div style={{
+      padding:'12px 14px', borderRadius:9,
+      border: `1px solid ${esVeto && value === 0 ? C.red+'55' : C.border}`,
+      background: esVeto && value === 0 ? '#ff406008' : C.bg,
+    }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:7 }}>
+          <span style={{ fontSize:12, fontWeight:600, color:C.text }}>{label}</span>
+          <span style={{ fontSize:9, color:C.muted, background:C.card, border:`1px solid ${C.border}`,
+            borderRadius:99, padding:'1px 6px' }}>×{peso}</span>
+          {esAutomatico && <span style={{ fontSize:9, color:C.accent, background:C.accent+'15',
+            border:`1px solid ${C.accent}33`, borderRadius:99, padding:'1px 6px' }}>AUTO</span>}
+          {esVeto && value === 0 && <span style={{ fontSize:9, color:C.red, fontWeight:700 }}>⚠ VETO</span>}
+        </div>
+        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+          <span style={{ fontSize:13, fontWeight:700, fontFamily:'monospace', color }}>
+            {value}/3
+          </span>
+          <span style={{ fontSize:10, color:C.muted }}>= {value * peso} pts</span>
+        </div>
+      </div>
+      <input
+        type="range" min={0} max={3} step={1} value={value}
+        onChange={e => onChange(id, parseInt(e.target.value))}
+        style={{ width:'100%', accentColor: color, cursor:'pointer', marginBottom:4 }}
+      />
+      <div style={{ fontSize:10, color: esVeto && value === 0 ? C.red : C.muted, lineHeight:1.5 }}>
+        {justificacion}
+      </div>
+    </div>
+  )
+}
+
+// ── Position Analysis ────────────────────────────────────────────────────────
+function PositionAnalysis({ session }) {
+  const [ticker,      setTicker]      = useState('')
+  const [loading,     setLoading]     = useState(false)
+  const [error,       setError]       = useState(null)
+  const [analysis,    setAnalysis]    = useState(null)
+  const [scores,      setScores]      = useState({})
+  const [sizing,      setSizing]      = useState({ capital:'', riskPct:'1.5', entryPrice:'', stopLoss:'', target1:'', target2:'' })
+  const [narrative,   setNarrative]   = useState('')
+  const [entrySignal, setEntrySignal] = useState(ENTRY_SIGNALS[0])
+  const [catalyst,    setCatalyst]    = useState('')
+  const [invalidation,setInvalidation]= useState('')
+  const [notes,       setNotes]       = useState('')
+  const [saving,      setSaving]      = useState(false)
+  const [saved,       setSaved]       = useState(false)
+
+  const analyze = async () => {
+    const t = ticker.trim().toUpperCase()
+    if (!t) return
+    setLoading(true); setError(null); setAnalysis(null); setScores({})
+    try {
+      const res = await fetch(`/api/analyze-position/${t}`)
+      if (!res.ok) { const d = await res.json(); throw new Error(d.detail || 'Error del servidor'); }
+      const data = await res.json()
+      setAnalysis(data)
+      // Inicializar scores con los valores sugeridos
+      const initScores = {}
+      Object.entries(data.scorecard || {}).forEach(([k, v]) => {
+        initScores[k] = v.score_sugerido ?? 0
+      })
+      setScores(initScores)
+      // Pre-llenar sizing con valores sugeridos
+      setSizing(prev => ({
+        ...prev,
+        entryPrice: data.entry_suggested?.toFixed(2) || '',
+        stopLoss:   data.stop_suggested?.toFixed(2)  || '',
+        target1:    data.target_suggested?.toFixed(2) || '',
+      }))
+    } catch(e) {
+      setError(e.message)
+    }
+    setLoading(false)
+  }
+
+  const updateScore = (id, val) => setScores(prev => ({ ...prev, [id]: val }))
+
+  const scoreTotal = Object.entries(scores).reduce((acc, [k, v]) => acc + (v * (WEIGHTS[k] || 1)), 0)
+  const vetos = []
+  if (scores.precio_sma200 === 0 && analysis) vetos.push('Precio bajo SMA200 — estructura bajista')
+  if (scores.ratio_rr !== undefined && scores.ratio_rr <= 1) vetos.push('R/R menor a 1:2 — riesgo no justificado')
+
+  const decision = vetos.length > 0 ? 'NO_OPERAR' :
+    scoreTotal >= 38 ? 'OPERAR_CONVICCION' :
+    scoreTotal >= 28 ? 'OPERAR_CAUTELA'    : 'NO_OPERAR'
+
+  const canTrade = decision !== 'NO_OPERAR'
+
+  // Cálculos de sizing
+  const sp = { ...sizing }
+  const capital    = parseFloat(sp.capital) || 0
+  const riskPct    = parseFloat(sp.riskPct) || 1.5
+  const entryPrice = parseFloat(sp.entryPrice) || 0
+  const stopLoss   = parseFloat(sp.stopLoss) || 0
+  const target1    = parseFloat(sp.target1) || 0
+  const target2    = parseFloat(sp.target2) || 0
+
+  const riskUsd    = capital > 0 ? capital * (riskPct / 100) : 0
+  const riskPerShare = entryPrice > stopLoss ? entryPrice - stopLoss : 0
+  let   shares     = riskPerShare > 0 && riskUsd > 0 ? Math.floor(riskUsd / riskPerShare) : 0
+  if (decision === 'OPERAR_CAUTELA') shares = Math.floor(shares * 0.5)
+  const positionValue = shares * entryPrice
+  const pctPortfolio  = capital > 0 ? (positionValue / capital) * 100 : 0
+  const rr1  = riskPerShare > 0 && target1 > entryPrice ? ((target1 - entryPrice) / riskPerShare).toFixed(2) : null
+  const rr2  = riskPerShare > 0 && target2 > entryPrice ? ((target2 - entryPrice) / riskPerShare).toFixed(2) : null
+  const gain1 = shares > 0 && target1 > 0 ? shares * (target1 - entryPrice) : null
+  const gain2 = shares > 0 && target2 > 0 ? shares * (target2 - entryPrice) : null
+  const overweighted = pctPortfolio > 10
+
+  const handleSave = async () => {
+    if (!analysis || !session) return
+    setSaving(true)
+    const row = {
+      user_id:       session.user.id,
+      ticker:        analysis.ticker,
+      company_name:  analysis.company_name,
+      macro_context: analysis.macro_context,
+      scorecard:     scores,
+      score_total:   scoreTotal,
+      decision,
+      capital:       capital || null,
+      risk_pct:      riskPct || null,
+      entry_price:   entryPrice || null,
+      stop_loss:     stopLoss || null,
+      target1:       target1 || null,
+      target2:       target2 || null,
+      shares:        shares || null,
+      narrative,
+      entry_signal:  entrySignal,
+      catalyst,
+      invalidation,
+      notes,
+      status:        'planning',
+    }
+    const { error: err } = await supabase.from('position_trades').insert(row)
+    if (!err) { setSaved(true); setTimeout(() => setSaved(false), 2500) }
+    else console.error('Error guardando position trade:', err)
+    setSaving(false)
+  }
+
+  const pctBar = Math.min(100, (scoreTotal / MAX_SCORE) * 100)
+  const barColor = decision === 'OPERAR_CONVICCION' ? C.green : decision === 'OPERAR_CAUTELA' ? C.amber : C.red
+
+  return (
+    <div style={{ maxWidth:760, margin:'0 auto', padding:'0 20px' }}>
+
+      {/* Input ticker */}
+      <div style={{ display:'flex', gap:8, marginBottom:24 }}>
+        <input
+          value={ticker}
+          onChange={e => setTicker(e.target.value.toUpperCase())}
+          onKeyDown={e => e.key === 'Enter' && analyze()}
+          placeholder="Ticker… ej: NVDA, MSFT, AMZN"
+          style={{ flex:1, background:C.card, border:`1px solid ${C.border}`, borderRadius:9,
+            padding:'11px 14px', color:C.text, fontSize:13, outline:'none' }}
+        />
+        <button onClick={analyze} disabled={loading || !ticker.trim()}
+          style={{ background:C.accent, border:'none', borderRadius:9, color:'#000',
+            fontWeight:700, padding:'11px 20px', cursor: loading ? 'not-allowed' : 'pointer',
+            fontSize:13, opacity: loading ? 0.7 : 1 }}>
+          {loading ? 'Analizando…' : 'Analizar'}
+        </button>
+      </div>
+
+      {error && (
+        <div style={{ background:'#ff406015', border:`1px solid ${C.red}44`, borderRadius:9,
+          padding:'12px 16px', color:C.red, fontSize:12, marginBottom:20 }}>
+          {error}
+        </div>
+      )}
+
+      {analysis && (
+        <>
+          {/* Datos básicos */}
+          <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:12,
+            padding:'16px 18px', marginBottom:20 }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', flexWrap:'wrap', gap:8 }}>
+              <div>
+                <div style={{ fontSize:18, fontWeight:700, color:C.text }}>{analysis.ticker}
+                  {analysis.company_name && <span style={{ fontSize:12, color:C.muted, fontWeight:400, marginLeft:8 }}>{analysis.company_name}</span>}
+                </div>
+                <div style={{ fontSize:11, color:C.muted, marginTop:2 }}>{analysis.sector}{analysis.sector_etf ? ` · ETF: ${analysis.sector_etf}` : ''}</div>
+              </div>
+              <div style={{ textAlign:'right' }}>
+                <div style={{ fontSize:22, fontWeight:700, fontFamily:'monospace', color:C.text }}>${analysis.price}</div>
+                <div style={{ fontSize:10, color:C.muted }}>SMA50 ${analysis.sma50} · SMA200 ${analysis.sma200}</div>
+              </div>
+            </div>
+
+            {/* Contexto macro */}
+            <div style={{ marginTop:12, padding:'10px 12px', borderRadius:8,
+              background: analysis.macro_context?.spy_above_sma200 ? '#00e09610' : '#ff406010',
+              border: `1px solid ${analysis.macro_context?.spy_above_sma200 ? C.green+'44' : C.red+'44'}` }}>
+              <span style={{ fontSize:10, fontWeight:700,
+                color: analysis.macro_context?.spy_above_sma200 ? C.green : C.red }}>
+                {analysis.macro_context?.spy_above_sma200 ? '▲ MERCADO ALCISTA' : '▼ MERCADO BAJISTA'}
+              </span>
+              <span style={{ fontSize:10, color:C.muted, marginLeft:8 }}>
+                SPY ${analysis.macro_context?.spy_price} · SMA200 ${analysis.macro_context?.spy_sma200}
+              </span>
+            </div>
+
+            {/* Indicadores */}
+            <div style={{ display:'flex', gap:14, marginTop:12, flexWrap:'wrap' }}>
+              {[
+                ['RSI', analysis.rsi],
+                ['Mansfield RS', analysis.mansfield_rs],
+                ['RS Sector', analysis.rs_sector?.toFixed(2)],
+                ['Vol%', analysis.vol_ratio],
+                ['HH/HL', `${analysis.hh_hl?.hh_count}HH/${analysis.hh_hl?.hl_count}HL`],
+                ['Earnings', analysis.next_earnings || 'N/A'],
+              ].map(([label, val]) => (
+                <div key={label}>
+                  <div style={{ fontSize:9, color:C.muted, textTransform:'uppercase', letterSpacing:'0.06em' }}>{label}</div>
+                  <div style={{ fontSize:12, fontFamily:'monospace', color:C.text, fontWeight:600 }}>{val ?? '—'}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Scorecard */}
+          <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:12,
+            padding:'16px 18px', marginBottom:20 }}>
+            <div style={{ fontSize:11, color:C.muted, textTransform:'uppercase', letterSpacing:'0.08em',
+              fontWeight:700, marginBottom:16 }}>Scorecard de evaluación</div>
+
+            <div style={{ display:'flex', flexDirection:'column', gap:10, marginBottom:18 }}>
+              {Object.entries(analysis.scorecard || {}).map(([id, meta]) => (
+                <CriterioSlider
+                  key={id} id={id} value={scores[id] ?? 0}
+                  onChange={updateScore}
+                  justificacion={meta.justificacion}
+                  esAutomatico={meta.es_automatico}
+                  esVeto={meta.es_veto}
+                />
+              ))}
+            </div>
+
+            {/* Vetos */}
+            {vetos.length > 0 && (
+              <div style={{ marginBottom:14 }}>
+                {vetos.map((v, i) => (
+                  <div key={i} style={{ background:'#ff406015', border:`1px solid ${C.red}44`,
+                    borderRadius:8, padding:'10px 14px', color:C.red, fontSize:12,
+                    fontWeight:600, marginBottom:6 }}>
+                    ⛔ {v}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Barra de progreso */}
+            <div style={{ marginBottom:10 }}>
+              <div style={{ display:'flex', justifyContent:'space-between', marginBottom:5 }}>
+                <span style={{ fontSize:11, color:C.muted }}>Score total</span>
+                <span style={{ fontSize:14, fontWeight:700, fontFamily:'monospace', color: barColor }}>
+                  {scoreTotal} / {MAX_SCORE}
+                </span>
+              </div>
+              <div style={{ height:10, background:C.bg, borderRadius:99, overflow:'hidden', border:`1px solid ${C.border}` }}>
+                <div style={{ height:'100%', width:`${pctBar}%`, background:barColor,
+                  borderRadius:99, transition:'width 0.3s, background 0.3s' }} />
+              </div>
+              <div style={{ display:'flex', justifyContent:'space-between', marginTop:4 }}>
+                <span style={{ fontSize:9, color:C.red }}>NO OPERAR &lt;28</span>
+                <span style={{ fontSize:9, color:C.amber }}>CAUTELA 28–37</span>
+                <span style={{ fontSize:9, color:C.green }}>CONVICCIÓN 38+</span>
+              </div>
+            </div>
+
+            {/* Decisión */}
+            <div style={{ padding:'12px 16px', borderRadius:10,
+              background: DECISION_COLOR[decision] + '18',
+              border: `2px solid ${DECISION_COLOR[decision]}55`,
+              textAlign:'center' }}>
+              <div style={{ fontSize:15, fontWeight:700, color: DECISION_COLOR[decision] }}>
+                {DECISION_LABEL[decision]}
+              </div>
+              {decision === 'OPERAR_CAUTELA' && (
+                <div style={{ fontSize:11, color:C.muted, marginTop:4 }}>
+                  Reducir posición al 50% — sizing ajustado automáticamente
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Calculadora de sizing */}
+          {canTrade && (
+            <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:12,
+              padding:'16px 18px', marginBottom:20 }}>
+              <div style={{ fontSize:11, color:C.muted, textTransform:'uppercase', letterSpacing:'0.08em',
+                fontWeight:700, marginBottom:16 }}>Calculadora de sizing</div>
+
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:14 }}>
+                {[
+                  ['Capital total ($)', 'capital', 'number', 'ej: 50000'],
+                  ['Riesgo por operación (%)', 'riskPct', 'number', '0.5–3'],
+                  ['Precio de entrada', 'entryPrice', 'number', ''],
+                  ['Stop loss', 'stopLoss', 'number', ''],
+                  ['Objetivo 1', 'target1', 'number', ''],
+                  ['Objetivo 2 (opcional)', 'target2', 'number', ''],
+                ].map(([label, field, type, ph]) => (
+                  <div key={field}>
+                    <div style={{ fontSize:10, color:C.muted, marginBottom:4 }}>{label}</div>
+                    <input
+                      type={type} value={sizing[field]}
+                      onChange={e => setSizing(prev => ({ ...prev, [field]: e.target.value }))}
+                      placeholder={ph}
+                      style={{ width:'100%', background:C.bg, border:`1px solid ${C.border}`,
+                        borderRadius:7, padding:'8px 10px', color:C.text, fontSize:12,
+                        outline:'none', boxSizing:'border-box' }}
+                    />
+                  </div>
+                ))}
+              </div>
+
+              {capital > 0 && entryPrice > 0 && stopLoss > 0 && (
+                <div style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:10,
+                  padding:'14px 16px' }}>
+                  <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(130px, 1fr))', gap:12 }}>
+                    {[
+                      ['Riesgo USD', `$${riskUsd.toFixed(0)}`, C.red],
+                      ['Acciones', `${shares}`, C.text],
+                      ['Valor posición', `$${positionValue.toFixed(0)}`, C.text],
+                      ['% portafolio', `${pctPortfolio.toFixed(1)}%`, overweighted ? C.red : C.text],
+                      ...(rr1 ? [['R/R Obj.1', `${rr1}x`, parseFloat(rr1) >= 2 ? C.green : C.amber]] : []),
+                      ...(rr2 ? [['R/R Obj.2', `${rr2}x`, parseFloat(rr2) >= 2 ? C.green : C.amber]] : []),
+                      ...(gain1 != null ? [['Ganancia Obj.1', fmtUsd(gain1), C.green]] : []),
+                      ...(gain2 != null ? [['Ganancia Obj.2', fmtUsd(gain2), C.green]] : []),
+                    ].map(([label, val, color]) => (
+                      <div key={label} style={{ textAlign:'center' }}>
+                        <div style={{ fontSize:9, color:C.muted, textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:3 }}>{label}</div>
+                        <div style={{ fontSize:15, fontWeight:700, fontFamily:'monospace', color }}>{val}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {overweighted && (
+                    <div style={{ marginTop:12, padding:'8px 12px', background:'#ff406015',
+                      border:`1px solid ${C.red}44`, borderRadius:7, fontSize:11, color:C.red }}>
+                      ⚠ La posición representa {pctPortfolio.toFixed(1)}% del portafolio — supera el 10% recomendado. Reduce el % de riesgo.
+                    </div>
+                  )}
+                  {decision === 'OPERAR_CAUTELA' && (
+                    <div style={{ marginTop:8, padding:'8px 12px', background:'#ffb80015',
+                      border:`1px solid ${C.amber}44`, borderRadius:7, fontSize:11, color:C.amber }}>
+                      Sizing reducido al 50% por decisión CAUTELA ({shares * 2} → {shares} acciones)
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Journal */}
+          <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:12,
+            padding:'16px 18px', marginBottom:24 }}>
+            <div style={{ fontSize:11, color:C.muted, textTransform:'uppercase', letterSpacing:'0.08em',
+              fontWeight:700, marginBottom:16 }}>Tesis de la operación</div>
+
+            <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+              <div>
+                <div style={{ fontSize:10, color:C.muted, marginBottom:4 }}>Narrativa en una frase</div>
+                <input value={narrative} onChange={e => setNarrative(e.target.value)}
+                  placeholder="ej: Ciclo de capex en IA impulsa demanda de semiconductores premium"
+                  style={{ width:'100%', background:C.bg, border:`1px solid ${C.border}`, borderRadius:7,
+                    padding:'9px 12px', color:C.text, fontSize:12, outline:'none', boxSizing:'border-box' }} />
+              </div>
+              <div>
+                <div style={{ fontSize:10, color:C.muted, marginBottom:4 }}>Señal técnica de entrada</div>
+                <select value={entrySignal} onChange={e => setEntrySignal(e.target.value)}
+                  style={{ width:'100%', background:C.bg, border:`1px solid ${C.border}`, borderRadius:7,
+                    padding:'9px 12px', color:C.text, fontSize:12, outline:'none', boxSizing:'border-box' }}>
+                  {ENTRY_SIGNALS.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              <div>
+                <div style={{ fontSize:10, color:C.muted, marginBottom:4 }}>Catalizador próximo</div>
+                <input value={catalyst} onChange={e => setCatalyst(e.target.value)}
+                  placeholder="ej: Lanzamiento producto Q3 2026 / Earnings Jul 24"
+                  style={{ width:'100%', background:C.bg, border:`1px solid ${C.border}`, borderRadius:7,
+                    padding:'9px 12px', color:C.text, fontSize:12, outline:'none', boxSizing:'border-box' }} />
+              </div>
+              <div>
+                <div style={{ fontSize:10, color:C.muted, marginBottom:4 }}>¿Qué invalidaría la tesis?</div>
+                <textarea value={invalidation} onChange={e => setInvalidation(e.target.value)}
+                  rows={2} placeholder="ej: Precio cierra bajo SMA200 en gráfico semanal / Revisión a la baja de guidance"
+                  style={{ width:'100%', background:C.bg, border:`1px solid ${C.border}`, borderRadius:7,
+                    padding:'9px 12px', color:C.text, fontSize:12, outline:'none', resize:'vertical',
+                    boxSizing:'border-box', fontFamily:'inherit' }} />
+              </div>
+              <div>
+                <div style={{ fontSize:10, color:C.muted, marginBottom:4 }}>Notas adicionales</div>
+                <textarea value={notes} onChange={e => setNotes(e.target.value)}
+                  rows={2}
+                  style={{ width:'100%', background:C.bg, border:`1px solid ${C.border}`, borderRadius:7,
+                    padding:'9px 12px', color:C.text, fontSize:12, outline:'none', resize:'vertical',
+                    boxSizing:'border-box', fontFamily:'inherit' }} />
+              </div>
+            </div>
+
+            <button onClick={handleSave} disabled={saving || !analysis}
+              style={{ marginTop:16, width:'100%', background: saved ? C.green : C.accent,
+                border:'none', borderRadius:9, color:'#000', fontWeight:700,
+                padding:'12px', cursor: saving ? 'not-allowed' : 'pointer', fontSize:14,
+                opacity: saving ? 0.7 : 1, transition:'background 0.3s' }}>
+              {saving ? 'Guardando…' : saved ? '✓ Guardado en Journal' : 'Guardar en Journal →'}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+// ── Position Journal ─────────────────────────────────────────────────────────
+function PositionJournal({ session }) {
+  const [trades,   setTrades]   = useState([])
+  const [filter,   setFilter]   = useState('all')
+  const [selected, setSelected] = useState(null)
+  const [form,     setForm]     = useState(null)
+  const [confirmDelete, setConfirmDelete] = useState(null)
+  const [saving,   setSaving]   = useState(false)
+
+  useEffect(() => {
+    if (!session) return
+    supabase.from('position_trades')
+      .select('*')
+      .eq('user_id', session.user.id)
+      .order('created_at', { ascending: false })
+      .then(({ data }) => setTrades(data || []))
+  }, [session, saving])
+
+  const filtered = filter === 'all' ? trades : trades.filter(t => t.status === filter)
+
+  const openModal = (trade) => {
+    setSelected(trade)
+    setForm({ ...trade })
+  }
+
+  const closeModal = () => { setSelected(null); setForm(null) }
+
+  const handleUpdate = async () => {
+    if (!form) return
+    setSaving(true)
+    const { error } = await supabase.from('position_trades')
+      .update({
+        status:      form.status,
+        exit_price:  form.exit_price || null,
+        exit_date:   form.exit_date  || null,
+        notes:       form.notes      || null,
+      })
+      .eq('id', form.id)
+    if (!error) closeModal()
+    setSaving(false)
+  }
+
+  const handleDelete = async (id) => {
+    await supabase.from('position_trades').delete().eq('id', id)
+    setTrades(prev => prev.filter(t => t.id !== id))
+    setConfirmDelete(null)
+    closeModal()
+  }
+
+  const DECISION_SHORT = { OPERAR_CONVICCION:'CONVICCIÓN', OPERAR_CAUTELA:'CAUTELA', NO_OPERAR:'NO OPERAR' }
+
+  return (
+    <div style={{ maxWidth:960, margin:'0 auto', padding:'0 20px' }}>
+      {/* Filtros */}
+      <div style={{ display:'flex', gap:8, marginBottom:18, flexWrap:'wrap' }}>
+        {[['all','Todos'],['planning','Planificando'],['open','Activos'],['closed','Cerrados']].map(([v,l]) => (
+          <button key={v} onClick={() => setFilter(v)}
+            style={{ background: filter===v ? C.accent+'22' : 'none',
+              border:`1px solid ${filter===v ? C.accent : C.border}`,
+              borderRadius:7, color: filter===v ? C.accent : C.muted,
+              padding:'5px 14px', cursor:'pointer', fontSize:11, fontWeight:600 }}>
+            {l}
+          </button>
+        ))}
+        <span style={{ marginLeft:'auto', fontSize:11, color:C.muted, alignSelf:'center' }}>
+          {filtered.length} operaciones
+        </span>
+      </div>
+
+      {filtered.length === 0 ? (
+        <div style={{ textAlign:'center', padding:'60px', color:C.muted, fontSize:13 }}>
+          No hay operaciones de position trading registradas.
+        </div>
+      ) : (
+        <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:12, overflow:'hidden' }}>
+          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+            <thead>
+              <tr style={{ borderBottom:`1px solid ${C.border}` }}>
+                {['Ticker','Empresa','Score','Decisión','Entrada','Stop','Obj.1','Estado',''].map(h => (
+                  <th key={h} style={{ padding:'9px 10px', textAlign:'left', fontSize:10,
+                    color:C.muted, letterSpacing:'0.07em', textTransform:'uppercase', fontWeight:600 }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(t => (
+                <tr key={t.id} onClick={() => openModal(t)}
+                  style={{ borderBottom:`1px solid ${C.border}`, cursor:'pointer' }}
+                  onMouseEnter={e => e.currentTarget.style.background='#1a2d4533'}
+                  onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                  <td style={{ padding:'10px', fontWeight:700, color:C.text }}>{t.ticker}</td>
+                  <td style={{ padding:'10px', color:C.muted, fontSize:11 }}>{t.company_name || '—'}</td>
+                  <td style={{ padding:'10px', fontFamily:'monospace', fontWeight:700,
+                    color: t.score_total >= 38 ? C.green : t.score_total >= 28 ? C.amber : C.red }}>
+                    {t.score_total}/{MAX_SCORE}
+                  </td>
+                  <td style={{ padding:'10px' }}>
+                    <span style={{ fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:99,
+                      color: DECISION_COLOR[t.decision], background: DECISION_COLOR[t.decision]+'18' }}>
+                      {DECISION_SHORT[t.decision] || t.decision || '—'}
+                    </span>
+                  </td>
+                  <td style={{ padding:'10px', fontFamily:'monospace', color:C.text }}>{t.entry_price ? `$${t.entry_price}` : '—'}</td>
+                  <td style={{ padding:'10px', fontFamily:'monospace', color:C.red }}>{t.stop_loss ? `$${t.stop_loss}` : '—'}</td>
+                  <td style={{ padding:'10px', fontFamily:'monospace', color:C.green }}>{t.target1 ? `$${t.target1}` : '—'}</td>
+                  <td style={{ padding:'10px' }}>
+                    <span style={{ fontSize:10, fontWeight:700, color: STATUS_COLORS[t.status] }}>
+                      {STATUS_LABELS[t.status] || t.status}
+                    </span>
+                  </td>
+                  <td style={{ padding:'10px' }} onClick={e => { e.stopPropagation(); setConfirmDelete(t.id) }}>
+                    <span style={{ color:C.red, opacity:0.6, cursor:'pointer', fontSize:14 }}>×</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Confirm delete */}
+      {confirmDelete && (
+        <div onClick={() => setConfirmDelete(null)}
+          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.7)', zIndex:3000,
+            display:'flex', alignItems:'center', justifyContent:'center' }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:12,
+              padding:'24px', textAlign:'center', maxWidth:320 }}>
+            <div style={{ fontSize:14, color:C.text, marginBottom:16 }}>¿Eliminar esta operación?</div>
+            <div style={{ display:'flex', gap:10, justifyContent:'center' }}>
+              <button onClick={() => setConfirmDelete(null)}
+                style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:7,
+                  color:C.muted, padding:'8px 18px', cursor:'pointer', fontSize:12 }}>Cancelar</button>
+              <button onClick={() => handleDelete(confirmDelete)}
+                style={{ background:C.red, border:'none', borderRadius:7,
+                  color:'#fff', padding:'8px 18px', cursor:'pointer', fontSize:12, fontWeight:700 }}>Eliminar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal edición */}
+      {selected && form && (
+        <div onClick={closeModal}
+          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.75)', zIndex:2500,
+            display:'flex', alignItems:'flex-start', justifyContent:'center',
+            padding:'40px 16px', overflowY:'auto' }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:14,
+              padding:'24px', width:'100%', maxWidth:480 }}>
+            <div style={{ fontSize:16, fontWeight:700, color:C.text, marginBottom:4 }}>
+              {selected.ticker} — {selected.company_name}
+            </div>
+            <div style={{ fontSize:11, color:C.muted, marginBottom:18 }}>
+              Score {selected.score_total}/{MAX_SCORE} · {DECISION_LABEL[selected.decision] || selected.decision}
+            </div>
+
+            {selected.narrative && (
+              <div style={{ marginBottom:14, padding:'10px 12px', background:C.bg,
+                borderRadius:8, fontSize:11, color:C.text, fontStyle:'italic' }}>
+                "{selected.narrative}"
+              </div>
+            )}
+
+            {selected.invalidation && (
+              <div style={{ marginBottom:14 }}>
+                <div style={{ fontSize:10, color:C.muted, marginBottom:3 }}>Invalidación de tesis:</div>
+                <div style={{ fontSize:11, color:C.amber }}>{selected.invalidation}</div>
+              </div>
+            )}
+
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:14 }}>
+              <div>
+                <div style={{ fontSize:10, color:C.muted, marginBottom:4 }}>Estado</div>
+                <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
+                  style={{ width:'100%', background:C.bg, border:`1px solid ${C.border}`, borderRadius:7,
+                    padding:'8px 10px', color:C.text, fontSize:12, outline:'none', boxSizing:'border-box' }}>
+                  <option value="planning">Planificando</option>
+                  <option value="open">Activo</option>
+                  <option value="closed">Cerrado</option>
+                </select>
+              </div>
+              <div>
+                <div style={{ fontSize:10, color:C.muted, marginBottom:4 }}>Precio de salida</div>
+                <input type="number" value={form.exit_price || ''} onChange={e => setForm(f => ({ ...f, exit_price: e.target.value }))}
+                  style={{ width:'100%', background:C.bg, border:`1px solid ${C.border}`, borderRadius:7,
+                    padding:'8px 10px', color:C.text, fontSize:12, outline:'none', boxSizing:'border-box' }} />
+              </div>
+              <div>
+                <div style={{ fontSize:10, color:C.muted, marginBottom:4 }}>Fecha de salida</div>
+                <input type="date" value={form.exit_date || ''} onChange={e => setForm(f => ({ ...f, exit_date: e.target.value }))}
+                  style={{ width:'100%', background:C.bg, border:`1px solid ${C.border}`, borderRadius:7,
+                    padding:'8px 10px', color:C.text, fontSize:12, outline:'none', boxSizing:'border-box' }} />
+              </div>
+            </div>
+
+            <div style={{ marginBottom:16 }}>
+              <div style={{ fontSize:10, color:C.muted, marginBottom:4 }}>Notas</div>
+              <textarea value={form.notes || ''} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+                rows={3} style={{ width:'100%', background:C.bg, border:`1px solid ${C.border}`, borderRadius:7,
+                  padding:'9px 12px', color:C.text, fontSize:12, outline:'none', resize:'vertical',
+                  boxSizing:'border-box', fontFamily:'inherit' }} />
+            </div>
+
+            <div style={{ display:'flex', gap:10 }}>
+              <button onClick={closeModal}
+                style={{ flex:1, background:'none', border:`1px solid ${C.border}`, borderRadius:8,
+                  color:C.muted, padding:'10px', cursor:'pointer', fontSize:12 }}>Cancelar</button>
+              <button onClick={handleUpdate} disabled={saving}
+                style={{ flex:2, background:C.accent, border:'none', borderRadius:8,
+                  color:'#000', fontWeight:700, padding:'10px', cursor:'pointer', fontSize:13 }}>
+                {saving ? 'Guardando…' : 'Guardar cambios'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Position Dashboard ───────────────────────────────────────────────────────
+function PositionDashboard({ session }) {
+  const [trades, setTrades] = useState([])
+
+  useEffect(() => {
+    if (!session) return
+    supabase.from('position_trades')
+      .select('*')
+      .eq('user_id', session.user.id)
+      .eq('status', 'closed')
+      .then(({ data }) => setTrades(data || []))
+  }, [session])
+
+  const closed = trades.filter(t => t.exit_price && t.entry_price && t.shares)
+
+  // P&L por trade
+  const withPnl = closed.map(t => {
+    const pnl = (parseFloat(t.exit_price) - parseFloat(t.entry_price)) * parseInt(t.shares)
+    return { ...t, pnl: round2(pnl) }
+  })
+
+  // Agrupar por mes
+  const byMonth = {}
+  withPnl.forEach(t => {
+    const key = (t.exit_date || t.created_at || '').slice(0, 7)
+    if (!key) return
+    if (!byMonth[key]) byMonth[key] = { month: key, pnl: 0, count: 0, wins: 0 }
+    byMonth[key].pnl += t.pnl
+    byMonth[key].count++
+    if (t.pnl > 0) byMonth[key].wins++
+  })
+  const monthData = Object.values(byMonth).sort((a, b) => a.month.localeCompare(b.month))
+  let cumPnl = 0
+  monthData.forEach(m => { cumPnl += m.pnl; m.cumPnl = round2(cumPnl) })
+
+  const totalPnl    = withPnl.reduce((s, t) => s + t.pnl, 0)
+  const winRate     = closed.length > 0 ? Math.round(withPnl.filter(t => t.pnl > 0).length / closed.length * 100) : null
+  const avgScore    = closed.length > 0 ? Math.round(closed.reduce((s, t) => s + (t.score_total || 0), 0) / closed.length) : null
+  const convWins    = withPnl.filter(t => t.decision === 'OPERAR_CONVICCION' && t.pnl > 0).length
+  const convTotal   = withPnl.filter(t => t.decision === 'OPERAR_CONVICCION').length
+  const convRate    = convTotal > 0 ? Math.round(convWins / convTotal * 100) : null
+
+  function round2(n) { return Math.round(n * 100) / 100 }
+
+  function CustomTooltip({ active, payload, label }) {
+    if (!active || !payload?.length) return null
+    const d = payload[0]?.payload
+    return (
+      <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:8, padding:'10px 14px', fontSize:11 }}>
+        <div style={{ color:C.muted, marginBottom:4 }}>{label}</div>
+        <div style={{ color: d?.pnl >= 0 ? C.green : C.red }}>P&L: {fmtUsdShort(d?.pnl)}</div>
+        <div style={{ color:C.accent }}>Acumulado: {fmtUsdShort(d?.cumPnl)}</div>
+        <div style={{ color:C.muted }}>{d?.count} trades · {d?.wins} wins</div>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ maxWidth:960, margin:'0 auto', padding:'0 20px' }}>
+      {closed.length === 0 ? (
+        <div style={{ textAlign:'center', padding:'60px', color:C.muted, fontSize:13 }}>
+          No hay operaciones cerradas en position trading aún.
+        </div>
+      ) : (
+        <>
+          {/* Stats */}
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(160px, 1fr))', gap:12, marginBottom:24 }}>
+            {[
+              ['P&L Total', fmtUsdShort(totalPnl), totalPnl >= 0 ? C.green : C.red],
+              ['Win Rate', winRate != null ? `${winRate}%` : '—', winRate >= 50 ? C.green : C.red],
+              ['Operaciones', closed.length, C.text],
+              ['Score Promedio', avgScore != null ? `${avgScore}/${MAX_SCORE}` : '—', C.text],
+              ['Win Rate Convicción', convRate != null ? `${convRate}%` : '—', convRate >= 60 ? C.green : C.amber],
+            ].map(([label, val, color]) => (
+              <div key={label} style={{ background:C.card, border:`1px solid ${C.border}`,
+                borderRadius:10, padding:'14px 16px', textAlign:'center' }}>
+                <div style={{ fontSize:9, color:C.muted, letterSpacing:'0.08em', textTransform:'uppercase', marginBottom:6 }}>{label}</div>
+                <div style={{ fontSize:20, fontWeight:700, fontFamily:'monospace', color }}>{val}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Gráfico mensual */}
+          {monthData.length > 0 && (
+            <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:12,
+              padding:'18px', marginBottom:24 }}>
+              <div style={{ fontSize:10, color:C.muted, textTransform:'uppercase', letterSpacing:'0.08em',
+                fontWeight:700, marginBottom:16 }}>P&L Mensual</div>
+              <ResponsiveContainer width="100%" height={220}>
+                <ComposedChart data={monthData} margin={{ top:5, right:10, left:0, bottom:5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+                  <XAxis dataKey="month" tick={{ fontSize:10, fill:C.muted }} />
+                  <YAxis tick={{ fontSize:10, fill:C.muted }} tickFormatter={v => fmtUsdShort(v)} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <ReferenceLine y={0} stroke={C.border} />
+                  <Bar dataKey="pnl" radius={[4,4,0,0]}>
+                    {monthData.map((m, i) => <Cell key={i} fill={m.pnl >= 0 ? C.green : C.red} fillOpacity={0.8} />)}
+                  </Bar>
+                  <Line type="monotone" dataKey="cumPnl" stroke={C.accent} strokeWidth={2} dot={false} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          {/* Tabla últimas operaciones */}
+          <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:12, overflow:'hidden' }}>
+            <div style={{ fontSize:10, color:C.muted, textTransform:'uppercase', letterSpacing:'0.08em',
+              fontWeight:700, padding:'12px 16px', borderBottom:`1px solid ${C.border}` }}>
+              Historial de operaciones cerradas
+            </div>
+            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+              <thead>
+                <tr style={{ borderBottom:`1px solid ${C.border}` }}>
+                  {['Ticker','Decisión','Score','Entrada','Salida','Acciones','P&L','Fecha'].map(h => (
+                    <th key={h} style={{ padding:'8px 10px', textAlign:'left', fontSize:10,
+                      color:C.muted, letterSpacing:'0.06em', textTransform:'uppercase' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {withPnl.sort((a,b) => (b.exit_date||'').localeCompare(a.exit_date||'')).map(t => (
+                  <tr key={t.id} style={{ borderBottom:`1px solid ${C.border}` }}>
+                    <td style={{ padding:'9px 10px', fontWeight:700, color:C.text }}>{t.ticker}</td>
+                    <td style={{ padding:'9px 10px' }}>
+                      <span style={{ fontSize:10, color: DECISION_COLOR[t.decision], fontWeight:700 }}>
+                        {t.decision === 'OPERAR_CONVICCION' ? 'CONV.' : t.decision === 'OPERAR_CAUTELA' ? 'CAUTELA' : '—'}
+                      </span>
+                    </td>
+                    <td style={{ padding:'9px 10px', fontFamily:'monospace',
+                      color: t.score_total >= 38 ? C.green : t.score_total >= 28 ? C.amber : C.red }}>
+                      {t.score_total}
+                    </td>
+                    <td style={{ padding:'9px 10px', fontFamily:'monospace' }}>${t.entry_price}</td>
+                    <td style={{ padding:'9px 10px', fontFamily:'monospace' }}>${t.exit_price}</td>
+                    <td style={{ padding:'9px 10px', fontFamily:'monospace' }}>{t.shares}</td>
+                    <td style={{ padding:'9px 10px', fontFamily:'monospace', fontWeight:700,
+                      color: t.pnl >= 0 ? C.green : C.red }}>
+                      {fmtUsdShort(t.pnl)}
+                    </td>
+                    <td style={{ padding:'9px 10px', color:C.muted, fontSize:11 }}>{t.exit_date || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+// ── Position Module (contenedor principal) ──────────────────────────────────
+export default function PositionModule({ session, onBack }) {
+  const [tab, setTab] = useState('analisis')
+
+  const tabs = [
+    ['analisis',  'Análisis'],
+    ['journal',   'Journal'],
+    ['dashboard', 'Dashboard'],
+  ]
+
+  return (
+    <div style={{ paddingBottom:48 }}>
+      {/* Header */}
+      <div style={{ background:'linear-gradient(180deg,#0c1828 0%,#070d1a 100%)',
+        padding:'22px 20px 0', borderBottom:`1px solid ${C.border}` }}>
+        <div style={{ maxWidth:960, margin:'0 auto' }}>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:5 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:7 }}>
+              <div style={{ width:7, height:7, borderRadius:'50%', background:C.green }}/>
+              <span style={{ fontSize:10, color:C.green, letterSpacing:'0.12em' }}>LIVE · DATOS REALES DE MERCADO</span>
+            </div>
+            <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+              <span style={{ fontSize:11, color:C.muted }}>{session.user.email}</span>
+            </div>
+          </div>
+          <div style={{ display:'flex', alignItems:'baseline', gap:10, marginBottom:10 }}>
+            <button onClick={onBack}
+              style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:6, color:C.muted,
+                padding:'3px 9px', cursor:'pointer', fontSize:10, marginRight:4 }}>
+              ← Módulos
+            </button>
+            <h1 style={{ fontSize:22, fontWeight:700, letterSpacing:'-0.02em' }}>KNNS TradeAgent</h1>
+            <span style={{ fontSize:11, color:C.muted }}>Position Trading · Mediano plazo</span>
+          </div>
+          {/* Tabs */}
+          <div style={{ display:'flex', borderTop:`1px solid ${C.border}` }}>
+            {tabs.map(([key, label]) => (
+              <button key={key} onClick={() => setTab(key)}
+                style={{ background:'none', border:'none',
+                  borderBottom: tab===key ? `2px solid ${C.green}` : '2px solid transparent',
+                  color: tab===key ? C.green : C.muted,
+                  padding:'10px 18px', cursor:'pointer', fontSize:12,
+                  fontWeight: tab===key ? 700 : 400 }}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div style={{ marginTop:20 }}>
+        {tab === 'analisis'  && <PositionAnalysis session={session} />}
+        {tab === 'journal'   && <PositionJournal  session={session} />}
+        {tab === 'dashboard' && <PositionDashboard session={session} />}
+      </div>
+    </div>
+  )
+}

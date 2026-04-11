@@ -5,6 +5,7 @@ import StockCard from './StockCard.jsx'
 import Journal from './Journal.jsx'
 import Discover from './Discover.jsx'
 import Dashboard from './Dashboard.jsx'
+import PositionModule from './PositionModule.jsx'
 
 class ErrorBoundary extends Component {
   constructor(props) { super(props); this.state = { error: null } }
@@ -257,9 +258,63 @@ function WatchlistTable({ tickers, analysisCache, openTrades, lastClosedTrades, 
   )
 }
 
+function ModuleSelector({ onSelect }) {
+  return (
+    <div style={{ minHeight:'100vh', background:'#070d1a', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'24px' }}>
+      <div style={{ marginBottom:40, textAlign:'center' }}>
+        <h1 style={{ fontSize:28, fontWeight:700, color:'#dde6f0', letterSpacing:'-0.02em', marginBottom:6 }}>KNNS TradeAgent</h1>
+        <p style={{ fontSize:13, color:'#4a6080' }}>Selecciona el módulo de análisis</p>
+      </div>
+      <div style={{ display:'flex', gap:20, flexWrap:'wrap', justifyContent:'center', maxWidth:700, width:'100%' }}>
+        {/* Swing Trading */}
+        <div onClick={() => onSelect('swing')}
+          style={{ flex:'1 1 280px', maxWidth:320, background:'#0f1929', border:'1px solid #1a2d45',
+            borderRadius:16, padding:'32px 28px', cursor:'pointer', transition:'border-color 0.2s, transform 0.15s' }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor='#00d4ff'; e.currentTarget.style.transform='translateY(-3px)' }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor='#1a2d45'; e.currentTarget.style.transform='translateY(0)' }}>
+          <div style={{ fontSize:28, marginBottom:14 }}>⚡</div>
+          <h2 style={{ fontSize:17, fontWeight:700, color:'#dde6f0', marginBottom:8 }}>Swing Trading</h2>
+          <p style={{ fontSize:12, color:'#4a6080', lineHeight:1.6, marginBottom:20 }}>
+            Operaciones de corto plazo (días a semanas). Análisis técnico automatizado, watchlist, screener y journal.
+          </p>
+          <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:20 }}>
+            {['Watchlist','Screener','Journal','Dashboard'].map(t => (
+              <span key={t} style={{ fontSize:10, color:'#00d4ff', background:'#00d4ff11', border:'1px solid #00d4ff33', borderRadius:99, padding:'3px 9px' }}>{t}</span>
+            ))}
+          </div>
+          <div style={{ background:'#00d4ff', borderRadius:8, padding:'9px 16px', textAlign:'center', fontWeight:700, fontSize:13, color:'#000' }}>
+            Entrar →
+          </div>
+        </div>
+        {/* Position Trading */}
+        <div onClick={() => onSelect('position')}
+          style={{ flex:'1 1 280px', maxWidth:320, background:'#0f1929', border:'1px solid #1a2d45',
+            borderRadius:16, padding:'32px 28px', cursor:'pointer', transition:'border-color 0.2s, transform 0.15s' }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor='#00e096'; e.currentTarget.style.transform='translateY(-3px)' }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor='#1a2d45'; e.currentTarget.style.transform='translateY(0)' }}>
+          <div style={{ fontSize:28, marginBottom:14 }}>📈</div>
+          <h2 style={{ fontSize:17, fontWeight:700, color:'#dde6f0', marginBottom:8 }}>Position Trading</h2>
+          <p style={{ fontSize:12, color:'#4a6080', lineHeight:1.6, marginBottom:20 }}>
+            Inversiones de mediano plazo (semanas a 12+ meses). Scorecard de 8 criterios, sizing por convicción y seguimiento de tesis.
+          </p>
+          <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:20 }}>
+            {['Análisis','Scorecard','Sizing','Journal'].map(t => (
+              <span key={t} style={{ fontSize:10, color:'#00e096', background:'#00e09611', border:'1px solid #00e09633', borderRadius:99, padding:'3px 9px' }}>{t}</span>
+            ))}
+          </div>
+          <div style={{ background:'#00e096', borderRadius:8, padding:'9px 16px', textAlign:'center', fontWeight:700, fontSize:13, color:'#000' }}>
+            Entrar →
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function App() {
   const [session,        setSession]        = useState(null)
   const [appLoading,     setAppLoading]     = useState(true)
+  const [module,         setModule]         = useState('selector')
   const [tab,            setTab]            = useState('dashboard')
 
   // null = not yet loaded from DB
@@ -461,6 +516,8 @@ export default function App() {
     </div>
   )
   if (!session) return <Auth />
+  if (module === 'selector') return <ModuleSelector onSelect={setModule} />
+  if (module === 'position') return <PositionModule session={session} onBack={() => setModule('selector')} />
 
   const tabs = [
     ['dashboard', 'Dashboard'],
@@ -493,8 +550,13 @@ export default function App() {
           </div>
 
           <div style={{ display:'flex', alignItems:'baseline', gap:10, marginBottom: tab==='watchlist' ? 14 : 10 }}>
-            <h1 style={{ fontSize:22, fontWeight:700, letterSpacing:'-0.02em' }}>Swing Trading Agent</h1>
-            <span style={{ fontSize:11, color:C.muted }}>NYSE / NASDAQ</span>
+            <button onClick={() => setModule('selector')}
+              style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:6, color:C.muted,
+                padding:'3px 9px', cursor:'pointer', fontSize:10, marginRight:4 }}>
+              ← Módulos
+            </button>
+            <h1 style={{ fontSize:22, fontWeight:700, letterSpacing:'-0.02em' }}>KNNS TradeAgent</h1>
+            <span style={{ fontSize:11, color:C.muted }}>Swing Trading · NYSE / NASDAQ</span>
           </div>
 
           {tab === 'watchlist' && (

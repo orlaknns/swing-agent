@@ -874,6 +874,453 @@ def health():
     return {"status": "ok"}
 
 
+# ── Position Trading ────────────────────────────────────────────────────────
+
+SECTOR_ETF_MAP = {
+    "Technology":             "XLK",
+    "Financial Services":     "XLF",
+    "Financial":              "XLF",
+    "Healthcare":             "XLV",
+    "Consumer Cyclical":      "XLY",
+    "Consumer Defensive":     "XLP",
+    "Energy":                 "XLE",
+    "Industrials":            "XLI",
+    "Utilities":              "XLU",
+    "Basic Materials":        "XLB",
+    "Real Estate":            "XLRE",
+    "Communication Services": "XLC",
+    "Communication":          "XLC",
+}
+
+# Cache de sector ETFs — clave: símbolo ETF, valor: {closes, ts}
+_sector_etf_cache: dict = {}
+
+
+async def fetch_prices_weekly(ticker: str, client_: httpx.AsyncClient, weeks: int = 20) -> list:
+    """Obtiene velas semanales de Alpha Vantage para detección de HH/HL."""
+    symbol = TICKER_MAP.get(ticker, ticker)
+    url = (
+        f"https://www.alphavantage.co/query"
+        f"?function=TIME_SERIES_WEEKLY&symbol={symbol}"
+        f"&outputsize=compact&apikey={AV_KEY}"
+    )
+    try:
+        r = await client_.get(url)
+        r.raise_for_status()
+        data = r.json()
+        if "Note" in data or "Information" in data or "Error Message" in data:
+            return []
+        ts = data.get("Weekly Time Series")
+        if not ts:
+            return []
+        dates = sorted(ts.keys())[-weeks:]
+        candles = []
+        for d in dates:
+            try:
+                candles.append({
+                    "date":  d,
+                    "open":  float(ts[d]["1. open"]),
+                    "high":  float(ts[d]["2. high"]),
+                    "low":   float(ts[d]["3. low"]),
+                    "close": float(ts[d]["4. close"]),
+                })
+            except Exception:
+                continue
+        return candles
+    except Exception:
+        return []
+
+
+async def fetch_cashflow(ticker: str, client_: httpx.AsyncClient) -> dict:
+    """Obtiene Free Cash Flow del último reporte anual."""
+    symbol = TICKER_MAP.get(ticker, ticker)
+    url = (
+        f"https://www.alphavantage.co/query"
+        f"?function=CASH_FLOW&symbol={symbol}&apikey={AV_KEY}"
+    )
+    try:
+        r = await client_.get(url)
+        r.raise_for_status()
+        data = r.json()
+        if not data or "Note" in data or "Information" in data:
+            return {"fcf": None, "fcf_positive": None}
+        annual = data.get("annualReports", [])
+        if not annual:
+            return {"fcf": None, "fcf_positive": None}
+        latest = annual[0]
+        op_cf = safe_float(latest.get("operatingCashflow"))
+        capex = safe_float(latest.get("capitalExpenditures"))
+        if op_cf is None:
+            return {"fcf": None, "fcf_positive": None}
+        capex = capex or 0
+        fcf = round(op_cf - capex, 0)
+        return {"fcf": fcf, "fcf_positive": fcf > 0}
+    except Exception:
+        return {"fcf": None, "fcf_positive": None}
+
+
+async def fetch_sector_etf_closes(etf: str, client_: httpx.AsyncClient) -> list:
+    """Obtiene closes del ETF de sector con caché de 60 minutos."""
+    import time
+    global _sector_etf_cache
+    cached = _sector_etf_cache.get(etf, {})
+    if cached.get("closes") and (time.time() - cached.get("ts", 0)) < 3600:
+        return cached["closes"]
+    url = (
+        f"https://www.alphavantage.co/query"
+        f"?function=TIME_SERIES_DAILY&symbol={etf}"
+        f"&outputsize=compact&apikey={AV_KEY}"
+    )
+    try:
+        r = await client_.get(url)
+        r.raise_for_status()
+        data = r.json()
+        ts = data.get("Time Series (Daily)")
+        if not ts:
+            return cached.get("closes", [])
+        dates = sorted(ts.keys())[-260:]
+        closes = [float(ts[d]["4. close"]) for d in dates]
+        _sector_etf_cache[etf] = {"closes": closes, "ts": time.time()}
+        return closes
+    except Exception:
+        return cached.get("closes", [])
+
+
+def detect_hh_hl(weekly_candles: list) -> dict:
+    """Detecta Higher Highs / Higher Lows en cierres semanales (últimas 16 semanas)."""
+    closes = [c["close"] for c in weekly_candles[-16:]] if len(weekly_candles) >= 16 else [c["close"] for c in weekly_candles]
+    if len(closes) < 5:
+        return {"score": 0, "hh_count": 0, "hl_count": 0, "description": "Datos semanales insuficientes"}
+
+    highs_pivot, lows_pivot = [], []
+    for i in range(1, len(closes) - 1):
+        if closes[i] > closes[i - 1] and closes[i] > closes[i + 1]:
+            highs_pivot.append(closes[i])
+        if closes[i] < closes[i - 1] and closes[i] < closes[i + 1]:
+            lows_pivot.append(closes[i])
+
+    hh_count = sum(1 for i in range(1, len(highs_pivot)) if highs_pivot[i] > highs_pivot[i - 1])
+    hl_count = sum(1 for i in range(1, len(lows_pivot)) if lows_pivot[i] > lows_pivot[i - 1])
+
+    if hh_count >= 3 and hl_count >= 3:
+        score = 3
+    elif hh_count >= 2 and hl_count >= 2:
+        score = 2
+    elif hh_count >= 1 and hl_count >= 1:
+        score = 1
+    else:
+        score = 0
+
+    return {
+        "score": score,
+        "hh_count": hh_count,
+        "hl_count": hl_count,
+        "description": f"{hh_count} máximos crecientes, {hl_count} mínimos crecientes (últimas 16 semanas)"
+    }
+
+
+def calc_position_scorecard(data: dict) -> dict:
+    """Puntúa los 8 criterios del scorecard de position trading."""
+    from datetime import date as _date
+
+    price        = data["price"]
+    sma50        = data["sma50"]
+    sma200       = data["sma200"]
+    rs_spy       = data["mansfield_rs"]
+    rs_sector    = data["rs_sector"]
+    hh_hl        = data["hh_hl"]
+    fundamentals = data["fundamentals"] or {}
+    cashflow     = data["cashflow"] or {}
+    vol_ratio    = data["vol_ratio"]
+    rr_suggested = data.get("rr_suggested")
+    next_earnings = data.get("next_earnings")
+
+    criteria = {}
+
+    # 1. Narrativa activa x3 — subjetivo, Claude sugiere luego
+    criteria["narrativa"] = {
+        "peso": 3, "score_sugerido": 1, "es_automatico": False,
+        "justificacion": "Evalúa si existe un catalizador estructural de crecimiento (IA, regulación, ciclo de producto, expansión geográfica, etc.)"
+    }
+
+    # 2. Precio > SMA200 x3 — binario automático
+    if sma200 and price > sma200:
+        criteria["precio_sma200"] = {
+            "peso": 3, "score_sugerido": 3, "es_automatico": True,
+            "justificacion": f"Precio ${price} sobre SMA200 ${sma200} — tendencia estructural alcista",
+            "es_veto": False
+        }
+    else:
+        criteria["precio_sma200"] = {
+            "peso": 3, "score_sugerido": 0, "es_automatico": True,
+            "justificacion": f"Precio ${price} BAJO SMA200 ${sma200 or 'N/A'} — estructura bajista",
+            "es_veto": True
+        }
+
+    # 3. Estructura HH/HL x2 — automático
+    criteria["estructura_hh_hl"] = {
+        "peso": 2, "score_sugerido": hh_hl["score"], "es_automatico": True,
+        "justificacion": hh_hl["description"]
+    }
+
+    # 4. RS vs sector/SPY x2 — automático
+    if rs_spy is not None:
+        if rs_spy > 2:   score_rs, rs_desc = 3, f"Mansfield RS {rs_spy} — líder vs S&P500"
+        elif rs_spy > 0: score_rs, rs_desc = 2, f"Mansfield RS {rs_spy} — supera a S&P500"
+        elif rs_spy > -1: score_rs, rs_desc = 1, f"Mansfield RS {rs_spy} — rendimiento similar al S&P500"
+        else:             score_rs, rs_desc = 0, f"Mansfield RS {rs_spy} — rezagado vs S&P500"
+        if rs_sector is not None:
+            rs_desc += f" | RS vs sector: {rs_sector:.2f}"
+    else:
+        score_rs, rs_desc = 1, "RS no calculable — datos insuficientes"
+    criteria["rs_relativa"] = {
+        "peso": 2, "score_sugerido": score_rs, "es_automatico": True,
+        "justificacion": rs_desc
+    }
+
+    # 5. Calidad fundamental x2 — semi-automático
+    rev_growth   = fundamentals.get("revenueGrowth")
+    eps_growth   = fundamentals.get("epsGrowth")
+    fcf_positive = cashflow.get("fcf_positive")
+    fund_score = 0
+    fund_points = []
+    if rev_growth and rev_growth > 10:
+        fund_score += 1; fund_points.append(f"Revenue +{rev_growth}% YoY")
+    if eps_growth and eps_growth > 0:
+        fund_score += 1; fund_points.append(f"EPS creciendo +{eps_growth}%")
+    if fcf_positive is True:
+        fund_score += 1; fund_points.append("FCF positivo")
+    fund_score = min(3, fund_score)
+    criteria["calidad_fundamental"] = {
+        "peso": 2, "score_sugerido": fund_score, "es_automatico": True,
+        "justificacion": " | ".join(fund_points) if fund_points else "Datos fundamentales insuficientes — ajustar manualmente"
+    }
+
+    # 6. Punto de entrada x2 — automático
+    if sma50 and price > 0:
+        dist_sma50 = ((price - sma50) / sma50) * 100
+        if 0 <= dist_sma50 <= 5:
+            entry_score = 3
+            entry_desc = f"Precio a {dist_sma50:.1f}% sobre SMA50 — zona óptima de entrada"
+        elif -3 <= dist_sma50 < 0:
+            entry_score = 3
+            entry_desc = f"Precio {abs(dist_sma50):.1f}% bajo SMA50 — pullback a soporte, entrada ideal"
+        elif 5 < dist_sma50 <= 15:
+            entry_score = 2
+            entry_desc = f"Precio a {dist_sma50:.1f}% sobre SMA50 — entrada aceptable, algo extendido"
+        elif dist_sma50 > 15:
+            entry_score = 1 if dist_sma50 <= 20 else 0
+            entry_desc = f"Precio a {dist_sma50:.1f}% sobre SMA50 — sobreextendido, esperar pullback"
+        else:
+            entry_score = 1
+            entry_desc = f"Precio {abs(dist_sma50):.1f}% bajo SMA50 — evaluar si es debilidad real o pullback profundo"
+        if vol_ratio < 80:
+            entry_desc += f" | Vol {vol_ratio}% del promedio — presión vendedora baja ✓"
+    else:
+        entry_score, entry_desc = 1, "SMA50 no calculable"
+    criteria["punto_entrada"] = {
+        "peso": 2, "score_sugerido": entry_score, "es_automatico": True,
+        "justificacion": entry_desc
+    }
+
+    # 7. Ratio R/R x2 — calculado con niveles sugeridos
+    if rr_suggested is not None:
+        if rr_suggested >= 3:    rr_score = 3
+        elif rr_suggested >= 2:  rr_score = 2
+        elif rr_suggested >= 1.5: rr_score = 1
+        else:                    rr_score = 0
+        rr_veto = rr_suggested < 2.0
+        rr_desc = f"R/R preliminar {rr_suggested:.1f}x — basado en SMA50 como entrada y ATR para stop"
+    else:
+        rr_score, rr_veto = 1, False
+        rr_desc = "R/R pendiente — define entrada, stop y objetivo en la calculadora"
+    criteria["ratio_rr"] = {
+        "peso": 2, "score_sugerido": rr_score, "es_automatico": True,
+        "justificacion": rr_desc,
+        "es_veto": rr_veto
+    }
+
+    # 8. Catalizador próximo x1 — earnings automático, resto manual
+    if next_earnings:
+        try:
+            days_earn = (_date.fromisoformat(next_earnings) - _date.today()).days
+            if 14 <= days_earn <= 60:
+                catalyst_score = 3
+                catalyst_desc = f"Earnings en {days_earn} días — catalizador próximo bien posicionado"
+            elif days_earn < 14:
+                catalyst_score = 1
+                catalyst_desc = f"Earnings en {days_earn} días — muy inminente, riesgo de gap"
+            elif days_earn <= 90:
+                catalyst_score = 2
+                catalyst_desc = f"Earnings en {days_earn} días — catalizador presente pero lejano"
+            else:
+                catalyst_score = 1
+                catalyst_desc = f"Earnings en {days_earn} días — considerar otros catalizadores"
+        except Exception:
+            catalyst_score, catalyst_desc = 0, "Sin catalizador automático detectado — definir manualmente"
+    else:
+        catalyst_score, catalyst_desc = 0, "Sin earnings próximos detectados — define el catalizador manualmente"
+    criteria["catalizador"] = {
+        "peso": 1, "score_sugerido": catalyst_score, "es_automatico": False,
+        "justificacion": catalyst_desc
+    }
+
+    return criteria
+
+
+@app.get("/analyze-position/{ticker}")
+async def analyze_position(ticker: str):
+    ticker = ticker.upper().strip()
+    try:
+        return await _analyze_position_inner(ticker)
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback as _tb
+        detail = f"{type(e).__name__}: {e}\n{_tb.format_exc()[-800:]}"
+        print(f"ANALYZE-POSITION ERROR {ticker}: {detail}")
+        raise HTTPException(status_code=500, detail=detail)
+
+
+async def _analyze_position_inner(ticker: str):
+    async with httpx.AsyncClient(timeout=25) as http:
+        candles, fundamentals, spy_closes, next_earnings, rt_quote, weekly_candles, cashflow = \
+            await asyncio.gather(
+                fetch_prices(ticker, http),
+                fetch_fundamentals(ticker, http),
+                fetch_spy_closes(http),
+                fetch_earnings(ticker, http),
+                fetch_realtime_quote(ticker, http),
+                fetch_prices_weekly(ticker, http),
+                fetch_cashflow(ticker, http),
+            )
+
+    if len(candles) < 5:
+        raise HTTPException(status_code=404, detail=f"Datos insuficientes para {ticker}")
+
+    closes  = [c["close"]  for c in candles]
+    highs   = [c["high"]   for c in candles]
+    lows    = [c["low"]    for c in candles]
+    volumes = [c["volume"] for c in candles]
+
+    price = round(rt_quote["price"], 2) if rt_quote and rt_quote.get("price", 0) > 0 else round(closes[-1], 2)
+
+    sma20  = calc_sma(closes, 20)
+    sma50  = calc_sma(closes, 50)
+    sma200 = calc_sma(closes, 200)
+    rsi    = calc_rsi(closes)
+    atr    = calc_atr(highs, lows, closes)
+    mansfield_rs = calc_mansfield_rs(closes, spy_closes)
+
+    avg_vol   = sum(volumes[-20:]) / min(20, len(volumes))
+    cur_vol   = rt_quote.get("volume", volumes[-1]) if rt_quote else volumes[-1]
+    vol_ratio = round(cur_vol / avg_vol * 100) if avg_vol else 100
+
+    # SPY vs SMA200 — contexto macro automático
+    spy_sma200 = calc_sma(spy_closes, 200)
+    spy_price  = spy_closes[-1] if spy_closes else None
+    spy_above  = (spy_price > spy_sma200) if (spy_price and spy_sma200) else None
+    macro_context = {
+        "spy_price":        round(spy_price, 2) if spy_price else None,
+        "spy_sma200":       round(spy_sma200, 2) if spy_sma200 else None,
+        "spy_above_sma200": spy_above,
+        "market_regime":    "bull" if spy_above else ("bear" if spy_above is False else "unknown"),
+    }
+
+    # RS vs sector ETF
+    sector     = (fundamentals or {}).get("sector")
+    sector_etf = SECTOR_ETF_MAP.get(sector)
+    rs_sector  = None
+    if sector_etf:
+        async with httpx.AsyncClient(timeout=15) as http2:
+            sector_closes = await fetch_sector_etf_closes(sector_etf, http2)
+        if sector_closes:
+            rs_sector = calc_mansfield_rs(closes, sector_closes)
+
+    # HH/HL en datos semanales
+    hh_hl_data = detect_hh_hl(weekly_candles)
+
+    # Sizing preliminar — entrada en SMA50, stop 2×ATR bajo SMA50
+    entry_sug  = sma50
+    stop_sug   = round(entry_sug - 2 * atr, 2) if (entry_sug and atr) else None
+    analyst_target = (fundamentals or {}).get("analystTarget")
+    target_sug = analyst_target or (round(entry_sug * 1.20, 2) if entry_sug else None)
+    rr_suggested = None
+    if entry_sug and stop_sug and target_sug:
+        risk = entry_sug - stop_sug
+        if risk > 0:
+            rr_suggested = round((target_sug - entry_sug) / risk, 2)
+
+    # Scorecard automático
+    scorecard = calc_position_scorecard({
+        "price": price, "sma50": sma50, "sma200": sma200,
+        "mansfield_rs": mansfield_rs, "rs_sector": rs_sector,
+        "hh_hl": hh_hl_data, "fundamentals": fundamentals,
+        "cashflow": cashflow, "vol_ratio": vol_ratio,
+        "rr_suggested": rr_suggested, "next_earnings": next_earnings,
+    })
+
+    # Claude Haiku — narrativa y catalizador subjetivos
+    try:
+        haiku_prompt = (
+            f"Eres analista de position trading (mediano plazo 3-12 meses). "
+            f"Para {ticker} ({(fundamentals or {}).get('name','')}, sector {sector or 'desconocido'}):\n"
+            f"1. Narrativa activa: ¿existe un tema estructural de crecimiento que impulse esta acción? "
+            f"Score 0-3 (0=ninguno, 1=débil, 2=activo, 3=dominante con flujo confirmado).\n"
+            f"2. ¿Hay algún catalizador conocido próximo (lanzamiento, regulación, expansión, ciclo) "
+            f"más allá de los earnings del {next_earnings or 'sin fecha'}?\n"
+            f"Datos: precio ${price}, SMA200 ${sma200}, Mansfield RS {mansfield_rs}, "
+            f"revenue_growth {(fundamentals or {}).get('revenueGrowth')}%, "
+            f"eps_growth {(fundamentals or {}).get('epsGrowth')}%\n"
+            f"Responde SOLO JSON sin texto extra: "
+            + '{"narrativa_sugerida":1,"narrativa_razon":"texto breve","catalizador_razon":"texto breve"}'
+        )
+        haiku_msg = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=250,
+            messages=[{"role": "user", "content": haiku_prompt}]
+        )
+        haiku_json = extract_json(haiku_msg.content[0].text)
+        scorecard["narrativa"]["score_sugerido"]   = int(haiku_json.get("narrativa_sugerida", 1))
+        scorecard["narrativa"]["justificacion"]     = haiku_json.get("narrativa_razon", scorecard["narrativa"]["justificacion"])
+        scorecard["catalizador"]["justificacion"]   = haiku_json.get("catalizador_razon", scorecard["catalizador"]["justificacion"])
+    except Exception as e:
+        print(f"Haiku position error {ticker}: {e}")
+
+    # Score total sugerido
+    score_total = sum(
+        v["score_sugerido"] * v["peso"]
+        for v in scorecard.values()
+    )
+
+    return JSONResponse(content={
+        "ticker":          ticker,
+        "company_name":    (fundamentals or {}).get("name"),
+        "sector":          sector,
+        "sector_etf":      sector_etf,
+        "price":           price,
+        "sma20":           sma20,
+        "sma50":           sma50,
+        "sma200":          sma200,
+        "rsi":             rsi,
+        "vol_ratio":       vol_ratio,
+        "atr":             round(atr, 2),
+        "mansfield_rs":    mansfield_rs,
+        "rs_sector":       rs_sector,
+        "macro_context":   macro_context,
+        "hh_hl":           hh_hl_data,
+        "next_earnings":   next_earnings,
+        "entry_suggested": entry_sug,
+        "stop_suggested":  stop_sug,
+        "target_suggested": target_sug,
+        "rr_suggested":    rr_suggested,
+        "scorecard":       scorecard,
+        "score_total_suggested": score_total,
+        "fundamentals":    fundamentals,
+        "cashflow":        cashflow,
+    }, media_type="application/json; charset=utf-8")
+
+
 # ── Screener — lee screener.json desde GitHub raw ──────────────────────────
 import time as _time
 
