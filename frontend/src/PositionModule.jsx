@@ -839,7 +839,18 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove }) {
             </div>
           )}
           {data?.sector && (
-            <div style={{ fontSize:9, color:C.accent, marginTop:1 }}>{data.sector}</div>
+            <div style={{ fontSize:9, marginTop:1, display:'flex', alignItems:'center', gap:6 }}>
+              <span style={{ color:C.accent }}>{data.sector}</span>
+              {data.sector_etf && (
+                <span style={{ color:C.muted }}>· {data.sector_etf}</span>
+              )}
+              {data.rs_sector != null && (
+                <span style={{ fontFamily:'monospace', fontWeight:700, fontSize:9,
+                  color: data.rs_sector > 2 ? C.green : data.rs_sector > 0 ? '#7fd4a0' : data.rs_sector > -2 ? C.amber : C.red }}>
+                  RS {data.rs_sector > 0 ? '+' : ''}{data.rs_sector}
+                </span>
+              )}
+            </div>
           )}
           {savedLabel && <div style={{ fontSize:9, color:C.muted, marginTop:1 }}>Actualizado {savedLabel}</div>}
         </div>
@@ -1173,6 +1184,7 @@ function PositionWatchlistTable({ tickers, cache, onRemove, onRefresh, refreshin
               <th style={thStyle(null)}>Decisión</th>
               <th style={thStyle('rsi')} onClick={() => handleSort('rsi')}>RSI <SortIcon col="rsi"/></th>
               <th style={thStyle('rs')} onClick={() => handleSort('rs')}>RS SPY <SortIcon col="rs"/></th>
+              <th style={thStyle(null)}>Sector</th>
               <th style={thStyle(null)}>Macro</th>
               <th style={thStyle(null)}>HH/HL</th>
               <th style={thStyle(null)}>Stage</th>
@@ -1226,6 +1238,22 @@ function PositionWatchlistTable({ tickers, cache, onRemove, onRefresh, refreshin
                   <td style={{ padding:'10px', fontFamily:'monospace',
                     color: analyzed && d.mansfield_rs > 0 ? C.green : analyzed && d.mansfield_rs < 0 ? C.red : C.muted }}>
                     {analyzed ? d.mansfield_rs : '—'}
+                  </td>
+                  <td style={{ padding:'10px', maxWidth:130 }}>
+                    {analyzed && d.sector ? (
+                      <div>
+                        <div style={{ fontSize:10, color:C.accent, whiteSpace:'nowrap',
+                          overflow:'hidden', textOverflow:'ellipsis' }}>
+                          {d.sector}
+                        </div>
+                        {d.rs_sector != null && (
+                          <div style={{ fontSize:9, fontFamily:'monospace', fontWeight:700,
+                            color: d.rs_sector > 2 ? C.green : d.rs_sector > 0 ? '#7fd4a0' : d.rs_sector > -2 ? C.amber : C.red }}>
+                            RS {d.rs_sector > 0 ? '+' : ''}{d.rs_sector}
+                          </div>
+                        )}
+                      </div>
+                    ) : <span style={{ color:C.muted }}>—</span>}
                   </td>
                   <td style={{ padding:'10px' }}>
                     {analyzed ? (
