@@ -1132,17 +1132,7 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove }) {
   const [loading,    setLoading]    = useState(false)
   const [error,      setError]      = useState(null)
   const [expanded,   setExpanded]   = useState(false)
-  const hasFetched = useRef(false)
-
-  // Auto-analiza solo si no hay cache — nunca re-analiza al re-montar
-  useEffect(() => {
-    if (!cachedData && !hasFetched.current) {
-      hasFetched.current = true
-      runAnalysis()
-    }
-  }, []) // eslint-disable-line
-
-  // Si cachedData cambia (e.g. tras ↻ manual desde padre), sincronizar
+  // Si cachedData cambia (e.g. tras ↻ manual), sincronizar
   useEffect(() => {
     if (cachedData) setData(cachedData)
   }, [cachedData])
@@ -1233,6 +1223,18 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove }) {
 
       {/* Error */}
       {error && <div style={{ fontSize:10, color:C.red, background:'#ff406011', padding:'6px 9px', borderRadius:6 }}>{error}</div>}
+
+      {/* Sin cache — pedir análisis manual */}
+      {!data && !loading && (
+        <div style={{ textAlign:'center', padding:'20px 0' }}>
+          <div style={{ fontSize:11, color:C.muted, marginBottom:10 }}>Sin análisis guardado</div>
+          <button onClick={runAnalysis}
+            style={{ background:C.green, border:'none', borderRadius:7, color:'#000',
+              fontWeight:700, padding:'7px 16px', cursor:'pointer', fontSize:12 }}>
+            ↻ Analizar
+          </button>
+        </div>
+      )}
 
       {/* Loading */}
       {loading && !data && (
@@ -1615,15 +1617,12 @@ export default function PositionModule({ session, onBack }) {
   }, [session])
 
   const upsertAll = (wl, cache) => {
-    const payload = {
+    supabase.from('watchlist').upsert({
       user_id:            session.user.id,
       position_watchlist: wl    ?? watchlistRef.current,
       position_cache:     cache ?? posCacheRef.current,
       updated_at:         new Date().toISOString(),
-    }
-    console.log('[upsertAll] payload:', payload)
-    supabase.from('watchlist').upsert(payload, { onConflict:'user_id' })
-      .then(({ error }) => console.log('[upsertAll] result:', error || 'OK'))
+    }, { onConflict:'user_id' })
   }
 
   const cacheAnalysis = (ticker, data) => {
