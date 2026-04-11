@@ -1594,14 +1594,11 @@ export default function PositionModule({ session, onBack }) {
   const [posCache,   setPosCache]   = useState({})
   const posCacheRef  = useRef({})
   const dbLoaded     = useRef(false)
-  const listsReady   = useRef(false)
-  const saveTimer    = useRef(null)
 
   // ── Carga inicial desde Supabase ──────────────────────────────────────────
   useEffect(() => {
     if (!session) return
-    dbLoaded.current   = false
-    listsReady.current = false
+    dbLoaded.current = false
     supabase.from('watchlist')
       .select('position_watchlist, position_cache')
       .eq('user_id', session.user.id)
@@ -1609,30 +1606,13 @@ export default function PositionModule({ session, onBack }) {
       .then(({ data }) => {
         const wl    = data?.position_watchlist?.length ? data.position_watchlist : []
         const cache = data?.position_cache || {}
-        setWatchlist(wl)
         watchlistRef.current = wl
         posCacheRef.current  = cache
+        setWatchlist(wl)
         if (Object.keys(cache).length > 0) setPosCache(cache)
         dbLoaded.current = true
       })
   }, [session])
-
-  // ── Guardar watchlist con debounce ────────────────────────────────────────
-  useEffect(() => {
-    if (watchlist === null) return
-    if (!dbLoaded.current) return
-    if (!listsReady.current) { listsReady.current = true; return }
-    watchlistRef.current = watchlist
-    if (saveTimer.current) clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(() => {
-      supabase.from('watchlist').upsert({
-        user_id:            session.user.id,
-        position_watchlist: watchlistRef.current,
-        position_cache:     posCacheRef.current,
-        updated_at:         new Date().toISOString(),
-      }, { onConflict:'user_id' })
-    }, 800)
-  }, [watchlist]) // eslint-disable-line
 
   const upsertAll = (wl, cache) => {
     supabase.from('watchlist').upsert({
@@ -1658,6 +1638,7 @@ export default function PositionModule({ session, onBack }) {
       watchlistRef.current = next
       setWatchlist(next)
       setSearch('')
+      upsertAll(next, null)
     }
   }
 
@@ -1677,6 +1658,7 @@ export default function PositionModule({ session, onBack }) {
     const next = [ticker, ...watchlistRef.current]
     watchlistRef.current = next
     setWatchlist(next)
+    upsertAll(next, null)
   }
   const addAllToWatchlist = (tickers) => {
     const toAdd = tickers.filter(t => !watchlistRef.current.includes(t))
@@ -1684,6 +1666,7 @@ export default function PositionModule({ session, onBack }) {
     const next = [...toAdd, ...watchlistRef.current]
     watchlistRef.current = next
     setWatchlist(next)
+    upsertAll(next, null)
   }
 
   const refreshFromTable = async (ticker) => {
