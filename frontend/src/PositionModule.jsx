@@ -1615,12 +1615,15 @@ export default function PositionModule({ session, onBack }) {
   }, [session])
 
   const upsertAll = (wl, cache) => {
-    supabase.from('watchlist').upsert({
+    const payload = {
       user_id:            session.user.id,
       position_watchlist: wl    ?? watchlistRef.current,
       position_cache:     cache ?? posCacheRef.current,
       updated_at:         new Date().toISOString(),
-    }, { onConflict:'user_id' })
+    }
+    console.log('[upsertAll] payload:', payload)
+    supabase.from('watchlist').upsert(payload, { onConflict:'user_id' })
+      .then(({ error }) => console.log('[upsertAll] result:', error || 'OK'))
   }
 
   const cacheAnalysis = (ticker, data) => {
