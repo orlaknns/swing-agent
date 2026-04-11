@@ -1020,7 +1020,7 @@ def detect_hh_hl(weekly_candles: list) -> dict:
 
 
 def calc_position_scorecard(data: dict) -> dict:
-    """Puntúa los 8 criterios del scorecard de position trading."""
+    """Puntúa los 7 criterios del scorecard de position trading."""
     from datetime import date as _date
 
     price        = data["price"]
@@ -1129,7 +1129,7 @@ def calc_position_scorecard(data: dict) -> dict:
         elif rr_suggested >= 2:  rr_score = 2
         elif rr_suggested >= 1.5: rr_score = 1
         else:                    rr_score = 0
-        rr_veto = rr_suggested < 2.0
+        rr_veto = rr_suggested < 2
         rr_desc = f"R/R preliminar {rr_suggested:.1f}x — basado en SMA50 como entrada y ATR para stop"
     else:
         rr_score, rr_veto = 1, False
@@ -1138,31 +1138,6 @@ def calc_position_scorecard(data: dict) -> dict:
         "peso": 2, "score_sugerido": rr_score, "es_automatico": True,
         "justificacion": rr_desc,
         "es_veto": rr_veto
-    }
-
-    # 8. Catalizador próximo x1 — earnings automático, resto manual
-    if next_earnings:
-        try:
-            days_earn = (_date.fromisoformat(next_earnings) - _date.today()).days
-            if 14 <= days_earn <= 60:
-                catalyst_score = 3
-                catalyst_desc = f"Earnings en {days_earn} días — catalizador próximo bien posicionado"
-            elif days_earn < 14:
-                catalyst_score = 1
-                catalyst_desc = f"Earnings en {days_earn} días — muy inminente, riesgo de gap"
-            elif days_earn <= 90:
-                catalyst_score = 2
-                catalyst_desc = f"Earnings en {days_earn} días — catalizador presente pero lejano"
-            else:
-                catalyst_score = 1
-                catalyst_desc = f"Earnings en {days_earn} días — considerar otros catalizadores"
-        except Exception:
-            catalyst_score, catalyst_desc = 0, "Sin catalizador automático detectado — definir manualmente"
-    else:
-        catalyst_score, catalyst_desc = 0, "Sin earnings próximos detectados — define el catalizador manualmente"
-    criteria["catalizador"] = {
-        "peso": 1, "score_sugerido": catalyst_score, "es_automatico": False,
-        "justificacion": catalyst_desc
     }
 
     return criteria
@@ -1260,30 +1235,28 @@ async def _analyze_position_inner(ticker: str):
         "rr_suggested": rr_suggested, "next_earnings": next_earnings,
     })
 
-    # Claude Haiku — narrativa y catalizador subjetivos
+    # Claude Haiku — evalúa narrativa activa
     try:
         haiku_prompt = (
             f"Eres analista de position trading (mediano plazo 3-12 meses). "
             f"Para {ticker} ({(fundamentals or {}).get('name','')}, sector {sector or 'desconocido'}):\n"
-            f"1. Narrativa activa: ¿existe un tema estructural de crecimiento que impulse esta acción? "
-            f"Score 0-3 (0=ninguno, 1=débil, 2=activo, 3=dominante con flujo confirmado).\n"
-            f"2. ¿Hay algún catalizador conocido próximo (lanzamiento, regulación, expansión, ciclo) "
-            f"más allá de los earnings del {next_earnings or 'sin fecha'}?\n"
+            f"¿Existe un tema estructural de crecimiento que impulse esta acción? "
+            f"Score 0-3 (0=ninguno, 1=débil/especulativo, 2=activo con evidencia, 3=dominante con flujo confirmado).\n"
             f"Datos: precio ${price}, SMA200 ${sma200}, Mansfield RS {mansfield_rs}, "
             f"revenue_growth {(fundamentals or {}).get('revenueGrowth')}%, "
-            f"eps_growth {(fundamentals or {}).get('epsGrowth')}%\n"
+            f"eps_growth {(fundamentals or {}).get('epsGrowth')}%, "
+            f"próximos earnings: {next_earnings or 'sin fecha'}\n"
             f"Responde SOLO JSON sin texto extra: "
-            + '{"narrativa_sugerida":1,"narrativa_razon":"texto breve","catalizador_razon":"texto breve"}'
+            + '{"narrativa_sugerida":1,"narrativa_razon":"texto breve en español"}'
         )
         haiku_msg = client.messages.create(
             model="claude-haiku-4-5-20251001",
-            max_tokens=250,
+            max_tokens=150,
             messages=[{"role": "user", "content": haiku_prompt}]
         )
         haiku_json = extract_json(haiku_msg.content[0].text)
-        scorecard["narrativa"]["score_sugerido"]   = int(haiku_json.get("narrativa_sugerida", 1))
-        scorecard["narrativa"]["justificacion"]     = haiku_json.get("narrativa_razon", scorecard["narrativa"]["justificacion"])
-        scorecard["catalizador"]["justificacion"]   = haiku_json.get("catalizador_razon", scorecard["catalizador"]["justificacion"])
+        scorecard["narrativa"]["score_sugerido"] = int(haiku_json.get("narrativa_sugerida", 1))
+        scorecard["narrativa"]["justificacion"]   = haiku_json.get("narrativa_razon", scorecard["narrativa"]["justificacion"])
     except Exception as e:
         print(f"Haiku position error {ticker}: {e}")
 

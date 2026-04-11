@@ -14,9 +14,9 @@ const C = {
 const WEIGHTS = {
   narrativa: 3, precio_sma200: 3, estructura_hh_hl: 2,
   rs_relativa: 2, calidad_fundamental: 2, punto_entrada: 2,
-  ratio_rr: 2, catalizador: 1,
+  ratio_rr: 2,
 }
-const MAX_SCORE = 51 // suma de todos los pesos × 3
+const MAX_SCORE = 48 // suma de todos los pesos × 3
 
 const CRITERIA_LABELS = {
   narrativa:           'Narrativa activa',
@@ -26,7 +26,6 @@ const CRITERIA_LABELS = {
   calidad_fundamental: 'Calidad fundamental',
   punto_entrada:       'Punto de entrada',
   ratio_rr:            'Ratio R/R',
-  catalizador:         'Catalizador próximo',
 }
 
 const ENTRY_SIGNALS = [
@@ -101,389 +100,6 @@ function CriterioSlider({ id, value, onChange, justificacion, esAutomatico, esVe
   )
 }
 
-// ── Position Analysis ────────────────────────────────────────────────────────
-function PositionAnalysis({ session, initialTicker = '' }) {
-  const [ticker,      setTicker]      = useState(initialTicker)
-  const [loading,     setLoading]     = useState(false)
-  const [error,       setError]       = useState(null)
-  const [analysis,    setAnalysis]    = useState(null)
-  const [scores,      setScores]      = useState({})
-  const [sizing,      setSizing]      = useState({ capital:'', riskPct:'1.5', entryPrice:'', stopLoss:'', target1:'', target2:'' })
-  const [narrative,   setNarrative]   = useState('')
-  const [entrySignal, setEntrySignal] = useState(ENTRY_SIGNALS[0])
-  const [catalyst,    setCatalyst]    = useState('')
-  const [invalidation,setInvalidation]= useState('')
-  const [notes,       setNotes]       = useState('')
-  const [saving,      setSaving]      = useState(false)
-  const [saved,       setSaved]       = useState(false)
-
-  const analyze = async () => {
-    const t = ticker.trim().toUpperCase()
-    if (!t) return
-    setLoading(true); setError(null); setAnalysis(null); setScores({})
-    try {
-      const res = await fetch(`/api/analyze-position/${t}`)
-      if (!res.ok) { const d = await res.json(); throw new Error(d.detail || 'Error del servidor'); }
-      const data = await res.json()
-      setAnalysis(data)
-      // Inicializar scores con los valores sugeridos
-      const initScores = {}
-      Object.entries(data.scorecard || {}).forEach(([k, v]) => {
-        initScores[k] = v.score_sugerido ?? 0
-      })
-      setScores(initScores)
-      // Pre-llenar sizing con valores sugeridos
-      setSizing(prev => ({
-        ...prev,
-        entryPrice: data.entry_suggested?.toFixed(2) || '',
-        stopLoss:   data.stop_suggested?.toFixed(2)  || '',
-        target1:    data.target_suggested?.toFixed(2) || '',
-      }))
-    } catch(e) {
-      setError(e.message)
-    }
-    setLoading(false)
-  }
-
-  const updateScore = (id, val) => setScores(prev => ({ ...prev, [id]: val }))
-
-  const scoreTotal = Object.entries(scores).reduce((acc, [k, v]) => acc + (v * (WEIGHTS[k] || 1)), 0)
-  const vetos = []
-  if (scores.precio_sma200 === 0 && analysis) vetos.push('Precio bajo SMA200 — estructura bajista')
-  if (scores.ratio_rr !== undefined && scores.ratio_rr <= 1) vetos.push('R/R menor a 1:2 — riesgo no justificado')
-
-  const decision = vetos.length > 0 ? 'NO_OPERAR' :
-    scoreTotal >= 38 ? 'OPERAR_CONVICCION' :
-    scoreTotal >= 28 ? 'OPERAR_CAUTELA'    : 'NO_OPERAR'
-
-  const canTrade = decision !== 'NO_OPERAR'
-
-  // Cálculos de sizing
-  const sp = { ...sizing }
-  const capital    = parseFloat(sp.capital) || 0
-  const riskPct    = parseFloat(sp.riskPct) || 1.5
-  const entryPrice = parseFloat(sp.entryPrice) || 0
-  const stopLoss   = parseFloat(sp.stopLoss) || 0
-  const target1    = parseFloat(sp.target1) || 0
-  const target2    = parseFloat(sp.target2) || 0
-
-  const riskUsd    = capital > 0 ? capital * (riskPct / 100) : 0
-  const riskPerShare = entryPrice > stopLoss ? entryPrice - stopLoss : 0
-  let   shares     = riskPerShare > 0 && riskUsd > 0 ? Math.floor(riskUsd / riskPerShare) : 0
-  if (decision === 'OPERAR_CAUTELA') shares = Math.floor(shares * 0.5)
-  const positionValue = shares * entryPrice
-  const pctPortfolio  = capital > 0 ? (positionValue / capital) * 100 : 0
-  const rr1  = riskPerShare > 0 && target1 > entryPrice ? ((target1 - entryPrice) / riskPerShare).toFixed(2) : null
-  const rr2  = riskPerShare > 0 && target2 > entryPrice ? ((target2 - entryPrice) / riskPerShare).toFixed(2) : null
-  const gain1 = shares > 0 && target1 > 0 ? shares * (target1 - entryPrice) : null
-  const gain2 = shares > 0 && target2 > 0 ? shares * (target2 - entryPrice) : null
-  const overweighted = pctPortfolio > 10
-
-  const handleSave = async () => {
-    if (!analysis || !session) return
-    setSaving(true)
-    const row = {
-      user_id:       session.user.id,
-      ticker:        analysis.ticker,
-      company_name:  analysis.company_name,
-      macro_context: analysis.macro_context,
-      scorecard:     scores,
-      score_total:   scoreTotal,
-      decision,
-      capital:       capital || null,
-      risk_pct:      riskPct || null,
-      entry_price:   entryPrice || null,
-      stop_loss:     stopLoss || null,
-      target1:       target1 || null,
-      target2:       target2 || null,
-      shares:        shares || null,
-      narrative,
-      entry_signal:  entrySignal,
-      catalyst,
-      invalidation,
-      notes,
-      status:        'planning',
-    }
-    const { error: err } = await supabase.from('position_trades').insert(row)
-    if (!err) { setSaved(true); setTimeout(() => setSaved(false), 2500) }
-    else console.error('Error guardando position trade:', err)
-    setSaving(false)
-  }
-
-  const pctBar = Math.min(100, (scoreTotal / MAX_SCORE) * 100)
-  const barColor = decision === 'OPERAR_CONVICCION' ? C.green : decision === 'OPERAR_CAUTELA' ? C.amber : C.red
-
-  return (
-    <div style={{ maxWidth:760, margin:'0 auto', padding:'0 20px' }}>
-
-      {/* Input ticker */}
-      <div style={{ display:'flex', gap:8, marginBottom:24 }}>
-        <input
-          value={ticker}
-          onChange={e => setTicker(e.target.value.toUpperCase())}
-          onKeyDown={e => e.key === 'Enter' && analyze()}
-          placeholder="Ticker… ej: NVDA, MSFT, AMZN"
-          style={{ flex:1, background:C.card, border:`1px solid ${C.border}`, borderRadius:9,
-            padding:'11px 14px', color:C.text, fontSize:13, outline:'none' }}
-        />
-        <button onClick={analyze} disabled={loading || !ticker.trim()}
-          style={{ background:C.accent, border:'none', borderRadius:9, color:'#000',
-            fontWeight:700, padding:'11px 20px', cursor: loading ? 'not-allowed' : 'pointer',
-            fontSize:13, opacity: loading ? 0.7 : 1 }}>
-          {loading ? 'Analizando…' : 'Analizar'}
-        </button>
-      </div>
-
-      {error && (
-        <div style={{ background:'#ff406015', border:`1px solid ${C.red}44`, borderRadius:9,
-          padding:'12px 16px', color:C.red, fontSize:12, marginBottom:20 }}>
-          {error}
-        </div>
-      )}
-
-      {analysis && (
-        <>
-          {/* Datos básicos */}
-          <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:12,
-            padding:'16px 18px', marginBottom:20 }}>
-            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', flexWrap:'wrap', gap:8 }}>
-              <div>
-                <div style={{ fontSize:18, fontWeight:700, color:C.text }}>{analysis.ticker}
-                  {analysis.company_name && <span style={{ fontSize:12, color:C.muted, fontWeight:400, marginLeft:8 }}>{analysis.company_name}</span>}
-                </div>
-                <div style={{ fontSize:11, color:C.muted, marginTop:2 }}>{analysis.sector}{analysis.sector_etf ? ` · ETF: ${analysis.sector_etf}` : ''}</div>
-              </div>
-              <div style={{ textAlign:'right' }}>
-                <div style={{ fontSize:22, fontWeight:700, fontFamily:'monospace', color:C.text }}>${analysis.price}</div>
-                <div style={{ fontSize:10, color:C.muted }}>SMA50 ${analysis.sma50} · SMA200 ${analysis.sma200}</div>
-              </div>
-            </div>
-
-            {/* Contexto macro */}
-            <div style={{ marginTop:12, padding:'10px 12px', borderRadius:8,
-              background: analysis.macro_context?.spy_above_sma200 ? '#00e09610' : '#ff406010',
-              border: `1px solid ${analysis.macro_context?.spy_above_sma200 ? C.green+'44' : C.red+'44'}` }}>
-              <span style={{ fontSize:10, fontWeight:700,
-                color: analysis.macro_context?.spy_above_sma200 ? C.green : C.red }}>
-                {analysis.macro_context?.spy_above_sma200 ? '▲ MERCADO ALCISTA' : '▼ MERCADO BAJISTA'}
-              </span>
-              <span style={{ fontSize:10, color:C.muted, marginLeft:8 }}>
-                SPY ${analysis.macro_context?.spy_price} · SMA200 ${analysis.macro_context?.spy_sma200}
-              </span>
-            </div>
-
-            {/* Indicadores */}
-            <div style={{ display:'flex', gap:14, marginTop:12, flexWrap:'wrap' }}>
-              {[
-                ['RSI', analysis.rsi],
-                ['Mansfield RS', analysis.mansfield_rs],
-                ['RS Sector', analysis.rs_sector?.toFixed(2)],
-                ['Vol%', analysis.vol_ratio],
-                ['HH/HL', `${analysis.hh_hl?.hh_count}HH/${analysis.hh_hl?.hl_count}HL`],
-                ['Earnings', analysis.next_earnings || 'N/A'],
-              ].map(([label, val]) => (
-                <div key={label}>
-                  <div style={{ fontSize:9, color:C.muted, textTransform:'uppercase', letterSpacing:'0.06em' }}>{label}</div>
-                  <div style={{ fontSize:12, fontFamily:'monospace', color:C.text, fontWeight:600 }}>{val ?? '—'}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Scorecard */}
-          <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:12,
-            padding:'16px 18px', marginBottom:20 }}>
-            <div style={{ fontSize:11, color:C.muted, textTransform:'uppercase', letterSpacing:'0.08em',
-              fontWeight:700, marginBottom:16 }}>Scorecard de evaluación</div>
-
-            <div style={{ display:'flex', flexDirection:'column', gap:10, marginBottom:18 }}>
-              {Object.entries(analysis.scorecard || {}).map(([id, meta]) => (
-                <CriterioSlider
-                  key={id} id={id} value={scores[id] ?? 0}
-                  onChange={updateScore}
-                  justificacion={meta.justificacion}
-                  esAutomatico={meta.es_automatico}
-                  esVeto={meta.es_veto}
-                />
-              ))}
-            </div>
-
-            {/* Vetos */}
-            {vetos.length > 0 && (
-              <div style={{ marginBottom:14 }}>
-                {vetos.map((v, i) => (
-                  <div key={i} style={{ background:'#ff406015', border:`1px solid ${C.red}44`,
-                    borderRadius:8, padding:'10px 14px', color:C.red, fontSize:12,
-                    fontWeight:600, marginBottom:6 }}>
-                    ⛔ {v}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Barra de progreso */}
-            <div style={{ marginBottom:10 }}>
-              <div style={{ display:'flex', justifyContent:'space-between', marginBottom:5 }}>
-                <span style={{ fontSize:11, color:C.muted }}>Score total</span>
-                <span style={{ fontSize:14, fontWeight:700, fontFamily:'monospace', color: barColor }}>
-                  {scoreTotal} / {MAX_SCORE}
-                </span>
-              </div>
-              <div style={{ height:10, background:C.bg, borderRadius:99, overflow:'hidden', border:`1px solid ${C.border}` }}>
-                <div style={{ height:'100%', width:`${pctBar}%`, background:barColor,
-                  borderRadius:99, transition:'width 0.3s, background 0.3s' }} />
-              </div>
-              <div style={{ display:'flex', justifyContent:'space-between', marginTop:4 }}>
-                <span style={{ fontSize:9, color:C.red }}>NO OPERAR &lt;28</span>
-                <span style={{ fontSize:9, color:C.amber }}>CAUTELA 28–37</span>
-                <span style={{ fontSize:9, color:C.green }}>CONVICCIÓN 38+</span>
-              </div>
-            </div>
-
-            {/* Decisión */}
-            <div style={{ padding:'12px 16px', borderRadius:10,
-              background: DECISION_COLOR[decision] + '18',
-              border: `2px solid ${DECISION_COLOR[decision]}55`,
-              textAlign:'center' }}>
-              <div style={{ fontSize:15, fontWeight:700, color: DECISION_COLOR[decision] }}>
-                {DECISION_LABEL[decision]}
-              </div>
-              {decision === 'OPERAR_CAUTELA' && (
-                <div style={{ fontSize:11, color:C.muted, marginTop:4 }}>
-                  Reducir posición al 50% — sizing ajustado automáticamente
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Calculadora de sizing */}
-          {canTrade && (
-            <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:12,
-              padding:'16px 18px', marginBottom:20 }}>
-              <div style={{ fontSize:11, color:C.muted, textTransform:'uppercase', letterSpacing:'0.08em',
-                fontWeight:700, marginBottom:16 }}>Calculadora de sizing</div>
-
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:14 }}>
-                {[
-                  ['Capital total ($)', 'capital', 'number', 'ej: 50000'],
-                  ['Riesgo por operación (%)', 'riskPct', 'number', '0.5–3'],
-                  ['Precio de entrada', 'entryPrice', 'number', ''],
-                  ['Stop loss', 'stopLoss', 'number', ''],
-                  ['Objetivo 1', 'target1', 'number', ''],
-                  ['Objetivo 2 (opcional)', 'target2', 'number', ''],
-                ].map(([label, field, type, ph]) => (
-                  <div key={field}>
-                    <div style={{ fontSize:10, color:C.muted, marginBottom:4 }}>{label}</div>
-                    <input
-                      type={type} value={sizing[field]}
-                      onChange={e => setSizing(prev => ({ ...prev, [field]: e.target.value }))}
-                      placeholder={ph}
-                      style={{ width:'100%', background:C.bg, border:`1px solid ${C.border}`,
-                        borderRadius:7, padding:'8px 10px', color:C.text, fontSize:12,
-                        outline:'none', boxSizing:'border-box' }}
-                    />
-                  </div>
-                ))}
-              </div>
-
-              {capital > 0 && entryPrice > 0 && stopLoss > 0 && (
-                <div style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:10,
-                  padding:'14px 16px' }}>
-                  <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(130px, 1fr))', gap:12 }}>
-                    {[
-                      ['Riesgo USD', `$${riskUsd.toFixed(0)}`, C.red],
-                      ['Acciones', `${shares}`, C.text],
-                      ['Valor posición', `$${positionValue.toFixed(0)}`, C.text],
-                      ['% portafolio', `${pctPortfolio.toFixed(1)}%`, overweighted ? C.red : C.text],
-                      ...(rr1 ? [['R/R Obj.1', `${rr1}x`, parseFloat(rr1) >= 2 ? C.green : C.amber]] : []),
-                      ...(rr2 ? [['R/R Obj.2', `${rr2}x`, parseFloat(rr2) >= 2 ? C.green : C.amber]] : []),
-                      ...(gain1 != null ? [['Ganancia Obj.1', fmtUsd(gain1), C.green]] : []),
-                      ...(gain2 != null ? [['Ganancia Obj.2', fmtUsd(gain2), C.green]] : []),
-                    ].map(([label, val, color]) => (
-                      <div key={label} style={{ textAlign:'center' }}>
-                        <div style={{ fontSize:9, color:C.muted, textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:3 }}>{label}</div>
-                        <div style={{ fontSize:15, fontWeight:700, fontFamily:'monospace', color }}>{val}</div>
-                      </div>
-                    ))}
-                  </div>
-                  {overweighted && (
-                    <div style={{ marginTop:12, padding:'8px 12px', background:'#ff406015',
-                      border:`1px solid ${C.red}44`, borderRadius:7, fontSize:11, color:C.red }}>
-                      ⚠ La posición representa {pctPortfolio.toFixed(1)}% del portafolio — supera el 10% recomendado. Reduce el % de riesgo.
-                    </div>
-                  )}
-                  {decision === 'OPERAR_CAUTELA' && (
-                    <div style={{ marginTop:8, padding:'8px 12px', background:'#ffb80015',
-                      border:`1px solid ${C.amber}44`, borderRadius:7, fontSize:11, color:C.amber }}>
-                      Sizing reducido al 50% por decisión CAUTELA ({shares * 2} → {shares} acciones)
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Journal */}
-          <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:12,
-            padding:'16px 18px', marginBottom:24 }}>
-            <div style={{ fontSize:11, color:C.muted, textTransform:'uppercase', letterSpacing:'0.08em',
-              fontWeight:700, marginBottom:16 }}>Tesis de la operación</div>
-
-            <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-              <div>
-                <div style={{ fontSize:10, color:C.muted, marginBottom:4 }}>Narrativa en una frase</div>
-                <input value={narrative} onChange={e => setNarrative(e.target.value)}
-                  placeholder="ej: Ciclo de capex en IA impulsa demanda de semiconductores premium"
-                  style={{ width:'100%', background:C.bg, border:`1px solid ${C.border}`, borderRadius:7,
-                    padding:'9px 12px', color:C.text, fontSize:12, outline:'none', boxSizing:'border-box' }} />
-              </div>
-              <div>
-                <div style={{ fontSize:10, color:C.muted, marginBottom:4 }}>Señal técnica de entrada</div>
-                <select value={entrySignal} onChange={e => setEntrySignal(e.target.value)}
-                  style={{ width:'100%', background:C.bg, border:`1px solid ${C.border}`, borderRadius:7,
-                    padding:'9px 12px', color:C.text, fontSize:12, outline:'none', boxSizing:'border-box' }}>
-                  {ENTRY_SIGNALS.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
-              <div>
-                <div style={{ fontSize:10, color:C.muted, marginBottom:4 }}>Catalizador próximo</div>
-                <input value={catalyst} onChange={e => setCatalyst(e.target.value)}
-                  placeholder="ej: Lanzamiento producto Q3 2026 / Earnings Jul 24"
-                  style={{ width:'100%', background:C.bg, border:`1px solid ${C.border}`, borderRadius:7,
-                    padding:'9px 12px', color:C.text, fontSize:12, outline:'none', boxSizing:'border-box' }} />
-              </div>
-              <div>
-                <div style={{ fontSize:10, color:C.muted, marginBottom:4 }}>¿Qué invalidaría la tesis?</div>
-                <textarea value={invalidation} onChange={e => setInvalidation(e.target.value)}
-                  rows={2} placeholder="ej: Precio cierra bajo SMA200 en gráfico semanal / Revisión a la baja de guidance"
-                  style={{ width:'100%', background:C.bg, border:`1px solid ${C.border}`, borderRadius:7,
-                    padding:'9px 12px', color:C.text, fontSize:12, outline:'none', resize:'vertical',
-                    boxSizing:'border-box', fontFamily:'inherit' }} />
-              </div>
-              <div>
-                <div style={{ fontSize:10, color:C.muted, marginBottom:4 }}>Notas adicionales</div>
-                <textarea value={notes} onChange={e => setNotes(e.target.value)}
-                  rows={2}
-                  style={{ width:'100%', background:C.bg, border:`1px solid ${C.border}`, borderRadius:7,
-                    padding:'9px 12px', color:C.text, fontSize:12, outline:'none', resize:'vertical',
-                    boxSizing:'border-box', fontFamily:'inherit' }} />
-              </div>
-            </div>
-
-            <button onClick={handleSave} disabled={saving || !analysis}
-              style={{ marginTop:16, width:'100%', background: saved ? C.green : C.accent,
-                border:'none', borderRadius:9, color:'#000', fontWeight:700,
-                padding:'12px', cursor: saving ? 'not-allowed' : 'pointer', fontSize:14,
-                opacity: saving ? 0.7 : 1, transition:'background 0.3s' }}>
-              {saving ? 'Guardando…' : saved ? '✓ Guardado en Journal' : 'Guardar en Journal →'}
-            </button>
-          </div>
-        </>
-      )}
-    </div>
-  )
-}
-
 // ── Position Journal ─────────────────────────────────────────────────────────
 function PositionJournal({ session }) {
   const [trades,   setTrades]   = useState([])
@@ -516,10 +132,12 @@ function PositionJournal({ session }) {
     setSaving(true)
     const { error } = await supabase.from('position_trades')
       .update({
-        status:      form.status,
-        exit_price:  form.exit_price || null,
-        exit_date:   form.exit_date  || null,
-        notes:       form.notes      || null,
+        status:       form.status,
+        exit_price:   form.exit_price   || null,
+        exit_date:    form.exit_date    || null,
+        notes:        form.notes        || null,
+        catalyst:     form.catalyst     || null,
+        invalidation: form.invalidation || null,
       })
       .eq('id', form.id)
     if (!error) closeModal()
@@ -683,6 +301,21 @@ function PositionJournal({ session }) {
             <div style={{ marginBottom:16 }}>
               <div style={{ fontSize:10, color:C.muted, marginBottom:4 }}>Notas</div>
               <textarea value={form.notes || ''} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+                rows={3} style={{ width:'100%', background:C.bg, border:`1px solid ${C.border}`, borderRadius:7,
+                  padding:'9px 12px', color:C.text, fontSize:12, outline:'none', resize:'vertical',
+                  boxSizing:'border-box', fontFamily:'inherit' }} />
+            </div>
+
+            <div style={{ marginBottom:16 }}>
+              <div style={{ fontSize:10, color:C.muted, marginBottom:4 }}>Catalizador</div>
+              <input value={form.catalyst || ''} onChange={e => setForm(f => ({ ...f, catalyst: e.target.value }))}
+                style={{ width:'100%', background:C.bg, border:`1px solid ${C.border}`, borderRadius:7,
+                  padding:'9px 12px', color:C.text, fontSize:12, outline:'none', boxSizing:'border-box' }} />
+            </div>
+
+            <div style={{ marginBottom:16 }}>
+              <div style={{ fontSize:10, color:C.muted, marginBottom:4 }}>Invalidación de tesis</div>
+              <textarea value={form.invalidation || ''} onChange={e => setForm(f => ({ ...f, invalidation: e.target.value }))}
                 rows={3} style={{ width:'100%', background:C.bg, border:`1px solid ${C.border}`, borderRadius:7,
                   padding:'9px 12px', color:C.text, fontSize:12, outline:'none', resize:'vertical',
                   boxSizing:'border-box', fontFamily:'inherit' }} />
@@ -1157,7 +790,7 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove }) {
     scoreTotal >= 38 ? 'OPERAR_CONVICCION' :
     scoreTotal >= 28 ? 'OPERAR_CAUTELA' : 'NO_OPERAR'
   const hasVeto = data?.scorecard?.precio_sma200?.score_sugerido === 0
-  const hasRRVeto = data?.rr_suggested != null && data.rr_suggested <= 1
+  const hasRRVeto = data?.rr_suggested != null && data.rr_suggested < 2
 
   const savedAt = data?._savedAt
   const savedLabel = savedAt ? (() => {
@@ -1303,7 +936,7 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove }) {
           {!hasVeto && hasRRVeto && (
             <div style={{ fontSize:10, color:C.red, background:'#ff406015',
               border:`1px solid ${C.red}44`, borderRadius:6, padding:'7px 10px', fontWeight:600 }}>
-              ⛔ R/R ≤ 1 — VETO ABSOLUTO
+              ⛔ R/R &lt; 2 — VETO ABSOLUTO
             </div>
           )}
 
