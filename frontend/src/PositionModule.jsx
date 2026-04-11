@@ -1653,15 +1653,17 @@ export default function PositionModule({ session, onBack }) {
 
   const add = () => {
     const t = search.trim().toUpperCase().replace(/[^A-Z.]/g,'')
-    if (t && !(watchlist||[]).includes(t)) {
-      const next = [t, ...(watchlist||[])]
+    if (t && !watchlistRef.current.includes(t)) {
+      const next = [t, ...watchlistRef.current]
+      watchlistRef.current = next
       setWatchlist(next)
       setSearch('')
     }
   }
 
   const remove = (ticker) => {
-    const next = (watchlist||[]).filter(t => t !== ticker)
+    const next = watchlistRef.current.filter(t => t !== ticker)
+    watchlistRef.current = next
     setWatchlist(next)
     const nextCache = { ...posCacheRef.current }
     delete nextCache[ticker]
@@ -1671,14 +1673,17 @@ export default function PositionModule({ session, onBack }) {
   }
 
   const addToWatchlist = (ticker) => {
-    if ((watchlist||[]).includes(ticker)) return
-    const next = [ticker, ...(watchlist||[])]
+    if (watchlistRef.current.includes(ticker)) return
+    const next = [ticker, ...watchlistRef.current]
+    watchlistRef.current = next
     setWatchlist(next)
   }
   const addAllToWatchlist = (tickers) => {
-    const toAdd = tickers.filter(t => !(watchlist||[]).includes(t))
+    const toAdd = tickers.filter(t => !watchlistRef.current.includes(t))
     if (!toAdd.length) return
-    setWatchlist(prev => [...toAdd, ...(prev||[])])
+    const next = [...toAdd, ...watchlistRef.current]
+    watchlistRef.current = next
+    setWatchlist(next)
   }
 
   const refreshFromTable = async (ticker) => {
