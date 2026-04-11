@@ -1057,6 +1057,97 @@ def detect_stage(weekly_candles: list) -> dict:
     }
 
 
+def analyze_base(weekly_candles: list) -> dict:
+    """
+    Detecta la base de consolidación actual en velas semanales.
+
+    Una 'base' es un período donde el precio se mueve en un rango estrecho
+    (<= 35% de amplitud) sin romper por debajo del soporte previo.
+
+    Retorna:
+      weeks_in_base  — semanas que lleva en base (0 si no hay base)
+      base_quality   — 'sound' (>6 semanas) | 'short' (3-5 sem) | 'none'
+      range_pct      — amplitud del rango como % (alto-bajo / bajo)
+      breakout_vol   — True si el volumen reciente es ≥1.5× promedio de la base
+      description    — texto explicativo
+    """
+    if len(weekly_candles) < 3:
+        return {"weeks_in_base": 0, "base_quality": "none", "range_pct": None,
+                "breakout_vol": None, "description": "Datos insuficientes"}
+
+    closes  = [c["close"]  for c in weekly_candles]
+    highs   = [c["high"]   for c in weekly_candles]
+    lows    = [c["low"]    for c in weekly_candles]
+    volumes = [c.get("volume", 0) for c in weekly_candles]
+    has_vol = any(v > 0 for v in volumes)
+
+    # Buscar el inicio de la base actual — recorremos hacia atrás desde la última vela
+    # La base termina donde el precio rompe con fuerza (cierre > high de la base + 5%)
+    # o donde cae por debajo del soporte (cierre < mínimo de la base - 3%)
+    base_start = len(closes) - 1
+    base_high  = highs[-1]
+    base_low   = lows[-1]
+
+    for i in range(len(closes) - 2, max(0, len(closes) - 53), -1):  # máx 52 semanas atrás
+        week_high  = highs[i]
+        week_low   = lows[i]
+        week_close = closes[i]
+
+        new_high = max(base_high, week_high)
+        new_low  = min(base_low, week_low)
+        rng = (new_high - new_low) / new_low * 100 if new_low > 0 else 999
+
+        # Si la ampliación del rango supera 35% el rango es demasiado ancho → fin de la base
+        if rng > 35:
+            break
+        # Si el cierre de esa semana cae > 15% bajo el mínimo actual → ruptura bajista → fin
+        if week_close < base_low * 0.85:
+            break
+
+        base_high  = new_high
+        base_low   = new_low
+        base_start = i
+
+    weeks_in_base = len(closes) - base_start  # número de velas incluidas en la base
+    range_pct     = round((base_high - base_low) / base_low * 100, 1) if base_low > 0 else None
+
+    # Calidad de la base
+    if weeks_in_base >= 7:
+        quality = "sound"     # base sólida ≥ 7 semanas
+    elif weeks_in_base >= 3:
+        quality = "short"     # base corta 3-6 semanas
+    else:
+        quality = "none"
+
+    # Volumen en breakout vs promedio de la base
+    base_vols   = volumes[base_start:] if has_vol else []
+    avg_base_vol = sum(base_vols) / len(base_vols) if base_vols else None
+    last_vol     = volumes[-1] if has_vol and volumes else None
+    breakout_vol = None
+    if avg_base_vol and last_vol:
+        bvr = last_vol / avg_base_vol
+        breakout_vol = bvr >= 1.5
+
+    # Descripción
+    if quality == "none":
+        desc = "No hay base clara de consolidación (< 3 semanas)"
+    elif quality == "short":
+        desc = f"Base corta de {weeks_in_base} semanas — rango {range_pct}%"
+    else:
+        bvol_txt = ""
+        if breakout_vol is True:    bvol_txt = " — volumen de breakout confirmado ✓"
+        elif breakout_vol is False: bvol_txt = " — breakout sin volumen confirmado"
+        desc = f"Base sólida de {weeks_in_base} semanas — rango {range_pct}%{bvol_txt}"
+
+    return {
+        "weeks_in_base": weeks_in_base,
+        "base_quality":  quality,
+        "range_pct":     range_pct,
+        "breakout_vol":  breakout_vol,
+        "description":   desc,
+    }
+
+
 def detect_hh_hl(weekly_candles: list) -> dict:
     """Detecta Higher Highs / Higher Lows en cierres semanales (últimas 16 semanas)."""
     closes = [c["close"] for c in weekly_candles[-16:]] if len(weekly_candles) >= 16 else [c["close"] for c in weekly_candles]
@@ -1198,12 +1289,13 @@ def calc_position_scorecard(data: dict) -> dict:
     }
 
     # 6. Punto de entrada x2 — automático
-    # Detecta breakout vs pullback y valida volumen
+    # Combina: posición vs SMA50, volumen diario de breakout, y calidad de la base semanal
+    base      = data.get("base", {}) or {}
     entry_score, entry_desc = 1, "Datos insuficientes"
     if sma50 and price > 0:
         dist_sma50 = ((price - sma50) / sma50) * 100
 
-        # Volumen en breakout: max volumen de los últimos 5 días vs promedio 20d
+        # Volumen en breakout: max volumen de los últimos 5 días vs promedio 20d (datos diarios)
         recent_vol_max = max(volumes[-5:]) if len(volumes) >= 5 else None
         avg_vol_20 = sum(volumes[-20:]) / min(20, len(volumes)) if volumes else None
         breakout_vol_ratio = round(recent_vol_max / avg_vol_20 * 100) if (recent_vol_max and avg_vol_20) else None
@@ -1213,31 +1305,42 @@ def calc_position_scorecard(data: dict) -> dict:
         high_52w = max(highs[-252:]) if len(highs) >= 252 else max(highs)
         near_52w_high = price >= high_52w * 0.95
 
+        # Info de base semanal para enriquecer la descripción
+        base_quality  = base.get("base_quality", "none")
+        weeks_in_base = base.get("weeks_in_base", 0)
+        base_bvol     = base.get("breakout_vol")   # True/False/None
+        base_suffix   = ""
+        if base_quality == "sound":
+            base_suffix = f" | Base sólida {weeks_in_base}sem ✓"
+        elif base_quality == "short":
+            base_suffix = f" | Base corta {weeks_in_base}sem"
+
         if near_52w_high and dist_sma50 > 10:
             # Breakout de nuevos máximos — evaluar volumen
-            if breakout_confirmed:
+            if breakout_confirmed or base_bvol is True:
                 entry_score = 3
-                entry_desc = f"Breakout en zona de máximos — volumen {breakout_vol_ratio}% del promedio ✓ entrada válida"
+                vol_txt = f"{breakout_vol_ratio}%" if breakout_vol_ratio else "semanal ✓"
+                entry_desc = f"Breakout en zona de máximos — volumen {vol_txt} confirmado{base_suffix}"
             else:
                 entry_score = 2
-                entry_desc = f"Cerca de máximos 52 semanas — breakout sin volumen confirmado ({breakout_vol_ratio or '?'}%)"
+                entry_desc = f"Cerca de máximos 52 semanas — breakout sin volumen ({breakout_vol_ratio or '?'}%){base_suffix}"
         elif -5 <= dist_sma50 <= 5:
             # Pullback a SMA50 — zona óptima
             if vol_ratio < 80:
                 entry_score = 3
-                entry_desc = f"Pullback a SMA50 ({dist_sma50:+.1f}%) con volumen bajo ({vol_ratio}%) — entrada ideal"
+                entry_desc = f"Pullback a SMA50 ({dist_sma50:+.1f}%) volumen bajo ({vol_ratio}%) — entrada ideal{base_suffix}"
             else:
                 entry_score = 2
-                entry_desc = f"Cerca de SMA50 ({dist_sma50:+.1f}%) — volumen aún elevado ({vol_ratio}%), esperar absorción"
+                entry_desc = f"Cerca de SMA50 ({dist_sma50:+.1f}%) — vol {vol_ratio}%, esperar absorción{base_suffix}"
         elif 5 < dist_sma50 <= 15:
             entry_score = 2
-            entry_desc = f"Precio {dist_sma50:.1f}% sobre SMA50 — algo extendido, esperar pullback o confirmar breakout"
+            entry_desc = f"Precio {dist_sma50:.1f}% sobre SMA50 — algo extendido{base_suffix}"
         elif dist_sma50 > 15:
             entry_score = 0 if dist_sma50 > 25 else 1
             entry_desc = f"Precio {dist_sma50:.1f}% sobre SMA50 — sobreextendido, riesgo de reversión"
         elif dist_sma50 < -5:
             entry_score = 1
-            entry_desc = f"Precio {abs(dist_sma50):.1f}% bajo SMA50 — debilidad, evaluar si es pullback profundo o cambio de tendencia"
+            entry_desc = f"Precio {abs(dist_sma50):.1f}% bajo SMA50 — debilidad{base_suffix}"
     criteria["punto_entrada"] = {
         "peso": 2, "score_sugerido": entry_score, "es_automatico": True,
         "justificacion": entry_desc
@@ -1332,9 +1435,10 @@ async def _analyze_position_inner(ticker: str):
         if sector_closes:
             rs_sector = calc_mansfield_rs(closes, sector_closes)
 
-    # Stage Analysis (Weinstein) + HH/HL en datos semanales
+    # Stage Analysis (Weinstein) + HH/HL + Base Analysis en datos semanales
     stage_data = detect_stage(weekly_candles)
     hh_hl_data = detect_hh_hl(weekly_candles)
+    base_data  = analyze_base(weekly_candles)
 
     # ── Sizing preliminar mejorado ──────────────────────────────────────────
     # Entrada: precio cerca de máximos (breakout) → usar precio actual
@@ -1372,6 +1476,7 @@ async def _analyze_position_inner(ticker: str):
         "cashflow": cashflow, "vol_ratio": vol_ratio,
         "rr_suggested": rr_suggested, "next_earnings": next_earnings,
         "highs": highs, "lows": lows, "volumes": volumes,
+        "base": base_data,
     })
 
     # Claude Haiku — evalúa narrativa activa
@@ -1422,6 +1527,7 @@ async def _analyze_position_inner(ticker: str):
         "macro_context":   macro_context,
         "hh_hl":           hh_hl_data,
         "stage":           stage_data,
+        "base":            base_data,
         "next_earnings":   next_earnings,
         "entry_suggested": entry_sug,
         "stop_suggested":  stop_sug,

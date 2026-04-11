@@ -1006,6 +1006,25 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove }) {
             </div>
           )}
 
+          {/* Base Analysis */}
+          {data.base?.base_quality !== 'none' && data.base?.weeks_in_base > 0 && (() => {
+            const b = data.base
+            const isSolid = b.base_quality === 'sound'
+            const color = isSolid ? C.green : C.amber
+            const bg    = isSolid ? '#00e09612' : '#ffb80012'
+            return (
+              <div style={{ fontSize:10, padding:'6px 10px', borderRadius:6, background:bg,
+                color, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                <span style={{ fontWeight:600 }}>
+                  {isSolid ? '◼' : '◻'} Base {isSolid ? 'sólida' : 'corta'}: {b.weeks_in_base} semanas
+                  {b.range_pct != null ? ` · rango ${b.range_pct}%` : ''}
+                </span>
+                {b.breakout_vol === true  && <span style={{ color:C.green,  fontWeight:700 }}>Vol ✓</span>}
+                {b.breakout_vol === false && <span style={{ color:C.amber,  fontWeight:500 }}>Vol ⚠</span>}
+              </div>
+            )
+          })()}
+
           {/* Earnings */}
           {data.next_earnings && (
             <div style={{ fontSize:10, color:C.muted, background:C.bg, borderRadius:6, padding:'5px 9px' }}>
