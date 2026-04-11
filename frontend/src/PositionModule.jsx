@@ -910,6 +910,31 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove }) {
             </span>
           </div>
 
+          {/* Stage Analysis (Weinstein) */}
+          {data.stage?.stage != null && (() => {
+            const s = data.stage
+            const stageColors = { 1: C.muted, 2: C.green, 3: C.amber, 4: C.red }
+            const stageBg     = { 1: '#4a608022', 2: '#00e09615', 3: '#ffb80015', 4: '#ff406015' }
+            const color = stageColors[s.stage] || C.muted
+            const bg    = stageBg[s.stage]    || '#4a608022'
+            return (
+              <div style={{ padding:'7px 10px', borderRadius:7, fontSize:10, fontWeight:600,
+                background: bg, color, display:'flex', justifyContent:'space-between', alignItems:'center',
+                border: s.stage === 4 ? `1px solid ${C.red}55` : 'none' }}>
+                <span>Stage {s.stage} — {s.label?.replace(/Stage \d — /,'')}</span>
+                <span style={{ color:C.muted, fontWeight:400, fontSize:9 }}>{s.slope_4w_pct > 0 ? '+' : ''}{s.slope_4w_pct}% / 4w · SMA30 ${s.sma30_weekly}</span>
+              </div>
+            )
+          })()}
+
+          {/* Stage 4 aviso */}
+          {data.stage?.stage === 4 && (
+            <div style={{ fontSize:10, color:C.amber, background:'#ffb80012',
+              border:`1px solid ${C.amber}44`, borderRadius:6, padding:'7px 10px', fontWeight:600 }}>
+              ⚠️ Stage 4 (declive) — considerar esperar recuperación a Stage 1/2
+            </div>
+          )}
+
           {/* Score bar + decisión */}
           {scoreTotal != null && (
             <div>
@@ -1131,6 +1156,7 @@ function PositionWatchlistTable({ tickers, cache, onRemove, onRefresh, refreshin
               <th style={thStyle('rs')} onClick={() => handleSort('rs')}>RS SPY <SortIcon col="rs"/></th>
               <th style={thStyle(null)}>Macro</th>
               <th style={thStyle(null)}>HH/HL</th>
+              <th style={thStyle(null)}>Stage</th>
               <th style={thStyle(null)}></th>
             </tr>
           </thead>
@@ -1192,6 +1218,13 @@ function PositionWatchlistTable({ tickers, cache, onRemove, onRefresh, refreshin
                   </td>
                   <td style={{ padding:'10px', fontFamily:'monospace', color:C.muted }}>
                     {analyzed && d.hh_hl ? `${d.hh_hl.hh_count}/${d.hh_hl.hl_count}` : '—'}
+                  </td>
+                  <td style={{ padding:'10px' }}>
+                    {analyzed && d.stage?.stage != null ? (() => {
+                      const stageColors = { 1: C.muted, 2: C.green, 3: C.amber, 4: C.red }
+                      const color = stageColors[d.stage.stage] || C.muted
+                      return <span style={{ fontFamily:'monospace', fontWeight:700, fontSize:11, color }}>S{d.stage.stage}</span>
+                    })() : <span style={{ color:C.muted }}>—</span>}
                   </td>
                   <td style={{ padding:'10px 8px', whiteSpace:'nowrap' }} onClick={e => e.stopPropagation()}>
                     <button onClick={() => onRefresh(ticker)} disabled={!!refreshingTickers?.[ticker]}

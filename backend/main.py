@@ -997,6 +997,66 @@ async def fetch_sector_etf_closes(etf: str, client_: httpx.AsyncClient) -> list:
         return cached.get("closes", [])
 
 
+def detect_stage(weekly_candles: list) -> dict:
+    """
+    Clasifica la etapa de Weinstein (1-4) usando velas semanales.
+    Requiere al menos 34 semanas para calcular SMA30 semanal.
+
+    Stage 1 — Acumulación: precio consolidando, SMA30 plana
+    Stage 2 — Avance: precio > SMA30, SMA30 con pendiente alcista ← ideal
+    Stage 3 — Distribución: precio en techo, SMA30 pierde pendiente
+    Stage 4 — Declive: precio < SMA30, SMA30 con pendiente bajista
+    """
+    if len(weekly_candles) < 34:
+        return {"stage": None, "description": "Datos insuficientes para Stage Analysis"}
+
+    closes = [c["close"] for c in weekly_candles]
+
+    # SMA30 semanal — necesita 30 velas
+    def sma_n(data, n):
+        if len(data) < n:
+            return None
+        return sum(data[-n:]) / n
+
+    sma30_now  = sma_n(closes, 30)
+    sma30_4w   = sma_n(closes[:-4], 30) if len(closes) >= 34 else None
+
+    if sma30_now is None or sma30_4w is None:
+        return {"stage": None, "description": "SMA30 insuficiente"}
+
+    price_now  = closes[-1]
+    slope      = (sma30_now - sma30_4w) / sma30_4w * 100  # % cambio en 4 semanas
+    above_sma  = price_now > sma30_now
+
+    # Clasificación
+    if above_sma and slope > 0.5:
+        stage = 2
+        label = "Avance (Stage 2)"
+        desc  = f"Precio sobre SMA30 semanal con pendiente +{slope:.1f}% — estructura alcista confirmada"
+    elif above_sma and abs(slope) <= 0.5:
+        stage = 3
+        label = "Distribución (Stage 3)"
+        desc  = f"Precio sobre SMA30 pero pendiente plana ({slope:+.1f}%) — posible techo"
+    elif not above_sma and slope < -0.5:
+        stage = 4
+        label = "Declive (Stage 4)"
+        desc  = f"Precio bajo SMA30 con pendiente {slope:.1f}% — tendencia bajista activa"
+    else:
+        # Bajo SMA30 pero pendiente frenando o ligeramente positiva → acumulación
+        stage = 1
+        label = "Acumulación (Stage 1)"
+        desc  = f"Precio bajo SMA30, pendiente {slope:+.1f}% — base en formación"
+
+    return {
+        "stage":       stage,
+        "label":       label,
+        "description": desc,
+        "sma30_weekly": round(sma30_now, 2),
+        "slope_4w_pct": round(slope, 2),
+        "price_above_sma30": above_sma,
+    }
+
+
 def detect_hh_hl(weekly_candles: list) -> dict:
     """Detecta Higher Highs / Higher Lows en cierres semanales (últimas 16 semanas)."""
     closes = [c["close"] for c in weekly_candles[-16:]] if len(weekly_candles) >= 16 else [c["close"] for c in weekly_candles]
@@ -1272,7 +1332,8 @@ async def _analyze_position_inner(ticker: str):
         if sector_closes:
             rs_sector = calc_mansfield_rs(closes, sector_closes)
 
-    # HH/HL en datos semanales
+    # Stage Analysis (Weinstein) + HH/HL en datos semanales
+    stage_data = detect_stage(weekly_candles)
     hh_hl_data = detect_hh_hl(weekly_candles)
 
     # ── Sizing preliminar mejorado ──────────────────────────────────────────
@@ -1360,6 +1421,7 @@ async def _analyze_position_inner(ticker: str):
         "rs_sector":       rs_sector,
         "macro_context":   macro_context,
         "hh_hl":           hh_hl_data,
+        "stage":           stage_data,
         "next_earnings":   next_earnings,
         "entry_suggested": entry_sug,
         "stop_suggested":  stop_sug,
