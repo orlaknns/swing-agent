@@ -1041,16 +1041,18 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove }) {
                   })}
 
                   {/* Fundamentales breves */}
-                  {(f.revenueGrowth != null || f.epsGrowth != null || f.peRatio != null || f.mktCap) && (
+                  {(f.revenueGrowth != null || f.epsGrowth != null || f.peRatio != null || f.mktCap || f.profitMargin != null || f.operatingMargin != null) && (
                     <div style={{ background:C.bg, borderRadius:7, padding:'8px 10px',
                       border:`1px solid ${C.border}` }}>
                       <div style={{ fontSize:10, color:C.text, fontWeight:600, marginBottom:6 }}>Fundamentales</div>
                       <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:5 }}>
                         {[
-                          ['Rev Growth', f.revenueGrowth != null ? `${f.revenueGrowth > 0?'+':''}${f.revenueGrowth}%` : null, f.revenueGrowth > 0 ? C.green : C.red],
-                          ['EPS Growth', f.epsGrowth    != null ? `${f.epsGrowth > 0?'+':''}${f.epsGrowth}%`    : null, f.epsGrowth > 0 ? C.green : C.red],
-                          ['P/E', f.peRatio ? f.peRatio : null, C.muted],
-                          ['Mkt Cap', f.mktCap || null, C.muted],
+                          ['Rev Growth',   f.revenueGrowth  != null ? `${f.revenueGrowth > 0?'+':''}${f.revenueGrowth}%`   : null, f.revenueGrowth > 0 ? C.green : C.red],
+                          ['EPS Growth',   f.epsGrowth      != null ? `${f.epsGrowth > 0?'+':''}${f.epsGrowth}%`           : null, f.epsGrowth > 0 ? C.green : C.red],
+                          ['Margen neto',  f.profitMargin   != null ? `${f.profitMargin}%`                                  : null, f.profitMargin > 10 ? C.green : f.profitMargin > 0 ? C.amber : C.red],
+                          ['Margen op.',   f.operatingMargin!= null ? `${f.operatingMargin}%`                               : null, f.operatingMargin > 15 ? C.green : f.operatingMargin > 0 ? C.amber : C.red],
+                          ['P/E',          f.peRatio        ? `${f.peRatio}x`                                               : null, C.muted],
+                          ['Mkt Cap',      f.mktCap         || null,                                                                C.muted],
                         ].filter(([,v]) => v != null).map(([label, val, color]) => (
                           <div key={label} style={{ display:'flex', justifyContent:'space-between' }}>
                             <span style={{ fontSize:10, color:C.muted }}>{label}</span>

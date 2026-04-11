@@ -155,21 +155,32 @@ async def fetch_fundamentals(ticker: str, client_: httpx.AsyncClient) -> dict:
         if ex_div_date and (ex_div_date in ("None", "0000-00-00", "null", "-") or len(ex_div_date) < 8):
             ex_div_date = None
 
+        profit_margin_raw  = safe_float(data.get("ProfitMargin"))
+        profit_margin      = round(profit_margin_raw * 100, 1) if profit_margin_raw else None
+        op_margin_raw      = safe_float(data.get("OperatingMarginTTM"))
+        op_margin          = round(op_margin_raw * 100, 1) if op_margin_raw else None
+        analyst_strong_buy = safe_float(data.get("AnalystRatingStrongBuy"))
+        analyst_buy        = safe_float(data.get("AnalystRatingBuy"))
+
         return {
-            "name":         data.get("Name") or None,
-            "sector":       data.get("Sector") or None,
-            "industry":     data.get("Industry") or None,
-            "marketCap":    mc,
-            "eps":          eps,
-            "peRatio":      pe,
-            "roe":          roe,
-            "revenueGrowth": rev_growth,
-            "epsGrowth":    eps_growth,
-            "analystTarget": safe_float(data.get("AnalystTargetPrice")),
-            "debtToEquity": safe_float(data.get("DebtToEquityRatio")),
-            "exDividendDate": ex_div_date,
-            "dividendPerShare": div_per_share,
-            "dividendYield": div_yield,
+            "name":              data.get("Name") or None,
+            "sector":            data.get("Sector") or None,
+            "industry":          data.get("Industry") or None,
+            "marketCap":         mc,
+            "eps":               eps,
+            "peRatio":           pe,
+            "roe":               roe,
+            "revenueGrowth":     rev_growth,
+            "epsGrowth":         eps_growth,
+            "profitMargin":      profit_margin,
+            "operatingMargin":   op_margin,
+            "analystTarget":     safe_float(data.get("AnalystTargetPrice")),
+            "analystStrongBuy":  analyst_strong_buy,
+            "analystBuy":        analyst_buy,
+            "debtToEquity":      safe_float(data.get("DebtToEquityRatio")),
+            "exDividendDate":    ex_div_date,
+            "dividendPerShare":  div_per_share,
+            "dividendYield":     div_yield,
         }
     except Exception:
         return {}
@@ -1034,6 +1045,9 @@ def calc_position_scorecard(data: dict) -> dict:
     vol_ratio    = data["vol_ratio"]
     rr_suggested = data.get("rr_suggested")
     next_earnings = data.get("next_earnings")
+    highs        = data.get("highs", [])
+    lows         = data.get("lows", [])
+    volumes      = data.get("volumes", [])
 
     criteria = {}
 
@@ -1079,45 +1093,91 @@ def calc_position_scorecard(data: dict) -> dict:
     }
 
     # 5. Calidad fundamental x2 — semi-automático
-    rev_growth   = fundamentals.get("revenueGrowth")
-    eps_growth   = fundamentals.get("epsGrowth")
-    fcf_positive = cashflow.get("fcf_positive")
+    rev_growth     = fundamentals.get("revenueGrowth")    # % YoY
+    eps_growth     = fundamentals.get("epsGrowth")        # % YoY
+    profit_margin  = fundamentals.get("profitMargin")     # % neto
+    op_margin      = fundamentals.get("operatingMargin")  # % operativo
+    analyst_sb     = fundamentals.get("analystStrongBuy") or 0
+    analyst_buy    = fundamentals.get("analystBuy") or 0
+    fcf_positive   = cashflow.get("fcf_positive")
+
     fund_score = 0
     fund_points = []
+
+    # Revenue creciendo >10% YoY
     if rev_growth and rev_growth > 10:
         fund_score += 1; fund_points.append(f"Revenue +{rev_growth}% YoY")
-    if eps_growth and eps_growth > 0:
-        fund_score += 1; fund_points.append(f"EPS creciendo +{eps_growth}%")
+    elif rev_growth and rev_growth > 0:
+        fund_points.append(f"Revenue +{rev_growth}% YoY (crecimiento moderado)")
+    elif rev_growth and rev_growth < 0:
+        fund_points.append(f"Revenue {rev_growth}% YoY (contracción)")
+
+    # EPS acelerando
+    if eps_growth and eps_growth > 20:
+        fund_score += 1; fund_points.append(f"EPS acelerando +{eps_growth}%")
+    elif eps_growth and eps_growth > 0:
+        fund_points.append(f"EPS creciendo +{eps_growth}%")
+    elif eps_growth and eps_growth < 0:
+        fund_points.append(f"EPS deteriorando {eps_growth}%")
+
+    # Calidad: FCF positivo + márgenes sanos
+    quality_ok = False
     if fcf_positive is True:
-        fund_score += 1; fund_points.append("FCF positivo")
+        quality_ok = True; fund_points.append("FCF positivo")
+    if profit_margin and profit_margin > 10:
+        quality_ok = True; fund_points.append(f"Margen neto {profit_margin}%")
+    elif op_margin and op_margin > 15:
+        quality_ok = True; fund_points.append(f"Margen operativo {op_margin}%")
+    if quality_ok:
+        fund_score += 1
+
     fund_score = min(3, fund_score)
     criteria["calidad_fundamental"] = {
         "peso": 2, "score_sugerido": fund_score, "es_automatico": True,
-        "justificacion": " | ".join(fund_points) if fund_points else "Datos fundamentales insuficientes — ajustar manualmente"
+        "justificacion": " | ".join(fund_points) if fund_points else "Datos fundamentales insuficientes — revisar manualmente"
     }
 
     # 6. Punto de entrada x2 — automático
+    # Detecta breakout vs pullback y valida volumen
+    entry_score, entry_desc = 1, "Datos insuficientes"
     if sma50 and price > 0:
         dist_sma50 = ((price - sma50) / sma50) * 100
-        if 0 <= dist_sma50 <= 5:
-            entry_score = 3
-            entry_desc = f"Precio a {dist_sma50:.1f}% sobre SMA50 — zona óptima de entrada"
-        elif -3 <= dist_sma50 < 0:
-            entry_score = 3
-            entry_desc = f"Precio {abs(dist_sma50):.1f}% bajo SMA50 — pullback a soporte, entrada ideal"
+
+        # Volumen en breakout: max volumen de los últimos 5 días vs promedio 20d
+        recent_vol_max = max(volumes[-5:]) if len(volumes) >= 5 else None
+        avg_vol_20 = sum(volumes[-20:]) / min(20, len(volumes)) if volumes else None
+        breakout_vol_ratio = round(recent_vol_max / avg_vol_20 * 100) if (recent_vol_max and avg_vol_20) else None
+        breakout_confirmed = breakout_vol_ratio and breakout_vol_ratio >= 150
+
+        # ¿Precio cerca de máximo de 52 semanas? → posible breakout
+        high_52w = max(highs[-252:]) if len(highs) >= 252 else max(highs)
+        near_52w_high = price >= high_52w * 0.95
+
+        if near_52w_high and dist_sma50 > 10:
+            # Breakout de nuevos máximos — evaluar volumen
+            if breakout_confirmed:
+                entry_score = 3
+                entry_desc = f"Breakout en zona de máximos — volumen {breakout_vol_ratio}% del promedio ✓ entrada válida"
+            else:
+                entry_score = 2
+                entry_desc = f"Cerca de máximos 52 semanas — breakout sin volumen confirmado ({breakout_vol_ratio or '?'}%)"
+        elif -5 <= dist_sma50 <= 5:
+            # Pullback a SMA50 — zona óptima
+            if vol_ratio < 80:
+                entry_score = 3
+                entry_desc = f"Pullback a SMA50 ({dist_sma50:+.1f}%) con volumen bajo ({vol_ratio}%) — entrada ideal"
+            else:
+                entry_score = 2
+                entry_desc = f"Cerca de SMA50 ({dist_sma50:+.1f}%) — volumen aún elevado ({vol_ratio}%), esperar absorción"
         elif 5 < dist_sma50 <= 15:
             entry_score = 2
-            entry_desc = f"Precio a {dist_sma50:.1f}% sobre SMA50 — entrada aceptable, algo extendido"
+            entry_desc = f"Precio {dist_sma50:.1f}% sobre SMA50 — algo extendido, esperar pullback o confirmar breakout"
         elif dist_sma50 > 15:
-            entry_score = 1 if dist_sma50 <= 20 else 0
-            entry_desc = f"Precio a {dist_sma50:.1f}% sobre SMA50 — sobreextendido, esperar pullback"
-        else:
+            entry_score = 0 if dist_sma50 > 25 else 1
+            entry_desc = f"Precio {dist_sma50:.1f}% sobre SMA50 — sobreextendido, riesgo de reversión"
+        elif dist_sma50 < -5:
             entry_score = 1
-            entry_desc = f"Precio {abs(dist_sma50):.1f}% bajo SMA50 — evaluar si es debilidad real o pullback profundo"
-        if vol_ratio < 80:
-            entry_desc += f" | Vol {vol_ratio}% del promedio — presión vendedora baja ✓"
-    else:
-        entry_score, entry_desc = 1, "SMA50 no calculable"
+            entry_desc = f"Precio {abs(dist_sma50):.1f}% bajo SMA50 — debilidad, evaluar si es pullback profundo o cambio de tendencia"
     criteria["punto_entrada"] = {
         "peso": 2, "score_sugerido": entry_score, "es_automatico": True,
         "justificacion": entry_desc
@@ -1215,13 +1275,30 @@ async def _analyze_position_inner(ticker: str):
     # HH/HL en datos semanales
     hh_hl_data = detect_hh_hl(weekly_candles)
 
-    # Sizing preliminar — entrada en SMA50, stop 2×ATR bajo SMA50
-    entry_sug  = sma50
-    stop_sug   = round(entry_sug - 2 * atr, 2) if (entry_sug and atr) else None
-    analyst_target = (fundamentals or {}).get("analystTarget")
-    target_sug = analyst_target or (round(entry_sug * 1.20, 2) if entry_sug else None)
+    # ── Sizing preliminar mejorado ──────────────────────────────────────────
+    # Entrada: precio cerca de máximos (breakout) → usar precio actual
+    #          precio en pullback a SMA50 → usar SMA50
+    high_52w_e = max(highs[-252:]) if len(highs) >= 252 else max(highs)
+    near_high  = price >= high_52w_e * 0.95
+    entry_sug  = round(price, 2) if near_high else (round(sma50, 2) if sma50 else round(price, 2))
+
+    # Stop: mínimo de los últimos 40 días hábiles (~8 semanas) menos 1%
+    # Representa el suelo de la base de consolidación reciente
+    base_lows  = lows[-40:] if len(lows) >= 40 else lows
+    base_low   = min(base_lows)
+    stop_sug   = round(base_low * 0.99, 2) if base_low else None
+
+    # Target: ancho de la base proyectado desde el punto de entrada
+    # Ancho base = máximo de los últimos 40 días - mínimo de los últimos 40 días
+    base_highs = highs[-40:] if len(highs) >= 40 else highs
+    base_width = max(base_highs) - base_low if base_low else 0
+    if entry_sug and base_width > 0:
+        target_sug = round(entry_sug + base_width, 2)   # proyección 1× el ancho de la base
+    else:
+        target_sug = round(entry_sug * 1.20, 2) if entry_sug else None
+
     rr_suggested = None
-    if entry_sug and stop_sug and target_sug:
+    if entry_sug and stop_sug and target_sug and entry_sug > stop_sug:
         risk = entry_sug - stop_sug
         if risk > 0:
             rr_suggested = round((target_sug - entry_sug) / risk, 2)
@@ -1233,6 +1310,7 @@ async def _analyze_position_inner(ticker: str):
         "hh_hl": hh_hl_data, "fundamentals": fundamentals,
         "cashflow": cashflow, "vol_ratio": vol_ratio,
         "rr_suggested": rr_suggested, "next_earnings": next_earnings,
+        "highs": highs, "lows": lows, "volumes": volumes,
     })
 
     # Claude Haiku — evalúa narrativa activa
