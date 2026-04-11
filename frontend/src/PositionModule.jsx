@@ -1704,7 +1704,14 @@ export default function PositionModule({ session, onBack }) {
               <div style={{ width:7, height:7, borderRadius:'50%', background:C.green }}/>
               <span style={{ fontSize:10, color:C.green, letterSpacing:'0.12em' }}>LIVE · DATOS REALES DE MERCADO</span>
             </div>
-            <span style={{ fontSize:11, color:C.muted }}>{session.user.email}</span>
+            <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+              <span style={{ fontSize:11, color:C.muted }}>{session.user.email}</span>
+              <button onClick={() => supabase.auth.signOut()}
+                style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:6,
+                  color:C.muted, padding:'3px 9px', cursor:'pointer', fontSize:10 }}>
+                Salir
+              </button>
+            </div>
           </div>
           <div style={{ display:'flex', alignItems:'baseline', gap:10, marginBottom: tab==='watchlist' ? 14 : 10 }}>
             <button onClick={onBack}
