@@ -1229,13 +1229,19 @@ def calc_position_scorecard(data: dict) -> dict:
     }
 
     # 4. RS vs sector/SPY x2 — automático
+    # Combina Mansfield RS vs SPY y RS vs sector propio
     if rs_spy is not None:
-        if rs_spy > 2:   score_rs, rs_desc = 3, f"Mansfield RS {rs_spy} — líder vs S&P500"
-        elif rs_spy > 0: score_rs, rs_desc = 2, f"Mansfield RS {rs_spy} — supera a S&P500"
-        elif rs_spy > -1: score_rs, rs_desc = 1, f"Mansfield RS {rs_spy} — rendimiento similar al S&P500"
-        else:             score_rs, rs_desc = 0, f"Mansfield RS {rs_spy} — rezagado vs S&P500"
+        if rs_spy > 2:    score_rs, rs_desc = 3, f"Mansfield RS {rs_spy} — líder claro vs S&P500"
+        elif rs_spy > 0:  score_rs, rs_desc = 2, f"Mansfield RS {rs_spy} — supera al S&P500"
+        elif rs_spy >= -1: score_rs, rs_desc = 1, f"Mansfield RS {rs_spy} — similar al S&P500"
+        else:              score_rs, rs_desc = 0, f"Mansfield RS {rs_spy} — rezagado vs S&P500"
+
         if rs_sector is not None:
-            rs_desc += f" | RS vs sector: {rs_sector:.2f}"
+            rs_desc += f" | RS vs sector: {rs_sector:+.2f}"
+            # Si lidera su sector aunque RS vs SPY sea moderado → bonus +1 (máx 3)
+            if rs_sector > 1 and score_rs < 3:
+                score_rs = min(3, score_rs + 1)
+                rs_desc += " ✓ líder sectorial"
     else:
         score_rs, rs_desc = 1, "RS no calculable — datos insuficientes"
     criteria["rs_relativa"] = {
@@ -1255,29 +1261,39 @@ def calc_position_scorecard(data: dict) -> dict:
     fund_score = 0
     fund_points = []
 
-    # Revenue creciendo >10% YoY
-    if rev_growth and rev_growth > 10:
+    # Punto 1: Crecimiento de ingresos
+    # >10% YoY → negocios en expansión activa
+    # 0-10% → crecimiento moderado pero positivo → medio punto (se suma con otro)
+    rev_ok = False
+    if rev_growth is not None and rev_growth > 10:
         fund_score += 1; fund_points.append(f"Revenue +{rev_growth}% YoY")
-    elif rev_growth and rev_growth > 0:
-        fund_points.append(f"Revenue +{rev_growth}% YoY (crecimiento moderado)")
-    elif rev_growth and rev_growth < 0:
+        rev_ok = True
+    elif rev_growth is not None and rev_growth > 0:
+        fund_points.append(f"Revenue +{rev_growth}% YoY (moderado)")
+        rev_ok = True   # no suma solo, pero se cuenta para combo
+    elif rev_growth is not None and rev_growth < 0:
         fund_points.append(f"Revenue {rev_growth}% YoY (contracción)")
 
-    # EPS acelerando
-    if eps_growth and eps_growth > 20:
-        fund_score += 1; fund_points.append(f"EPS acelerando +{eps_growth}%")
-    elif eps_growth and eps_growth > 0:
-        fund_points.append(f"EPS creciendo +{eps_growth}%")
-    elif eps_growth and eps_growth < 0:
-        fund_points.append(f"EPS deteriorando {eps_growth}%")
+    # Punto 2: Crecimiento de beneficios (EPS)
+    if eps_growth is not None and eps_growth > 20:
+        fund_score += 1; fund_points.append(f"EPS +{eps_growth}% YoY")
+    elif eps_growth is not None and eps_growth > 0:
+        fund_points.append(f"EPS +{eps_growth}% YoY")
+        # Rev moderado + EPS creciendo → juntos valen 1 punto
+        if rev_ok and fund_score == 0:
+            fund_score += 1; fund_points[-1] += " | combo rev+eps ✓"
+    elif eps_growth is not None and eps_growth < 0:
+        fund_points.append(f"EPS {eps_growth}% YoY (deterioro)")
 
-    # Calidad: FCF positivo + márgenes sanos
+    # Punto 3: Calidad del negocio — FCF y márgenes
+    # Una empresa con FCF positivo y márgenes sanos es un negocio de calidad
+    # independientemente de su tasa de crecimiento
     quality_ok = False
     if fcf_positive is True:
         quality_ok = True; fund_points.append("FCF positivo")
-    if profit_margin and profit_margin > 10:
+    if profit_margin is not None and profit_margin > 10:
         quality_ok = True; fund_points.append(f"Margen neto {profit_margin}%")
-    elif op_margin and op_margin > 15:
+    elif op_margin is not None and op_margin > 15:
         quality_ok = True; fund_points.append(f"Margen operativo {op_margin}%")
     if quality_ok:
         fund_score += 1
@@ -1315,32 +1331,34 @@ def calc_position_scorecard(data: dict) -> dict:
         elif base_quality == "short":
             base_suffix = f" | Base corta {weeks_in_base}sem"
 
-        if near_52w_high and dist_sma50 > 10:
-            # Breakout de nuevos máximos — evaluar volumen
+        if near_52w_high:
+            # Zona de breakout / nuevos máximos — la mejor condición en position trading
             if breakout_confirmed or base_bvol is True:
                 entry_score = 3
                 vol_txt = f"{breakout_vol_ratio}%" if breakout_vol_ratio else "semanal ✓"
                 entry_desc = f"Breakout en zona de máximos — volumen {vol_txt} confirmado{base_suffix}"
             else:
                 entry_score = 2
-                entry_desc = f"Cerca de máximos 52 semanas — breakout sin volumen ({breakout_vol_ratio or '?'}%){base_suffix}"
-        elif -5 <= dist_sma50 <= 5:
-            # Pullback a SMA50 — zona óptima
+                entry_desc = f"Breakout en máximos — sin confirmación de volumen ({breakout_vol_ratio or '?'}%){base_suffix}"
+        elif -5 <= dist_sma50 <= 10:
+            # Pullback limpio a SMA50 — zona óptima de entrada
             if vol_ratio < 80:
                 entry_score = 3
                 entry_desc = f"Pullback a SMA50 ({dist_sma50:+.1f}%) volumen bajo ({vol_ratio}%) — entrada ideal{base_suffix}"
             else:
                 entry_score = 2
                 entry_desc = f"Cerca de SMA50 ({dist_sma50:+.1f}%) — vol {vol_ratio}%, esperar absorción{base_suffix}"
-        elif 5 < dist_sma50 <= 15:
+        elif 10 < dist_sma50 <= 25:
+            # Extendido pero en rango normal para tendencias sanas
             entry_score = 2
-            entry_desc = f"Precio {dist_sma50:.1f}% sobre SMA50 — algo extendido{base_suffix}"
-        elif dist_sma50 > 15:
-            entry_score = 0 if dist_sma50 > 25 else 1
-            entry_desc = f"Precio {dist_sma50:.1f}% sobre SMA50 — sobreextendido, riesgo de reversión"
+            entry_desc = f"Precio {dist_sma50:.1f}% sobre SMA50 — algo extendido, esperar pullback{base_suffix}"
+        elif dist_sma50 > 25:
+            # Muy extendido — riesgo de corrección significativa
+            entry_score = 1
+            entry_desc = f"Precio {dist_sma50:.1f}% sobre SMA50 — sobreextendido, esperar pullback a SMA50"
         elif dist_sma50 < -5:
             entry_score = 1
-            entry_desc = f"Precio {abs(dist_sma50):.1f}% bajo SMA50 — debilidad{base_suffix}"
+            entry_desc = f"Precio {abs(dist_sma50):.1f}% bajo SMA50 — debilidad temporal o cambio de tendencia{base_suffix}"
     criteria["punto_entrada"] = {
         "peso": 2, "score_sugerido": entry_score, "es_automatico": True,
         "justificacion": entry_desc
