@@ -1127,15 +1127,25 @@ function PositionScreener({ watchlist, onAdd, onRemove, onAddAll }) {
 }
 
 // ── Position Card ────────────────────────────────────────────────────────────
-function PositionCard({ ticker, cachedData, onAnalysed, onRemove, refreshKey }) {
-  const [data,    setData]    = useState(cachedData || null)
-  const [loading, setLoading] = useState(false)
-  const [error,   setError]   = useState(null)
+function PositionCard({ ticker, cachedData, onAnalysed, onRemove }) {
+  const [data,       setData]       = useState(cachedData || null)
+  const [loading,    setLoading]    = useState(false)
+  const [error,      setError]      = useState(null)
+  const [expanded,   setExpanded]   = useState(false)
+  const hasFetched = useRef(false)
 
-  // Si no hay cache, auto-analiza al montar
+  // Auto-analiza solo si no hay cache — nunca re-analiza al re-montar
   useEffect(() => {
-    if (!cachedData) runAnalysis()
-  }, [ticker, refreshKey]) // eslint-disable-line
+    if (!cachedData && !hasFetched.current) {
+      hasFetched.current = true
+      runAnalysis()
+    }
+  }, []) // eslint-disable-line
+
+  // Si cachedData cambia (e.g. tras ↻ manual desde padre), sincronizar
+  useEffect(() => {
+    if (cachedData) setData(cachedData)
+  }, [cachedData])
 
   const runAnalysis = async () => {
     setLoading(true); setError(null)
@@ -1149,7 +1159,7 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove, refreshKey }) 
     setLoading(false)
   }
 
-  // Score total del cache
+  // Score total
   const scoreTotal = data?.scorecard
     ? Object.entries(data.scorecard).reduce((s, [k, v]) => s + (v.score_sugerido ?? 0) * (WEIGHTS[k] || 1), 0)
     : null
@@ -1157,6 +1167,7 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove, refreshKey }) 
     scoreTotal >= 38 ? 'OPERAR_CONVICCION' :
     scoreTotal >= 28 ? 'OPERAR_CAUTELA' : 'NO_OPERAR'
   const hasVeto = data?.scorecard?.precio_sma200?.score_sugerido === 0
+  const hasRRVeto = data?.rr_suggested != null && data.rr_suggested <= 1
 
   const savedAt = data?._savedAt
   const savedLabel = savedAt ? (() => {
@@ -1175,116 +1186,248 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove, refreshKey }) 
   })() : null
 
   const decisionColor = DECISION_COLOR[decision] || C.muted
-  const decisionShort = decision === 'OPERAR_CONVICCION' ? 'CONVICCIÓN' :
-                        decision === 'OPERAR_CAUTELA'    ? 'CAUTELA'    :
-                        decision === 'NO_OPERAR'         ? 'NO OPERAR'  : null
+  const decisionLabel = DECISION_LABEL[decision] || ''
+
+  const f = data?.fundamentals || {}
+  const scoreColors = ['#4a6080','#ffb800','#00aaff','#00e096']
 
   return (
-    <div style={{ background:C.card, border:`1px solid ${hasVeto ? C.red+'44' : decision === 'OPERAR_CONVICCION' ? C.green+'44' : C.border}`,
-      borderRadius:12, padding:'14px', display:'flex', flexDirection:'column', gap:10,
-      borderLeft:`3px solid ${hasVeto ? C.red : decisionColor}` }}>
+    <div style={{ background:C.card,
+      border:`1px solid ${hasVeto||hasRRVeto ? C.red+'55' : decision==='OPERAR_CONVICCION' ? C.green+'44' : C.border}`,
+      borderRadius:12, padding:'16px', display:'flex', flexDirection:'column', gap:11,
+      borderLeft:`3px solid ${hasVeto||hasRRVeto ? C.red : decisionColor}` }}>
 
       {/* Header */}
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
-        <div>
-          <div style={{ display:'flex', alignItems:'center', gap:7 }}>
-            <span style={{ fontSize:15, fontWeight:700, fontFamily:'monospace', color:C.text }}>{ticker}</span>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:7, flexWrap:'wrap' }}>
+            <span style={{ fontSize:16, fontWeight:700, fontFamily:'monospace', color:C.text }}>{ticker}</span>
             {decision && !loading && (
-              <span style={{ fontSize:9, fontWeight:700, padding:'2px 7px', borderRadius:99,
-                color: decisionColor, background: decisionColor+'18' }}>
-                {decisionShort}
+              <span style={{ fontSize:9, fontWeight:700, padding:'2px 8px', borderRadius:99,
+                color: decisionColor, background: decisionColor+'18', border:`1px solid ${decisionColor}44` }}>
+                {decisionLabel}
               </span>
             )}
           </div>
-          {data?.company_name && <div style={{ fontSize:10, color:C.muted, marginTop:1 }}>{data.company_name}</div>}
+          {data?.company_name && (
+            <div style={{ fontSize:11, color:C.muted, marginTop:2,
+              overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+              {data.company_name}
+            </div>
+          )}
+          {data?.sector && (
+            <div style={{ fontSize:9, color:C.accent, marginTop:1 }}>{data.sector}</div>
+          )}
           {savedLabel && <div style={{ fontSize:9, color:C.muted, marginTop:1 }}>Actualizado {savedLabel}</div>}
         </div>
-        <div style={{ display:'flex', gap:5, alignItems:'center' }}>
-          <button onClick={runAnalysis} disabled={loading} title="Actualizar análisis"
+        <div style={{ display:'flex', gap:5, alignItems:'center', flexShrink:0 }}>
+          <button onClick={runAnalysis} disabled={loading} title="Re-analizar"
             style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:5,
               color: loading ? C.accent : C.muted, cursor: loading ? 'not-allowed' : 'pointer',
-              padding:'3px 7px', fontSize:11,
-              animation: loading ? 'spin 0.7s linear infinite' : 'none' }}>↻</button>
+              padding:'4px 8px', fontSize:12 }}>↻</button>
           <button onClick={() => onRemove(ticker)} title="Eliminar"
             style={{ background:'none', border:`1px solid ${C.red}44`, borderRadius:5,
-              color:C.red, cursor:'pointer', padding:'3px 7px', fontSize:11, opacity:0.7 }}>×</button>
+              color:C.red, cursor:'pointer', padding:'4px 8px', fontSize:12, opacity:0.7 }}>×</button>
         </div>
       </div>
 
       {/* Error */}
-      {error && <div style={{ fontSize:10, color:C.red }}>{error}</div>}
+      {error && <div style={{ fontSize:10, color:C.red, background:'#ff406011', padding:'6px 9px', borderRadius:6 }}>{error}</div>}
 
       {/* Loading */}
       {loading && !data && (
-        <div style={{ fontSize:11, color:C.muted, textAlign:'center', padding:'12px 0' }}>Analizando...</div>
+        <div style={{ fontSize:12, color:C.muted, textAlign:'center', padding:'20px 0' }}>
+          Analizando {ticker}...
+        </div>
       )}
 
-      {/* Datos */}
-      {data && !loading && (
+      {/* ── Datos ── */}
+      {data && (
         <>
-          {/* Precio y SMA */}
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-            <span style={{ fontSize:18, fontWeight:700, fontFamily:'monospace', color:C.text }}>${data.price}</span>
-            <div style={{ textAlign:'right' }}>
-              <div style={{ fontSize:9, color:C.muted }}>SMA50 <span style={{ color:C.amber }}>${data.sma50}</span></div>
-              <div style={{ fontSize:9, color:C.muted }}>SMA200 <span style={{ color: data.sma200 && data.price > data.sma200 ? C.green : C.red }}>${data.sma200}</span></div>
+          {/* Precio y SMAs */}
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center',
+            background:C.bg, borderRadius:8, padding:'9px 12px' }}>
+            <div>
+              <div style={{ fontSize:22, fontWeight:700, fontFamily:'monospace', color:C.text }}>${data.price}</div>
+              <div style={{ fontSize:9, color:C.muted, marginTop:1 }}>precio actual</div>
+            </div>
+            <div style={{ textAlign:'right', display:'flex', flexDirection:'column', gap:3 }}>
+              <div style={{ fontSize:10, color:C.muted }}>
+                SMA20 <span style={{ color:C.text, fontFamily:'monospace' }}>${data.sma20}</span>
+              </div>
+              <div style={{ fontSize:10, color:C.muted }}>
+                SMA50 <span style={{ color:C.amber, fontFamily:'monospace' }}>${data.sma50}</span>
+              </div>
+              <div style={{ fontSize:10, color:C.muted }}>
+                SMA200 <span style={{ color: data.sma200 && data.price >= data.sma200 ? C.green : C.red, fontFamily:'monospace' }}>${data.sma200}</span>
+              </div>
             </div>
           </div>
 
           {/* Macro context */}
-          <div style={{ padding:'6px 9px', borderRadius:6, fontSize:10, fontWeight:600,
-            background: data.macro_context?.spy_above_sma200 ? '#00e09610' : '#ff406010',
-            color: data.macro_context?.spy_above_sma200 ? C.green : C.red }}>
-            {data.macro_context?.spy_above_sma200 ? '▲ Mercado alcista' : '▼ Mercado bajista'}
-            <span style={{ color:C.muted, fontWeight:400, marginLeft:6 }}>SPY vs SMA200</span>
+          <div style={{ padding:'7px 10px', borderRadius:7, fontSize:10, fontWeight:600,
+            background: data.macro_context?.spy_above_sma200 ? '#00e09612' : '#ff406012',
+            color: data.macro_context?.spy_above_sma200 ? C.green : C.red,
+            display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+            <span>{data.macro_context?.spy_above_sma200 ? '▲ Mercado alcista' : '▼ Mercado bajista'}</span>
+            <span style={{ color:C.muted, fontWeight:400, fontSize:9 }}>
+              SPY ${data.macro_context?.spy_price} / SMA200 ${data.macro_context?.spy_sma200}
+            </span>
           </div>
 
-          {/* Score bar */}
+          {/* Score bar + decisión */}
           {scoreTotal != null && (
             <div>
-              <div style={{ display:'flex', justifyContent:'space-between', marginBottom:3 }}>
-                <span style={{ fontSize:10, color:C.muted }}>Score</span>
-                <span style={{ fontSize:11, fontWeight:700, fontFamily:'monospace', color: decisionColor }}>
-                  {scoreTotal}/{MAX_SCORE}
+              <div style={{ display:'flex', justifyContent:'space-between', marginBottom:4 }}>
+                <span style={{ fontSize:10, color:C.muted }}>Score total</span>
+                <span style={{ fontSize:13, fontWeight:700, fontFamily:'monospace', color: decisionColor }}>
+                  {scoreTotal} / {MAX_SCORE}
                 </span>
               </div>
-              <div style={{ height:5, background:C.bg, borderRadius:99, overflow:'hidden', border:`1px solid ${C.border}` }}>
+              <div style={{ height:6, background:C.bg, borderRadius:99, overflow:'hidden', border:`1px solid ${C.border}` }}>
                 <div style={{ height:'100%', width:`${Math.min(100,(scoreTotal/MAX_SCORE)*100)}%`,
-                  background: decisionColor, borderRadius:99, transition:'width 0.3s' }} />
+                  background: decisionColor, borderRadius:99, transition:'width 0.4s' }} />
               </div>
             </div>
           )}
 
-          {/* Indicadores clave */}
+          {/* Vetos */}
+          {hasVeto && (
+            <div style={{ fontSize:10, color:C.red, background:'#ff406015',
+              border:`1px solid ${C.red}44`, borderRadius:6, padding:'7px 10px', fontWeight:600 }}>
+              ⛔ Precio bajo SMA200 — VETO ABSOLUTO
+            </div>
+          )}
+          {!hasVeto && hasRRVeto && (
+            <div style={{ fontSize:10, color:C.red, background:'#ff406015',
+              border:`1px solid ${C.red}44`, borderRadius:6, padding:'7px 10px', fontWeight:600 }}>
+              ⛔ R/R ≤ 1 — VETO ABSOLUTO
+            </div>
+          )}
+
+          {/* Indicadores clave — 6 celdas */}
           <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:6 }}>
             {[
-              ['RSI', data.rsi, data.rsi > 65 ? C.red : data.rsi < 40 ? C.green : C.text],
-              ['RS SPY', data.mansfield_rs, data.mansfield_rs > 0 ? C.green : C.red],
-              ['HH/HL', `${data.hh_hl?.hh_count}/${data.hh_hl?.hl_count}`, data.hh_hl?.score >= 2 ? C.green : C.muted],
-              ['Vol%', data.vol_ratio, data.vol_ratio > 120 ? C.green : C.muted],
-              ['R/R', data.rr_suggested ? `${data.rr_suggested}x` : '—', data.rr_suggested >= 2 ? C.green : C.amber],
-              ['Sector', data.sector_etf || '—', C.muted],
+              ['RSI', data.rsi != null ? data.rsi : '—',   data.rsi > 65 ? C.red : data.rsi < 40 ? C.amber : C.green],
+              ['RS Mansfield', data.mansfield_rs != null ? data.mansfield_rs : '—', data.mansfield_rs > 0 ? C.green : C.red],
+              ['HH/HL', data.hh_hl ? `${data.hh_hl.hh_count}/${data.hh_hl.hl_count}` : '—', data.hh_hl?.score >= 2 ? C.green : C.muted],
+              ['Volumen%', data.vol_ratio != null ? `${data.vol_ratio}%` : '—', data.vol_ratio > 120 ? C.green : C.muted],
+              ['ATR', data.atr != null ? `$${data.atr}` : '—', C.muted],
+              ['RS Sector', data.rs_sector != null ? data.rs_sector : '—', data.rs_sector > 0 ? C.green : data.rs_sector < 0 ? C.red : C.muted],
             ].map(([label, val, color]) => (
-              <div key={label} style={{ background:C.bg, borderRadius:6, padding:'5px 7px' }}>
-                <div style={{ fontSize:8, color:C.muted, textTransform:'uppercase', letterSpacing:'0.05em' }}>{label}</div>
-                <div style={{ fontSize:11, fontFamily:'monospace', fontWeight:600, color }}>{val ?? '—'}</div>
+              <div key={label} style={{ background:C.bg, borderRadius:6, padding:'6px 8px' }}>
+                <div style={{ fontSize:8, color:C.muted, textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:2 }}>{label}</div>
+                <div style={{ fontSize:12, fontFamily:'monospace', fontWeight:600, color }}>{val ?? '—'}</div>
               </div>
             ))}
           </div>
 
-          {/* Criterios con veto */}
-          {hasVeto && (
-            <div style={{ fontSize:10, color:C.red, background:'#ff406015',
-              border:`1px solid ${C.red}33`, borderRadius:6, padding:'6px 9px', fontWeight:600 }}>
-              ⛔ Precio bajo SMA200 — VETO ABSOLUTO
+          {/* Entry / Stop / Target */}
+          {(data.entry_suggested || data.stop_suggested || data.target_suggested) && (
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:6 }}>
+              {[
+                ['Entrada sug.', data.entry_suggested ? `$${data.entry_suggested}` : '—', C.amber],
+                ['Stop sug.',    data.stop_suggested  ? `$${data.stop_suggested}`  : '—', C.red],
+                ['Target sug.',  data.target_suggested? `$${data.target_suggested}`: '—', C.green],
+              ].map(([label, val, color]) => (
+                <div key={label} style={{ background:C.bg, borderRadius:6, padding:'6px 8px',
+                  border:`1px solid ${color}22` }}>
+                  <div style={{ fontSize:8, color:C.muted, textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:2 }}>{label}</div>
+                  <div style={{ fontSize:12, fontFamily:'monospace', fontWeight:700, color }}>{val}</div>
+                </div>
+              ))}
+            </div>
+          )}
+          {data.rr_suggested != null && (
+            <div style={{ fontSize:10, color: data.rr_suggested >= 2 ? C.green : data.rr_suggested >= 1.5 ? C.amber : C.red,
+              background: data.rr_suggested >= 2 ? '#00e09610' : '#ff406010',
+              borderRadius:6, padding:'5px 9px', fontWeight:600 }}>
+              R/R sugerido: {data.rr_suggested}x {data.rr_suggested < 1 ? '⛔' : data.rr_suggested >= 2 ? '✓' : '⚠'}
             </div>
           )}
 
           {/* Earnings */}
           {data.next_earnings && (
-            <div style={{ fontSize:10, color:C.muted }}>
-              Earnings: <span style={{ color:C.amber }}>{data.next_earnings}</span>
+            <div style={{ fontSize:10, color:C.muted, background:C.bg, borderRadius:6, padding:'5px 9px' }}>
+              Próximos earnings: <span style={{ color:C.amber, fontWeight:600 }}>{data.next_earnings}</span>
             </div>
+          )}
+
+          {/* Scorecard detalle — expandible */}
+          {data.scorecard && (
+            <>
+              <button onClick={() => setExpanded(e => !e)}
+                style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:7,
+                  color:C.muted, padding:'5px 10px', cursor:'pointer', fontSize:10,
+                  textAlign:'left', display:'flex', justifyContent:'space-between' }}>
+                <span>Scorecard detallado</span>
+                <span>{expanded ? '▲' : '▼'}</span>
+              </button>
+
+              {expanded && (
+                <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                  {Object.entries(data.scorecard).map(([key, crit]) => {
+                    const score  = crit.score_sugerido ?? 0
+                    const peso   = crit.peso ?? WEIGHTS[key] ?? 1
+                    const color  = scoreColors[Math.min(score, 3)]
+                    const esVeto = (key === 'precio_sma200' && score === 0) || (key === 'ratio_rr' && score === 0)
+                    return (
+                      <div key={key} style={{ padding:'8px 10px', borderRadius:7, background:C.bg,
+                        border:`1px solid ${esVeto ? C.red+'44' : C.border}` }}>
+                        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:3 }}>
+                          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                            <span style={{ fontSize:11, fontWeight:600, color:C.text }}>
+                              {CRITERIA_LABELS[key] || key}
+                            </span>
+                            <span style={{ fontSize:9, color:C.muted, background:C.card,
+                              border:`1px solid ${C.border}`, borderRadius:99, padding:'1px 5px' }}>×{peso}</span>
+                            {crit.automatico && (
+                              <span style={{ fontSize:9, color:C.accent, background:C.accent+'15',
+                                border:`1px solid ${C.accent}33`, borderRadius:99, padding:'1px 5px' }}>AUTO</span>
+                            )}
+                            {esVeto && <span style={{ fontSize:9, color:C.red, fontWeight:700 }}>⚠ VETO</span>}
+                          </div>
+                          <div style={{ display:'flex', alignItems:'center', gap:5 }}>
+                            <span style={{ fontSize:12, fontWeight:700, fontFamily:'monospace', color }}>{score}/3</span>
+                            <span style={{ fontSize:9, color:C.muted }}>= {score*peso} pts</span>
+                          </div>
+                        </div>
+                        {/* Mini barra */}
+                        <div style={{ height:3, background:C.card, borderRadius:99, overflow:'hidden', marginBottom:4 }}>
+                          <div style={{ height:'100%', width:`${(score/3)*100}%`, background:color, borderRadius:99 }} />
+                        </div>
+                        {crit.justificacion && (
+                          <div style={{ fontSize:10, color: esVeto ? C.red : C.muted, lineHeight:1.5 }}>
+                            {crit.justificacion}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+
+                  {/* Fundamentales breves */}
+                  {(f.revenueGrowth != null || f.epsGrowth != null || f.peRatio != null || f.mktCap) && (
+                    <div style={{ background:C.bg, borderRadius:7, padding:'8px 10px',
+                      border:`1px solid ${C.border}` }}>
+                      <div style={{ fontSize:10, color:C.text, fontWeight:600, marginBottom:6 }}>Fundamentales</div>
+                      <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:5 }}>
+                        {[
+                          ['Rev Growth', f.revenueGrowth != null ? `${f.revenueGrowth > 0?'+':''}${f.revenueGrowth}%` : null, f.revenueGrowth > 0 ? C.green : C.red],
+                          ['EPS Growth', f.epsGrowth    != null ? `${f.epsGrowth > 0?'+':''}${f.epsGrowth}%`    : null, f.epsGrowth > 0 ? C.green : C.red],
+                          ['P/E', f.peRatio ? f.peRatio : null, C.muted],
+                          ['Mkt Cap', f.mktCap || null, C.muted],
+                        ].filter(([,v]) => v != null).map(([label, val, color]) => (
+                          <div key={label} style={{ display:'flex', justifyContent:'space-between' }}>
+                            <span style={{ fontSize:10, color:C.muted }}>{label}</span>
+                            <span style={{ fontSize:10, fontWeight:600, color }}>{val}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
           )}
         </>
       )}
@@ -1442,7 +1585,6 @@ export default function PositionModule({ session, onBack }) {
   const [search,     setSearch]     = useState('')
   const [tableModal, setTableModal] = useState(null)
   const [refreshingTickers, setRefreshingTickers] = useState({})
-  const [refreshKey, setRefreshKey] = useState(0)
 
   // Watchlist
   const [watchlist,  setWatchlist]  = useState(null)   // null = no cargado aún
@@ -1597,10 +1739,10 @@ export default function PositionModule({ session, onBack }) {
                   fontWeight:700, padding:'10px 16px', cursor:'pointer', fontSize:13 }}>
                 + Agregar
               </button>
-              <button onClick={() => { setPosCache({}); posCacheRef.current={}; setRefreshKey(k=>k+1) }}
+              <button onClick={() => { posCacheRef.current={}; setPosCache({}); upsertAll(null, {}) }}
                 style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:9,
                   color:C.muted, padding:'10px 13px', cursor:'pointer', fontSize:13 }}
-                title="Reanalizar todo">↻</button>
+                title="Limpiar cache y re-analizar todo">↻</button>
               <button onClick={() => setViewMode(v => v==='cards'?'table':'cards')}
                 title={viewMode==='cards'?'Ver tabla':'Ver tarjetas'}
                 style={{ background: viewMode==='table' ? C.green+'22' : 'none',
@@ -1652,13 +1794,12 @@ export default function PositionModule({ session, onBack }) {
                 />
               </div>
             ) : (
-              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(268px, 1fr))', gap:11 }}>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(300px, 1fr))', gap:11 }}>
                 {wl.map(t => (
-                  <PositionCard key={`${t}-${refreshKey}`} ticker={t}
+                  <PositionCard key={t} ticker={t}
                     cachedData={posCache[t] || null}
                     onAnalysed={cacheAnalysis}
                     onRemove={remove}
-                    refreshKey={refreshKey}
                   />
                 ))}
               </div>
@@ -1694,7 +1835,6 @@ export default function PositionModule({ session, onBack }) {
               cachedData={posCache[tableModal] || null}
               onAnalysed={cacheAnalysis}
               onRemove={t => { remove(t); setTableModal(null) }}
-              refreshKey={refreshKey}
             />
             <button onClick={() => setTableModal(null)}
               style={{ marginTop:10, width:'100%', background:'none', border:`1px solid ${C.border}`,
