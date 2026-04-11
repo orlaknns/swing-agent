@@ -1170,9 +1170,17 @@ def detect_hh_hl(weekly_candles: list) -> dict:
         if wk_lows[i] < wk_lows[i-1] and wk_lows[i] < wk_lows[i+1]:
             lows_pivot.append(wk_lows[i])
 
-    # Contar cuántos pivots consecutivos son crecientes
-    hh_count = sum(1 for i in range(1, len(highs_pivot)) if highs_pivot[i] > highs_pivot[i-1])
-    hl_count = sum(1 for i in range(1, len(lows_pivot))  if lows_pivot[i]  > lows_pivot[i-1])
+    # Contar pivots crecientes significativos (mínimo 0.5% de diferencia)
+    # Filtra micro-oscilaciones laterales que no representan tendencia real
+    MIN_MOVE = 0.005
+    hh_count = sum(
+        1 for i in range(1, len(highs_pivot))
+        if highs_pivot[i] > highs_pivot[i-1] * (1 + MIN_MOVE)
+    )
+    hl_count = sum(
+        1 for i in range(1, len(lows_pivot))
+        if lows_pivot[i] > lows_pivot[i-1] * (1 + MIN_MOVE)
+    )
 
     # Score: basta con HH o HL, no necesita ambos igual de fuertes
     combined = hh_count + hl_count
