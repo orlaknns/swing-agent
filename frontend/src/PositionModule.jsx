@@ -1608,6 +1608,7 @@ export default function PositionModule({ session, onBack }) {
       .then(({ data }) => {
         const wl    = data?.position_watchlist?.length ? data.position_watchlist : []
         const cache = data?.position_cache || {}
+        console.log('[LOAD] wl from DB:', wl)
         watchlistRef.current = wl
         posCacheRef.current  = cache
         setWatchlist(wl)
