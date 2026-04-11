@@ -1608,7 +1608,7 @@ export default function PositionModule({ session, onBack }) {
       .then(({ data }) => {
         const wl    = data?.position_watchlist?.length ? data.position_watchlist : []
         const cache = data?.position_cache || {}
-        console.log('[LOAD] wl from DB:', wl)
+
         watchlistRef.current = wl
         posCacheRef.current  = cache
         setWatchlist(wl)
@@ -1625,8 +1625,7 @@ export default function PositionModule({ session, onBack }) {
       updated_at:         new Date().toISOString(),
     }
     const { error } = await supabase.from('watchlist').upsert(payload, { onConflict:'user_id' })
-    if (error) console.error('[upsertAll ERROR]', error)
-    else console.log('[upsertAll OK] wl=', payload.position_watchlist)
+    if (error) console.error('[position upsertAll error]', error)
   }
 
   const cacheAnalysis = (ticker, data) => {
