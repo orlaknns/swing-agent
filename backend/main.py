@@ -1751,3 +1751,108 @@ async def screener_position_refresh():
             return JSONResponse(status_code=r.status_code, content={"error": f"GitHub respondió {r.status_code}", "detail": r.text})
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+# ── Sector Rotation Tracker ──────────────────────────────────────────────────
+
+_SECTOR_ROTATION_CACHE: dict = {}
+_SECTOR_ROTATION_TS: float = 0
+_SECTOR_ROTATION_TTL = 3600  # 1 hora
+
+# ETFs canónicos por sector (sin duplicados)
+SECTOR_ETFS = [
+    ("Technology",             "XLK"),
+    ("Financial Services",     "XLF"),
+    ("Healthcare",             "XLV"),
+    ("Consumer Cyclical",      "XLY"),
+    ("Consumer Defensive",     "XLP"),
+    ("Energy",                 "XLE"),
+    ("Industrials",            "XLI"),
+    ("Utilities",              "XLU"),
+    ("Basic Materials",        "XLB"),
+    ("Real Estate",            "XLRE"),
+    ("Communication Services", "XLC"),
+]
+
+
+@app.get("/sector-rotation")
+async def sector_rotation():
+    """
+    Devuelve RS Mansfield de cada sector ETF vs SPY, momentum 4 semanas,
+    posición vs SMA50 y SMA200. Caché de 1 hora.
+    """
+    import time as _t
+    global _SECTOR_ROTATION_CACHE, _SECTOR_ROTATION_TS
+
+    if _SECTOR_ROTATION_CACHE and (_t.time() - _SECTOR_ROTATION_TS) < _SECTOR_ROTATION_TTL:
+        return JSONResponse(content=_SECTOR_ROTATION_CACHE,
+                            media_type="application/json; charset=utf-8")
+
+    try:
+        async with httpx.AsyncClient(timeout=25) as http:
+            spy_closes, *etf_results = await asyncio.gather(
+                fetch_spy_closes(http),
+                *[fetch_sector_etf_closes(etf, http) for _, etf in SECTOR_ETFS],
+            )
+
+        sectors = []
+        for (sector_name, etf_symbol), closes in zip(SECTOR_ETFS, etf_results):
+            if len(closes) < 10:
+                sectors.append({
+                    "sector": sector_name, "etf": etf_symbol,
+                    "price": None, "rs_mansfield": None,
+                    "momentum_4w": None, "above_sma50": None, "above_sma200": None,
+                    "sma50": None, "sma200": None,
+                    "error": "Datos insuficientes"
+                })
+                continue
+
+            price  = round(closes[-1], 2)
+            sma50  = calc_sma(closes, 50)
+            sma200 = calc_sma(closes, 200)
+            rs     = calc_mansfield_rs(closes, spy_closes)
+
+            # Momentum 4 semanas (~20 días hábiles)
+            past_20 = closes[-21] if len(closes) >= 21 else closes[0]
+            mom_4w  = round((closes[-1] - past_20) / past_20 * 100, 1) if past_20 else None
+
+            sectors.append({
+                "sector":       sector_name,
+                "etf":          etf_symbol,
+                "price":        price,
+                "rs_mansfield": rs,
+                "momentum_4w":  mom_4w,
+                "above_sma50":  (closes[-1] > sma50)  if sma50  else None,
+                "above_sma200": (closes[-1] > sma200) if sma200 else None,
+                "sma50":        round(sma50, 2)  if sma50  else None,
+                "sma200":       round(sma200, 2) if sma200 else None,
+            })
+
+        # Ordenar por RS Mansfield desc (líderes primero)
+        sectors.sort(key=lambda s: s["rs_mansfield"] if s["rs_mansfield"] is not None else -999,
+                     reverse=True)
+
+        spy_price   = round(spy_closes[-1], 2) if spy_closes else None
+        spy_sma200  = calc_sma(spy_closes, 200)
+        spy_past_20 = spy_closes[-21] if len(spy_closes) >= 21 else (spy_closes[0] if spy_closes else None)
+        spy_mom_4w  = round((spy_closes[-1] - spy_past_20) / spy_past_20 * 100, 1) if spy_past_20 else None
+
+        result = {
+            "sectors": sectors,
+            "spy": {
+                "price":        spy_price,
+                "sma200":       round(spy_sma200, 2) if spy_sma200 else None,
+                "above_sma200": (spy_closes[-1] > spy_sma200) if (spy_closes and spy_sma200) else None,
+                "momentum_4w":  spy_mom_4w,
+            },
+            "updated_at": __import__("datetime").datetime.utcnow().isoformat() + "Z",
+        }
+
+        _SECTOR_ROTATION_CACHE = result
+        _SECTOR_ROTATION_TS    = _t.time()
+        return JSONResponse(content=result, media_type="application/json; charset=utf-8")
+
+    except Exception as e:
+        import traceback as _tb
+        print(f"SECTOR-ROTATION ERROR: {e}\n{_tb.format_exc()[-600:]}")
+        raise HTTPException(status_code=500, detail=str(e))

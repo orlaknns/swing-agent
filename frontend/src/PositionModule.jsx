@@ -1267,6 +1267,168 @@ function PositionWatchlistTable({ tickers, cache, onRemove, onRefresh, refreshin
   )
 }
 
+// ── Sector Rotation Tracker ──────────────────────────────────────────────────
+function SectorRotation() {
+  const [data,    setData]    = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState(null)
+
+  const load = async () => {
+    setLoading(true); setError(null)
+    try {
+      const res = await fetch('/api/sector-rotation')
+      if (!res.ok) throw new Error(`Error ${res.status}`)
+      setData(await res.json())
+    } catch(e) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { load() }, [])
+
+  const rsColor = rs => rs == null ? C.muted : rs > 2 ? C.green : rs > 0 ? '#7fd4a0' : rs > -2 ? C.amber : C.red
+  const momColor = m => m == null ? C.muted : m > 3 ? C.green : m > 0 ? '#7fd4a0' : m > -3 ? C.amber : C.red
+
+  return (
+    <div style={{ maxWidth:960, margin:'0 auto', padding:'0 20px' }}>
+      {/* SPY header */}
+      {data?.spy && (
+        <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10,
+          padding:'12px 16px', marginBottom:14, display:'flex', alignItems:'center',
+          justifyContent:'space-between', flexWrap:'wrap', gap:8 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+            <span style={{ fontFamily:'monospace', fontWeight:700, fontSize:15, color:C.text }}>SPY</span>
+            <span style={{ fontSize:13, fontFamily:'monospace', color:C.text }}>${data.spy.price}</span>
+            <span style={{ fontSize:10, padding:'2px 7px', borderRadius:99, fontWeight:600,
+              background: data.spy.above_sma200 ? '#00e09618' : '#ff406018',
+              color: data.spy.above_sma200 ? C.green : C.red }}>
+              {data.spy.above_sma200 ? '▲ Sobre SMA200' : '▼ Bajo SMA200'}
+            </span>
+          </div>
+          <div style={{ display:'flex', alignItems:'center', gap:14 }}>
+            <span style={{ fontSize:11, color:C.muted }}>
+              Momentum 4sem: <span style={{ fontFamily:'monospace', fontWeight:600,
+                color: momColor(data.spy.momentum_4w) }}>
+                {data.spy.momentum_4w != null ? `${data.spy.momentum_4w > 0 ? '+' : ''}${data.spy.momentum_4w}%` : '—'}
+              </span>
+            </span>
+            <span style={{ fontSize:10, color:C.muted }}>SMA200 ${data.spy.sma200}</span>
+            <button onClick={load} disabled={loading}
+              style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:6,
+                color:C.muted, padding:'3px 9px', cursor:'pointer', fontSize:11,
+                animation: loading ? 'spin 0.7s linear infinite' : 'none' }}>↻</button>
+          </div>
+        </div>
+      )}
+
+      {/* Estado carga */}
+      {loading && !data && (
+        <div style={{ textAlign:'center', padding:'60px', color:C.muted, fontSize:13 }}>
+          Cargando datos de sectores… (~10 segundos)
+        </div>
+      )}
+      {error && (
+        <div style={{ padding:'16px', background:'#ff406015', border:`1px solid ${C.red}44`,
+          borderRadius:9, color:C.red, fontSize:12 }}>
+          Error: {error}
+        </div>
+      )}
+
+      {/* Tabla de sectores */}
+      {data?.sectors && (
+        <>
+          {/* Leyenda RS */}
+          <div style={{ display:'flex', gap:12, marginBottom:10, flexWrap:'wrap' }}>
+            {[
+              ['RS > 2', C.green,  'Líder fuerte'],
+              ['RS 0–2', '#7fd4a0','Leve liderazgo'],
+              ['RS -2–0',C.amber,  'Rezagado leve'],
+              ['RS < -2',C.red,    'Rezagado fuerte'],
+            ].map(([label, color, desc]) => (
+              <span key={label} style={{ fontSize:10, color, display:'flex', alignItems:'center', gap:4 }}>
+                <span style={{ width:8, height:8, borderRadius:'50%', background:color, display:'inline-block' }}/>
+                {label} — {desc}
+              </span>
+            ))}
+          </div>
+
+          <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:12, overflow:'hidden' }}>
+            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+              <thead>
+                <tr style={{ borderBottom:`1px solid ${C.border}`, background:'#0c1828' }}>
+                  <th style={{ padding:'10px 14px', textAlign:'left', color:C.muted, fontWeight:600, fontSize:11 }}>Sector</th>
+                  <th style={{ padding:'10px 10px', textAlign:'center', color:C.muted, fontWeight:600, fontSize:11 }}>ETF</th>
+                  <th style={{ padding:'10px 10px', textAlign:'right', color:C.muted, fontWeight:600, fontSize:11 }}>Precio</th>
+                  <th style={{ padding:'10px 10px', textAlign:'right', color:C.muted, fontWeight:600, fontSize:11 }}>RS SPY</th>
+                  <th style={{ padding:'10px 10px', textAlign:'right', color:C.muted, fontWeight:600, fontSize:11 }}>Mom 4sem</th>
+                  <th style={{ padding:'10px 10px', textAlign:'center', color:C.muted, fontWeight:600, fontSize:11 }}>SMA50</th>
+                  <th style={{ padding:'10px 10px', textAlign:'center', color:C.muted, fontWeight:600, fontSize:11 }}>SMA200</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.sectors.map((s, i) => (
+                  <tr key={s.etf} style={{ borderBottom:`1px solid ${C.border}`,
+                    background: i % 2 === 0 ? 'transparent' : '#0c182808' }}>
+                    <td style={{ padding:'10px 14px' }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:7 }}>
+                        <span style={{ width:8, height:8, borderRadius:'50%', flexShrink:0,
+                          background: rsColor(s.rs_mansfield) }} />
+                        <span style={{ color:C.text, fontWeight: i < 3 ? 700 : 400 }}>{s.sector}</span>
+                        {i < 3 && <span style={{ fontSize:9, color:C.green, background:'#00e09618',
+                          padding:'1px 5px', borderRadius:99, fontWeight:600 }}>TOP</span>}
+                        {i >= data.sectors.length - 2 && <span style={{ fontSize:9, color:C.red,
+                          background:'#ff406018', padding:'1px 5px', borderRadius:99, fontWeight:600 }}>WEAK</span>}
+                      </div>
+                    </td>
+                    <td style={{ padding:'10px', textAlign:'center', fontFamily:'monospace',
+                      color:C.muted, fontSize:11 }}>{s.etf}</td>
+                    <td style={{ padding:'10px', textAlign:'right', fontFamily:'monospace', color:C.text }}>
+                      {s.price != null ? `$${s.price}` : '—'}
+                    </td>
+                    <td style={{ padding:'10px', textAlign:'right', fontFamily:'monospace',
+                      fontWeight:700, color: rsColor(s.rs_mansfield) }}>
+                      {s.rs_mansfield != null ? (s.rs_mansfield > 0 ? `+${s.rs_mansfield}` : s.rs_mansfield) : '—'}
+                    </td>
+                    <td style={{ padding:'10px', textAlign:'right', fontFamily:'monospace',
+                      color: momColor(s.momentum_4w) }}>
+                      {s.momentum_4w != null ? `${s.momentum_4w > 0 ? '+' : ''}${s.momentum_4w}%` : '—'}
+                    </td>
+                    <td style={{ padding:'10px', textAlign:'center' }}>
+                      {s.above_sma50 != null ? (
+                        <span style={{ fontSize:10, fontWeight:600,
+                          color: s.above_sma50 ? C.green : C.red }}>
+                          {s.above_sma50 ? '▲' : '▼'}
+                        </span>
+                      ) : '—'}
+                    </td>
+                    <td style={{ padding:'10px', textAlign:'center' }}>
+                      {s.above_sma200 != null ? (
+                        <span style={{ fontSize:10, fontWeight:600,
+                          color: s.above_sma200 ? C.green : C.red }}>
+                          {s.above_sma200 ? '▲' : '▼'}
+                        </span>
+                      ) : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {data.updated_at && (
+            <div style={{ fontSize:10, color:C.muted, marginTop:8, textAlign:'right' }}>
+              Actualizado: {new Date(data.updated_at).toLocaleTimeString()} · Caché 1h
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+
 // ── Position Module (contenedor principal) ──────────────────────────────────
 export default function PositionModule({ session, onBack }) {
   const [tab,        setTab]        = useState('watchlist')
@@ -1376,6 +1538,7 @@ export default function PositionModule({ session, onBack }) {
   const tabs = [
     ['watchlist', `Watchlist · ${wl.length}`],
     ['screener',  'Screener'],
+    ['mercado',   'Mercado'],
     ['journal',   'Journal'],
     ['dashboard', 'Dashboard'],
   ]
@@ -1505,6 +1668,9 @@ export default function PositionModule({ session, onBack }) {
           <PositionScreener watchlist={wl}
             onAdd={addToWatchlist} onRemove={remove} onAddAll={addAllToWatchlist} />
         </div>
+
+        {/* Mercado */}
+        {tab === 'mercado'   && <SectorRotation />}
 
         {/* Journal */}
         {tab === 'journal'   && <PositionJournal   session={session} />}
