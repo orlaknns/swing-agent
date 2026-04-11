@@ -1126,101 +1126,304 @@ function PositionScreener({ watchlist, onAdd, onRemove, onAddAll }) {
   )
 }
 
-// ── Position Watchlist ───────────────────────────────────────────────────────
-function PositionWatchlist({ session, watchlist, onRemove, onAnalyze }) {
-  const [positionTrades, setPositionTrades] = useState({}) // { AAPL: { id, entry_price, status } }
+// ── Position Card ────────────────────────────────────────────────────────────
+function PositionCard({ ticker, cachedData, onAnalysed, onRemove, refreshKey }) {
+  const [data,    setData]    = useState(cachedData || null)
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState(null)
 
+  // Si no hay cache, auto-analiza al montar
   useEffect(() => {
-    if (!session) return
-    supabase.from('position_trades')
-      .select('ticker, entry_price, status, score_total, decision')
-      .eq('user_id', session.user.id)
-      .in('status', ['planning', 'open'])
-      .then(({ data }) => {
-        const map = {}
-        ;(data || []).forEach(t => { if (!map[t.ticker]) map[t.ticker] = t })
-        setPositionTrades(map)
-      })
-  }, [session])
+    if (!cachedData) runAnalysis()
+  }, [ticker, refreshKey]) // eslint-disable-line
 
-  if (watchlist.length === 0) {
-    return (
-      <div style={{ maxWidth:960, margin:'0 auto', padding:'0 20px' }}>
-        <div style={{ textAlign:'center', padding:'60px', color:C.muted }}>
-          <div style={{ fontSize:28, marginBottom:12 }}>📋</div>
-          <div style={{ fontSize:14, marginBottom:6 }}>Tu watchlist de position trading está vacía</div>
-          <div style={{ fontSize:11 }}>Agrega tickers desde el Screener o ingrésalos manualmente en el tab Análisis.</div>
-        </div>
-      </div>
-    )
+  const runAnalysis = async () => {
+    setLoading(true); setError(null)
+    try {
+      const res = await fetch(`/api/analyze-position/${ticker}`)
+      if (!res.ok) { const d = await res.json(); throw new Error(d.detail || 'Error') }
+      const json = await res.json()
+      setData(json)
+      onAnalysed(ticker, json)
+    } catch(e) { setError(e.message) }
+    setLoading(false)
   }
 
+  // Score total del cache
+  const scoreTotal = data?.scorecard
+    ? Object.entries(data.scorecard).reduce((s, [k, v]) => s + (v.score_sugerido ?? 0) * (WEIGHTS[k] || 1), 0)
+    : null
+  const decision = scoreTotal == null ? null :
+    scoreTotal >= 38 ? 'OPERAR_CONVICCION' :
+    scoreTotal >= 28 ? 'OPERAR_CAUTELA' : 'NO_OPERAR'
+  const hasVeto = data?.scorecard?.precio_sma200?.score_sugerido === 0
+
+  const savedAt = data?._savedAt
+  const savedLabel = savedAt ? (() => {
+    const d = new Date(savedAt), now = new Date()
+    const dDate   = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
+    const nowDate = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`
+    if (dDate === nowDate) {
+      const h = d.getHours().toString().padStart(2,'0')
+      const m = d.getMinutes().toString().padStart(2,'0')
+      return `hoy ${h}:${m}`
+    }
+    const y = new Date(now); y.setDate(y.getDate()-1)
+    const yesterDate = `${y.getFullYear()}-${y.getMonth()}-${y.getDate()}`
+    if (dDate === yesterDate) return 'ayer'
+    return `hace ${Math.floor((now-d)/(1000*60*60*24))}d`
+  })() : null
+
+  const decisionColor = DECISION_COLOR[decision] || C.muted
+  const decisionShort = decision === 'OPERAR_CONVICCION' ? 'CONVICCIÓN' :
+                        decision === 'OPERAR_CAUTELA'    ? 'CAUTELA'    :
+                        decision === 'NO_OPERAR'         ? 'NO OPERAR'  : null
+
   return (
-    <div style={{ maxWidth:960, margin:'0 auto', padding:'0 20px' }}>
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
-        <div style={{ fontSize:13, color:C.muted }}>{watchlist.length} acciones en seguimiento</div>
+    <div style={{ background:C.card, border:`1px solid ${hasVeto ? C.red+'44' : decision === 'OPERAR_CONVICCION' ? C.green+'44' : C.border}`,
+      borderRadius:12, padding:'14px', display:'flex', flexDirection:'column', gap:10,
+      borderLeft:`3px solid ${hasVeto ? C.red : decisionColor}` }}>
+
+      {/* Header */}
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
+        <div>
+          <div style={{ display:'flex', alignItems:'center', gap:7 }}>
+            <span style={{ fontSize:15, fontWeight:700, fontFamily:'monospace', color:C.text }}>{ticker}</span>
+            {decision && !loading && (
+              <span style={{ fontSize:9, fontWeight:700, padding:'2px 7px', borderRadius:99,
+                color: decisionColor, background: decisionColor+'18' }}>
+                {decisionShort}
+              </span>
+            )}
+          </div>
+          {data?.company_name && <div style={{ fontSize:10, color:C.muted, marginTop:1 }}>{data.company_name}</div>}
+          {savedLabel && <div style={{ fontSize:9, color:C.muted, marginTop:1 }}>Actualizado {savedLabel}</div>}
+        </div>
+        <div style={{ display:'flex', gap:5, alignItems:'center' }}>
+          <button onClick={runAnalysis} disabled={loading} title="Actualizar análisis"
+            style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:5,
+              color: loading ? C.accent : C.muted, cursor: loading ? 'not-allowed' : 'pointer',
+              padding:'3px 7px', fontSize:11,
+              animation: loading ? 'spin 0.7s linear infinite' : 'none' }}>↻</button>
+          <button onClick={() => onRemove(ticker)} title="Eliminar"
+            style={{ background:'none', border:`1px solid ${C.red}44`, borderRadius:5,
+              color:C.red, cursor:'pointer', padding:'3px 7px', fontSize:11, opacity:0.7 }}>×</button>
+        </div>
       </div>
 
-      <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:12, overflow:'hidden', marginBottom:16 }}>
+      {/* Error */}
+      {error && <div style={{ fontSize:10, color:C.red }}>{error}</div>}
+
+      {/* Loading */}
+      {loading && !data && (
+        <div style={{ fontSize:11, color:C.muted, textAlign:'center', padding:'12px 0' }}>Analizando...</div>
+      )}
+
+      {/* Datos */}
+      {data && !loading && (
+        <>
+          {/* Precio y SMA */}
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+            <span style={{ fontSize:18, fontWeight:700, fontFamily:'monospace', color:C.text }}>${data.price}</span>
+            <div style={{ textAlign:'right' }}>
+              <div style={{ fontSize:9, color:C.muted }}>SMA50 <span style={{ color:C.amber }}>${data.sma50}</span></div>
+              <div style={{ fontSize:9, color:C.muted }}>SMA200 <span style={{ color: data.sma200 && data.price > data.sma200 ? C.green : C.red }}>${data.sma200}</span></div>
+            </div>
+          </div>
+
+          {/* Macro context */}
+          <div style={{ padding:'6px 9px', borderRadius:6, fontSize:10, fontWeight:600,
+            background: data.macro_context?.spy_above_sma200 ? '#00e09610' : '#ff406010',
+            color: data.macro_context?.spy_above_sma200 ? C.green : C.red }}>
+            {data.macro_context?.spy_above_sma200 ? '▲ Mercado alcista' : '▼ Mercado bajista'}
+            <span style={{ color:C.muted, fontWeight:400, marginLeft:6 }}>SPY vs SMA200</span>
+          </div>
+
+          {/* Score bar */}
+          {scoreTotal != null && (
+            <div>
+              <div style={{ display:'flex', justifyContent:'space-between', marginBottom:3 }}>
+                <span style={{ fontSize:10, color:C.muted }}>Score</span>
+                <span style={{ fontSize:11, fontWeight:700, fontFamily:'monospace', color: decisionColor }}>
+                  {scoreTotal}/{MAX_SCORE}
+                </span>
+              </div>
+              <div style={{ height:5, background:C.bg, borderRadius:99, overflow:'hidden', border:`1px solid ${C.border}` }}>
+                <div style={{ height:'100%', width:`${Math.min(100,(scoreTotal/MAX_SCORE)*100)}%`,
+                  background: decisionColor, borderRadius:99, transition:'width 0.3s' }} />
+              </div>
+            </div>
+          )}
+
+          {/* Indicadores clave */}
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:6 }}>
+            {[
+              ['RSI', data.rsi, data.rsi > 65 ? C.red : data.rsi < 40 ? C.green : C.text],
+              ['RS SPY', data.mansfield_rs, data.mansfield_rs > 0 ? C.green : C.red],
+              ['HH/HL', `${data.hh_hl?.hh_count}/${data.hh_hl?.hl_count}`, data.hh_hl?.score >= 2 ? C.green : C.muted],
+              ['Vol%', data.vol_ratio, data.vol_ratio > 120 ? C.green : C.muted],
+              ['R/R', data.rr_suggested ? `${data.rr_suggested}x` : '—', data.rr_suggested >= 2 ? C.green : C.amber],
+              ['Sector', data.sector_etf || '—', C.muted],
+            ].map(([label, val, color]) => (
+              <div key={label} style={{ background:C.bg, borderRadius:6, padding:'5px 7px' }}>
+                <div style={{ fontSize:8, color:C.muted, textTransform:'uppercase', letterSpacing:'0.05em' }}>{label}</div>
+                <div style={{ fontSize:11, fontFamily:'monospace', fontWeight:600, color }}>{val ?? '—'}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Criterios con veto */}
+          {hasVeto && (
+            <div style={{ fontSize:10, color:C.red, background:'#ff406015',
+              border:`1px solid ${C.red}33`, borderRadius:6, padding:'6px 9px', fontWeight:600 }}>
+              ⛔ Precio bajo SMA200 — VETO ABSOLUTO
+            </div>
+          )}
+
+          {/* Earnings */}
+          {data.next_earnings && (
+            <div style={{ fontSize:10, color:C.muted }}>
+              Earnings: <span style={{ color:C.amber }}>{data.next_earnings}</span>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+// ── Position Watchlist Table ─────────────────────────────────────────────────
+function PositionWatchlistTable({ tickers, cache, onRemove, onRefresh, refreshingTickers, onRowClick }) {
+  const [sortCol, setSortCol] = useState(null)
+  const [sortDir, setSortDir] = useState('desc')
+  const [filterText, setFilterText] = useState('')
+
+  const handleSort = col => {
+    if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortCol(col); setSortDir('desc') }
+  }
+  const SortIcon = ({ col }) => sortCol !== col
+    ? <span style={{ opacity:0.3, marginLeft:3 }}>↕</span>
+    : <span style={{ marginLeft:3, color:C.green }}>{sortDir==='asc'?'↑':'↓'}</span>
+
+  let rows = tickers.map(ticker => {
+    const d = cache[ticker]
+    const scoreTotal = d?.scorecard
+      ? Object.entries(d.scorecard).reduce((s,[k,v]) => s+(v.score_sugerido??0)*(WEIGHTS[k]||1),0)
+      : null
+    return { ticker, d, scoreTotal, analyzed: !!(d && !d.error) }
+  })
+  if (filterText) rows = rows.filter(r => r.ticker.includes(filterText.toUpperCase()))
+  if (sortCol) rows = [...rows].sort((a,b) => {
+    let va, vb
+    if (sortCol === 'ticker') { va=a.ticker; vb=b.ticker }
+    if (sortCol === 'score')  { va=a.scoreTotal??-1; vb=b.scoreTotal??-1 }
+    if (sortCol === 'rsi')    { va=a.d?.rsi??-1; vb=b.d?.rsi??-1 }
+    if (sortCol === 'rs')     { va=a.d?.mansfield_rs??-99; vb=b.d?.mansfield_rs??-99 }
+    if (va<vb) return sortDir==='asc'?-1:1
+    if (va>vb) return sortDir==='asc'?1:-1
+    return 0
+  })
+
+  const thStyle = col => ({ padding:'8px 10px', textAlign:'left', fontSize:10,
+    color: sortCol===col ? C.green : C.muted, letterSpacing:'0.07em',
+    textTransform:'uppercase', fontWeight:600, whiteSpace:'nowrap',
+    cursor: col ? 'pointer' : 'default', userSelect:'none' })
+
+  return (
+    <div>
+      <div style={{ display:'flex', gap:8, padding:'10px 12px', borderBottom:`1px solid ${C.border}`, alignItems:'center' }}>
+        <input value={filterText} onChange={e => setFilterText(e.target.value)}
+          placeholder="Buscar ticker…"
+          style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:7,
+            padding:'5px 10px', color:C.text, fontSize:11, outline:'none', width:120 }} />
+        <span style={{ marginLeft:'auto', fontSize:10, color:C.muted }}>{rows.length} / {tickers.length}</span>
+      </div>
+      <div style={{ overflowX:'auto' }}>
         <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
           <thead>
             <tr style={{ borderBottom:`1px solid ${C.border}` }}>
-              {['Ticker','Estado position','Score','Decisión','Acciones'].map(h => (
-                <th key={h} style={{ padding:'9px 12px', textAlign:'left', fontSize:10,
-                  color:C.muted, letterSpacing:'0.07em', textTransform:'uppercase', fontWeight:600 }}>{h}</th>
-              ))}
+              <th style={thStyle('ticker')} onClick={() => handleSort('ticker')}>Ticker <SortIcon col="ticker"/></th>
+              <th style={thStyle(null)}>Precio</th>
+              <th style={thStyle('score')} onClick={() => handleSort('score')}>Score <SortIcon col="score"/></th>
+              <th style={thStyle(null)}>Decisión</th>
+              <th style={thStyle('rsi')} onClick={() => handleSort('rsi')}>RSI <SortIcon col="rsi"/></th>
+              <th style={thStyle('rs')} onClick={() => handleSort('rs')}>RS SPY <SortIcon col="rs"/></th>
+              <th style={thStyle(null)}>Macro</th>
+              <th style={thStyle(null)}>HH/HL</th>
+              <th style={thStyle(null)}></th>
             </tr>
           </thead>
           <tbody>
-            {watchlist.map(ticker => {
-              const trade = positionTrades[ticker]
+            {rows.map(({ ticker, d, scoreTotal, analyzed }) => {
+              const decision = scoreTotal == null ? null :
+                scoreTotal >= 38 ? 'OPERAR_CONVICCION' :
+                scoreTotal >= 28 ? 'OPERAR_CAUTELA' : 'NO_OPERAR'
+              const dc = DECISION_COLOR[decision] || C.muted
+              const hasVeto = d?.scorecard?.precio_sma200?.score_sugerido === 0
               return (
-                <tr key={ticker}
-                  style={{ borderBottom:`1px solid ${C.border}` }}
+                <tr key={ticker} onClick={() => onRowClick(ticker)}
+                  style={{ borderBottom:`1px solid ${C.border}`, cursor:'pointer', transition:'background 0.15s' }}
                   onMouseEnter={e => e.currentTarget.style.background='#1a2d4533'}
                   onMouseLeave={e => e.currentTarget.style.background='transparent'}>
-                  <td style={{ padding:'12px', fontWeight:700, color:C.text, fontFamily:'monospace' }}>
-                    {ticker}
+                  <td style={{ padding:'10px' }}>
+                    <span style={{ fontFamily:'monospace', fontWeight:700, color:C.text }}>{ticker}</span>
+                    {d?._savedAt && (() => {
+                      const dt = new Date(d._savedAt), now = new Date()
+                      const dDate = `${dt.getFullYear()}-${dt.getMonth()}-${dt.getDate()}`
+                      const nDate = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`
+                      const h = dt.getHours().toString().padStart(2,'0')
+                      const m = dt.getMinutes().toString().padStart(2,'0')
+                      const label = dDate===nDate ? `hoy ${h}:${m}` : 'ayer'
+                      return <div style={{ fontSize:9, color:C.muted, marginTop:1 }}>{label}</div>
+                    })()}
                   </td>
-                  <td style={{ padding:'12px' }}>
-                    {trade ? (
-                      <span style={{ fontSize:10, fontWeight:700,
-                        color: STATUS_COLORS[trade.status],
-                        background: STATUS_COLORS[trade.status]+'18',
-                        padding:'2px 8px', borderRadius:99 }}>
-                        {STATUS_LABELS[trade.status]}
-                      </span>
-                    ) : (
-                      <span style={{ fontSize:10, color:C.muted }}>Sin análisis</span>
-                    )}
+                  <td style={{ padding:'10px', fontFamily:'monospace', color:C.text }}>
+                    {analyzed ? `$${d.price?.toFixed(2)}` : <span style={{ color:C.muted }}>—</span>}
                   </td>
-                  <td style={{ padding:'12px', fontFamily:'monospace',
-                    color: trade ? (trade.score_total >= 38 ? C.green : trade.score_total >= 28 ? C.amber : C.red) : C.muted }}>
-                    {trade ? `${trade.score_total}/${MAX_SCORE}` : '—'}
+                  <td style={{ padding:'10px', fontFamily:'monospace', fontWeight:700,
+                    color: scoreTotal >= 38 ? C.green : scoreTotal >= 28 ? C.amber : scoreTotal != null ? C.red : C.muted }}>
+                    {scoreTotal != null ? `${scoreTotal}/${MAX_SCORE}` : '—'}
                   </td>
-                  <td style={{ padding:'12px' }}>
-                    {trade?.decision ? (
-                      <span style={{ fontSize:10, fontWeight:700, color: DECISION_COLOR[trade.decision] }}>
-                        {trade.decision === 'OPERAR_CONVICCION' ? 'CONVICCIÓN' :
-                         trade.decision === 'OPERAR_CAUTELA'    ? 'CAUTELA'    : 'NO OPERAR'}
+                  <td style={{ padding:'10px' }}>
+                    {decision ? (
+                      <span style={{ fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:99,
+                        color:dc, background:dc+'18' }}>
+                        {decision==='OPERAR_CONVICCION'?'CONVICCIÓN':decision==='OPERAR_CAUTELA'?'CAUTELA':'NO OPERAR'}
                       </span>
                     ) : <span style={{ color:C.muted }}>—</span>}
+                    {hasVeto && <span style={{ fontSize:9, color:C.red, marginLeft:5 }}>⛔</span>}
                   </td>
-                  <td style={{ padding:'12px' }}>
-                    <div style={{ display:'flex', gap:6 }}>
-                      <button onClick={() => onAnalyze(ticker)}
-                        style={{ background:C.green+'22', border:`1px solid ${C.green}44`,
-                          borderRadius:6, color:C.green, cursor:'pointer',
-                          padding:'4px 10px', fontSize:11, fontWeight:600 }}>
-                        Analizar
-                      </button>
-                      <button onClick={() => onRemove(ticker)}
-                        style={{ background:'none', border:`1px solid ${C.red}44`,
-                          borderRadius:6, color:C.red, cursor:'pointer',
-                          padding:'4px 8px', fontSize:11, opacity:0.7 }}>
-                        ×
-                      </button>
-                    </div>
+                  <td style={{ padding:'10px', fontFamily:'monospace',
+                    color: analyzed && d.rsi > 65 ? C.red : analyzed && d.rsi < 40 ? C.green : C.text }}>
+                    {analyzed ? d.rsi?.toFixed(0) : '—'}
+                  </td>
+                  <td style={{ padding:'10px', fontFamily:'monospace',
+                    color: analyzed && d.mansfield_rs > 0 ? C.green : analyzed && d.mansfield_rs < 0 ? C.red : C.muted }}>
+                    {analyzed ? d.mansfield_rs : '—'}
+                  </td>
+                  <td style={{ padding:'10px' }}>
+                    {analyzed ? (
+                      <span style={{ fontSize:10, fontWeight:600,
+                        color: d.macro_context?.spy_above_sma200 ? C.green : C.red }}>
+                        {d.macro_context?.spy_above_sma200 ? '▲' : '▼'} SPY
+                      </span>
+                    ) : '—'}
+                  </td>
+                  <td style={{ padding:'10px', fontFamily:'monospace', color:C.muted }}>
+                    {analyzed && d.hh_hl ? `${d.hh_hl.hh_count}/${d.hh_hl.hl_count}` : '—'}
+                  </td>
+                  <td style={{ padding:'10px 8px', whiteSpace:'nowrap' }} onClick={e => e.stopPropagation()}>
+                    <button onClick={() => onRefresh(ticker)} disabled={!!refreshingTickers?.[ticker]}
+                      title="Actualizar"
+                      style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:5,
+                        color: refreshingTickers?.[ticker] ? C.green : C.muted,
+                        cursor: refreshingTickers?.[ticker] ? 'not-allowed' : 'pointer',
+                        padding:'3px 7px', fontSize:11, marginRight:4,
+                        animation: refreshingTickers?.[ticker] ? 'spin 0.7s linear infinite' : 'none' }}>↻</button>
+                    <button onClick={() => onRemove(ticker)}
+                      style={{ background:'none', border:`1px solid ${C.red}44`, borderRadius:5,
+                        color:C.red, cursor:'pointer', padding:'3px 7px', fontSize:11, opacity:0.7 }}>×</button>
                   </td>
                 </tr>
               )
@@ -1228,73 +1431,128 @@ function PositionWatchlist({ session, watchlist, onRemove, onAnalyze }) {
           </tbody>
         </table>
       </div>
-
-      <div style={{ padding:'10px 14px', background:C.card, borderRadius:8,
-        border:`1px solid ${C.border}`, fontSize:11, color:C.muted }}>
-        <b style={{ color:C.amber }}>Tip:</b> Haz click en "Analizar" para abrir el análisis completo de position trading con scorecard y sizing.
-      </div>
     </div>
   )
 }
 
 // ── Position Module (contenedor principal) ──────────────────────────────────
 export default function PositionModule({ session, onBack }) {
-  const [tab,       setTab]       = useState('analisis')
-  const [watchlist, setWatchlist] = useState([])
-  const [wlLoaded,  setWlLoaded]  = useState(false)
-  const [analysisTicker, setAnalysisTicker] = useState('')
+  const [tab,        setTab]        = useState('watchlist')
+  const [viewMode,   setViewMode]   = useState('cards')   // 'cards' | 'table'
+  const [search,     setSearch]     = useState('')
+  const [tableModal, setTableModal] = useState(null)
+  const [refreshingTickers, setRefreshingTickers] = useState({})
+  const [refreshKey, setRefreshKey] = useState(0)
 
-  // Cargar/guardar watchlist de position desde Supabase (campo position_watchlist)
+  // Watchlist
+  const [watchlist,  setWatchlist]  = useState(null)   // null = no cargado aún
+  const watchlistRef = useRef([])
+
+  // Cache de análisis position
+  const [posCache,   setPosCache]   = useState({})
+  const posCacheRef  = useRef({})
+  const dbLoaded     = useRef(false)
+  const listsReady   = useRef(false)
+  const saveTimer    = useRef(null)
+
+  // ── Carga inicial desde Supabase ──────────────────────────────────────────
   useEffect(() => {
     if (!session) return
+    dbLoaded.current   = false
+    listsReady.current = false
     supabase.from('watchlist')
-      .select('position_watchlist')
+      .select('position_watchlist, position_cache')
       .eq('user_id', session.user.id)
       .single()
       .then(({ data }) => {
-        if (data?.position_watchlist) setWatchlist(data.position_watchlist)
-        setWlLoaded(true)
+        const wl    = data?.position_watchlist?.length ? data.position_watchlist : []
+        const cache = data?.position_cache || {}
+        setWatchlist(wl)
+        watchlistRef.current = wl
+        posCacheRef.current  = cache
+        if (Object.keys(cache).length > 0) setPosCache(cache)
+        dbLoaded.current = true
       })
   }, [session])
 
-  const saveWatchlist = async (list) => {
-    await supabase.from('watchlist').upsert({
-      user_id:             session.user.id,
-      position_watchlist:  list,
-      updated_at:          new Date().toISOString(),
+  // ── Guardar watchlist con debounce ────────────────────────────────────────
+  useEffect(() => {
+    if (watchlist === null) return
+    if (!dbLoaded.current) return
+    if (!listsReady.current) { listsReady.current = true; return }
+    watchlistRef.current = watchlist
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+    saveTimer.current = setTimeout(() => {
+      supabase.from('watchlist').upsert({
+        user_id:            session.user.id,
+        position_watchlist: watchlistRef.current,
+        position_cache:     posCacheRef.current,
+        updated_at:         new Date().toISOString(),
+      }, { onConflict:'user_id' })
+    }, 800)
+  }, [watchlist]) // eslint-disable-line
+
+  const upsertAll = (wl, cache) => {
+    supabase.from('watchlist').upsert({
+      user_id:            session.user.id,
+      position_watchlist: wl    ?? watchlistRef.current,
+      position_cache:     cache ?? posCacheRef.current,
+      updated_at:         new Date().toISOString(),
     }, { onConflict:'user_id' })
   }
 
+  const cacheAnalysis = (ticker, data) => {
+    const entry = { ...data, _savedAt: new Date().toISOString() }
+    const next  = { ...posCacheRef.current, [ticker]: entry }
+    posCacheRef.current = next
+    setPosCache(next)
+    if (dbLoaded.current) upsertAll(null, next)
+  }
+
+  const add = () => {
+    const t = search.trim().toUpperCase().replace(/[^A-Z.]/g,'')
+    if (t && !(watchlist||[]).includes(t)) {
+      const next = [t, ...(watchlist||[])]
+      setWatchlist(next)
+      setSearch('')
+    }
+  }
+
+  const remove = (ticker) => {
+    const next = (watchlist||[]).filter(t => t !== ticker)
+    setWatchlist(next)
+    const nextCache = { ...posCacheRef.current }
+    delete nextCache[ticker]
+    posCacheRef.current = nextCache
+    setPosCache(nextCache)
+    upsertAll(next, nextCache)
+  }
+
   const addToWatchlist = (ticker) => {
-    if (watchlist.includes(ticker)) return
-    const next = [ticker, ...watchlist]
+    if ((watchlist||[]).includes(ticker)) return
+    const next = [ticker, ...(watchlist||[])]
     setWatchlist(next)
-    saveWatchlist(next)
   }
-
   const addAllToWatchlist = (tickers) => {
-    const toAdd = tickers.filter(t => !watchlist.includes(t))
+    const toAdd = tickers.filter(t => !(watchlist||[]).includes(t))
     if (!toAdd.length) return
-    const next = [...toAdd, ...watchlist]
-    setWatchlist(next)
-    saveWatchlist(next)
+    setWatchlist(prev => [...toAdd, ...(prev||[])])
   }
 
-  const removeFromWatchlist = (ticker) => {
-    const next = watchlist.filter(t => t !== ticker)
-    setWatchlist(next)
-    saveWatchlist(next)
+  const refreshFromTable = async (ticker) => {
+    setRefreshingTickers(prev => ({ ...prev, [ticker]:true }))
+    try {
+      const res = await fetch(`/api/analyze-position/${ticker}`)
+      if (res.ok) cacheAnalysis(ticker, await res.json())
+    } catch {}
+    setRefreshingTickers(prev => { const n={...prev}; delete n[ticker]; return n })
   }
 
-  // Navegar al análisis con un ticker pre-cargado
-  const goToAnalysis = (ticker) => {
-    setAnalysisTicker(ticker)
-    setTab('analisis')
-  }
+  const wl = watchlist || []
+  const isLoaded = watchlist !== null
 
   const tabs = [
-    ['analisis',  'Análisis'],
-    ['watchlist', `Watchlist · ${watchlist.length}`],
+    ['watchlist', `Watchlist · ${wl.length}`],
     ['screener',  'Screener'],
     ['journal',   'Journal'],
     ['dashboard', 'Dashboard'],
@@ -1311,11 +1569,9 @@ export default function PositionModule({ session, onBack }) {
               <div style={{ width:7, height:7, borderRadius:'50%', background:C.green }}/>
               <span style={{ fontSize:10, color:C.green, letterSpacing:'0.12em' }}>LIVE · DATOS REALES DE MERCADO</span>
             </div>
-            <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-              <span style={{ fontSize:11, color:C.muted }}>{session.user.email}</span>
-            </div>
+            <span style={{ fontSize:11, color:C.muted }}>{session.user.email}</span>
           </div>
-          <div style={{ display:'flex', alignItems:'baseline', gap:10, marginBottom:10 }}>
+          <div style={{ display:'flex', alignItems:'baseline', gap:10, marginBottom: tab==='watchlist' ? 14 : 10 }}>
             <button onClick={onBack}
               style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:6, color:C.muted,
                 padding:'3px 9px', cursor:'pointer', fontSize:10, marginRight:4 }}>
@@ -1324,6 +1580,38 @@ export default function PositionModule({ session, onBack }) {
             <h1 style={{ fontSize:22, fontWeight:700, letterSpacing:'-0.02em' }}>KNNS TradeAgent</h1>
             <span style={{ fontSize:11, color:C.muted }}>Position Trading · Mediano plazo</span>
           </div>
+
+          {/* Barra de búsqueda — solo en watchlist */}
+          {tab === 'watchlist' && (
+            <div style={{ display:'flex', gap:7, marginBottom:14 }}>
+              <input value={search} onChange={e => setSearch(e.target.value.toUpperCase())}
+                onKeyDown={e => e.key==='Enter' && add()}
+                placeholder="Agregar ticker… ej: NVDA, MSFT, AAPL"
+                style={{ flex:1, background:'#0f1929', border:`1px solid ${C.border}`, borderRadius:9,
+                  padding:'10px 14px', color:C.text, fontSize:13, outline:'none' }}
+                onFocus={e => e.target.style.borderColor=C.green}
+                onBlur={e  => e.target.style.borderColor=C.border}
+              />
+              <button onClick={add}
+                style={{ background:C.green, border:'none', borderRadius:9, color:'#000',
+                  fontWeight:700, padding:'10px 16px', cursor:'pointer', fontSize:13 }}>
+                + Agregar
+              </button>
+              <button onClick={() => { setPosCache({}); posCacheRef.current={}; setRefreshKey(k=>k+1) }}
+                style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:9,
+                  color:C.muted, padding:'10px 13px', cursor:'pointer', fontSize:13 }}
+                title="Reanalizar todo">↻</button>
+              <button onClick={() => setViewMode(v => v==='cards'?'table':'cards')}
+                title={viewMode==='cards'?'Ver tabla':'Ver tarjetas'}
+                style={{ background: viewMode==='table' ? C.green+'22' : 'none',
+                  border:`1px solid ${viewMode==='table' ? C.green : C.border}`,
+                  borderRadius:9, color: viewMode==='table' ? C.green : C.muted,
+                  padding:'10px 13px', cursor:'pointer', fontSize:13 }}>
+                {viewMode==='cards' ? '☰' : '⊞'}
+              </button>
+            </div>
+          )}
+
           {/* Tabs */}
           <div style={{ display:'flex', borderTop:`1px solid ${C.border}` }}>
             {tabs.map(([key, label]) => (
@@ -1342,14 +1630,80 @@ export default function PositionModule({ session, onBack }) {
 
       {/* Content */}
       <div style={{ marginTop:20 }}>
-        {tab === 'analisis'  && <PositionAnalysis  session={session} initialTicker={analysisTicker} />}
-        {tab === 'watchlist' && <PositionWatchlist session={session} watchlist={watchlist}
-            onRemove={removeFromWatchlist} onAnalyze={goToAnalysis} />}
-        {tab === 'screener'  && <PositionScreener  watchlist={watchlist}
-            onAdd={addToWatchlist} onRemove={removeFromWatchlist} onAddAll={addAllToWatchlist} />}
+
+        {/* Watchlist */}
+        <div style={{ display: tab==='watchlist' ? 'block' : 'none' }}>
+          <div style={{ maxWidth:960, margin:'0 auto', padding:'0 20px' }}>
+            {!isLoaded ? (
+              <div style={{ textAlign:'center', padding:'60px', color:C.muted, fontSize:13 }}>Cargando watchlist...</div>
+            ) : wl.length === 0 ? (
+              <div style={{ textAlign:'center', padding:'60px', color:C.muted }}>
+                <div style={{ fontSize:28, marginBottom:12 }}>📋</div>
+                <div style={{ fontSize:14, marginBottom:6 }}>Tu watchlist de position trading está vacía</div>
+                <div style={{ fontSize:11 }}>Agrega tickers con el buscador o desde el Screener.</div>
+              </div>
+            ) : viewMode === 'table' ? (
+              <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:12 }}>
+                <PositionWatchlistTable
+                  tickers={wl} cache={posCache}
+                  onRemove={remove} onRefresh={refreshFromTable}
+                  refreshingTickers={refreshingTickers}
+                  onRowClick={setTableModal}
+                />
+              </div>
+            ) : (
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(268px, 1fr))', gap:11 }}>
+                {wl.map(t => (
+                  <PositionCard key={`${t}-${refreshKey}`} ticker={t}
+                    cachedData={posCache[t] || null}
+                    onAnalysed={cacheAnalysis}
+                    onRemove={remove}
+                    refreshKey={refreshKey}
+                  />
+                ))}
+              </div>
+            )}
+            {isLoaded && wl.length > 0 && (
+              <div style={{ marginTop:18, padding:'12px 14px', background:C.card, borderRadius:9,
+                border:`1px solid ${C.border}`, fontSize:11, color:C.muted }}>
+                <b style={{ color:C.amber }}>Aviso:</b> Análisis orientativo. No constituye asesoría financiera.
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Screener */}
+        <div style={{ display: tab==='screener' ? 'block' : 'none' }}>
+          <PositionScreener watchlist={wl}
+            onAdd={addToWatchlist} onRemove={remove} onAddAll={addAllToWatchlist} />
+        </div>
+
+        {/* Journal */}
         {tab === 'journal'   && <PositionJournal   session={session} />}
         {tab === 'dashboard' && <PositionDashboard session={session} />}
       </div>
+
+      {/* Modal tarjeta desde tabla */}
+      {tableModal && (
+        <div onClick={() => setTableModal(null)}
+          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.75)', zIndex:2000,
+            display:'flex', alignItems:'flex-start', justifyContent:'center',
+            padding:'40px 16px', overflowY:'auto' }}>
+          <div onClick={e => e.stopPropagation()} style={{ width:'100%', maxWidth:380 }}>
+            <PositionCard ticker={tableModal}
+              cachedData={posCache[tableModal] || null}
+              onAnalysed={cacheAnalysis}
+              onRemove={t => { remove(t); setTableModal(null) }}
+              refreshKey={refreshKey}
+            />
+            <button onClick={() => setTableModal(null)}
+              style={{ marginTop:10, width:'100%', background:'none', border:`1px solid ${C.border}`,
+                borderRadius:8, color:C.muted, padding:'8px', cursor:'pointer', fontSize:12 }}>
+              Cerrar
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
