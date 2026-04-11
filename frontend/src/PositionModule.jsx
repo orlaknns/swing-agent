@@ -102,8 +102,8 @@ function CriterioSlider({ id, value, onChange, justificacion, esAutomatico, esVe
 }
 
 // ── Position Analysis ────────────────────────────────────────────────────────
-function PositionAnalysis({ session }) {
-  const [ticker,      setTicker]      = useState('')
+function PositionAnalysis({ session, initialTicker = '' }) {
+  const [ticker,      setTicker]      = useState(initialTicker)
   const [loading,     setLoading]     = useState(false)
   const [error,       setError]       = useState(null)
   const [analysis,    setAnalysis]    = useState(null)
@@ -856,12 +856,446 @@ function PositionDashboard({ session }) {
   )
 }
 
+const SECTOR_COLORS = {
+  'Technology':         '#00d4ff',
+  'Financial':          '#00e096',
+  'Financial Services': '#00e096',
+  'Healthcare':         '#a78bfa',
+  'Consumer Cyclical':  '#ffb800',
+  'Consumer Defensive': '#34d399',
+  'Communication':      '#fb923c',
+  'Communication Services': '#fb923c',
+  'Energy':             '#f59e0b',
+  'Industrials':        '#94a3b8',
+  'Basic Materials':    '#84cc16',
+  'Real Estate':        '#e879f9',
+  'Utilities':          '#38bdf8',
+}
+
+// ── Position Screener ────────────────────────────────────────────────────────
+function PositionScreener({ watchlist, onAdd, onRemove, onAddAll }) {
+  const [candidates,   setCandidates]   = useState([])
+  const [loading,      setLoading]      = useState(false)
+  const [error,        setError]        = useState(null)
+  const [filter,       setFilter]       = useState('all')
+  const [screenerDate, setScreenerDate] = useState(null)
+  const [source,       setSource]       = useState(null)
+  const [updatedAt,    setUpdatedAt]    = useState(null)
+  const [refreshing,   setRefreshing]   = useState(false)
+  const [refreshMsg,   setRefreshMsg]   = useState(null)
+
+  const load = async () => {
+    setLoading(true); setError(null)
+    try {
+      const res = await fetch('/api/screener-position')
+      if (!res.ok) throw new Error(`Error ${res.status}`)
+      const data = await res.json()
+      setCandidates(data.candidates || [])
+      setScreenerDate(data.date || null)
+      setSource(data.source || null)
+      setUpdatedAt(data.updatedAt || null)
+    } catch {
+      setError('No se pudo conectar con el screener.')
+    }
+    setLoading(false)
+  }
+
+  useEffect(() => { load() }, [])
+
+  const triggerRefresh = async () => {
+    setRefreshing(true); setRefreshMsg(null)
+    try {
+      const res = await fetch('/api/screener-position/refresh', { method:'POST' })
+      const data = await res.json()
+      if (res.ok) {
+        setRefreshMsg({ ok:true, text:'Actualizando... listo en ~90 segundos' })
+        setTimeout(() => { load(); setRefreshMsg(null) }, 90000)
+      } else {
+        setRefreshMsg({ ok:false, text: data.error || 'Error al actualizar' })
+      }
+    } catch {
+      setRefreshMsg({ ok:false, text:'No se pudo conectar con el servidor' })
+    }
+    setRefreshing(false)
+  }
+
+  const sectors = ['all', ...new Set(candidates.map(c => c.sector).filter(Boolean))]
+  const filtered = filter === 'all' ? candidates : candidates.filter(c => c.sector === filter)
+  const inWatchlist = t => watchlist.includes(t)
+
+  return (
+    <div style={{ maxWidth:960, margin:'0 auto', padding:'0 20px 48px' }}>
+
+      {/* Header */}
+      <div style={{ marginBottom:16 }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <h2 style={{ fontSize:18, fontWeight:700, color:C.text, margin:0 }}>Screener Position Trading</h2>
+          <button onClick={triggerRefresh} disabled={refreshing}
+            style={{ background: refreshing ? C.border : C.green+'22',
+              border:`1px solid ${refreshing ? C.border : C.green}`,
+              borderRadius:7, color: refreshing ? C.muted : C.green,
+              fontWeight:700, padding:'6px 14px', cursor: refreshing ? 'default' : 'pointer', fontSize:11 }}>
+            {refreshing ? 'Actualizando...' : '↻ Actualizar screener'}
+          </button>
+        </div>
+        <p style={{ fontSize:11, color:C.muted, margin:'4px 0 0' }}>
+          Candidatas para position trading · Precio &gt; SMA200 · SMA50 &gt; SMA200 · RSI 40–65 · Cap &gt; $300M
+        </p>
+        <div style={{ marginTop:4, fontSize:11, display:'flex', alignItems:'center', gap:8 }}>
+          {source === 'curated' ? (
+            <span style={{ background:'#ffb80022', color:C.amber, padding:'2px 8px', borderRadius:99, fontSize:10, fontWeight:700 }}>
+              LISTA CURADA
+            </span>
+          ) : source === 'finviz' ? (
+            <>
+              <span style={{ background:'#00e09622', color:C.green, padding:'2px 8px', borderRadius:99, fontSize:10, fontWeight:700 }}>
+                FINVIZ LIVE
+              </span>
+              <span style={{ color:C.muted }}>Actualizado: {updatedAt || screenerDate}</span>
+            </>
+          ) : source === 'cached' ? (
+            <span style={{ background:'#00aaff22', color:C.accent, padding:'2px 8px', borderRadius:99, fontSize:10, fontWeight:700 }}>
+              CACHÉ
+            </span>
+          ) : (
+            <span style={{ color:C.muted }}>Cargando...</span>
+          )}
+          <span style={{ color:C.muted, fontSize:10 }}>· Actualización semanal (lunes)</span>
+        </div>
+      </div>
+
+      {refreshMsg && (
+        <div style={{ background: refreshMsg.ok ? C.green+'11' : C.red+'11',
+          border:`1px solid ${refreshMsg.ok ? C.green : C.red}44`,
+          borderRadius:8, padding:'8px 14px', marginBottom:12, fontSize:12,
+          color: refreshMsg.ok ? C.green : C.red }}>
+          {refreshMsg.text}
+        </div>
+      )}
+
+      {/* Criterios */}
+      <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:8,
+        padding:'10px 14px', marginBottom:16, fontSize:11, color:C.muted }}>
+        <span style={{ color:C.green, fontWeight:700 }}>Criterios de filtrado: </span>
+        Precio sobre SMA200 (tendencia alcista estructural) · SMA50 &gt; SMA200 (golden cross) · RSI 40–65 (momentum sin sobrecompra) · Volumen &gt; 500k · Market cap &gt; $300M · NYSE y NASDAQ
+      </div>
+
+      {error && (
+        <div style={{ background:'#ff406011', border:`1px solid ${C.red}44`, borderRadius:8,
+          padding:'12px 14px', marginBottom:16, fontSize:12, color:C.red }}>
+          {error}
+        </div>
+      )}
+
+      {loading && (
+        <div style={{ textAlign:'center', padding:'60px 20px', color:C.muted }}>
+          <div style={{ fontSize:13 }}>Consultando screener de position trading...</div>
+        </div>
+      )}
+
+      {!loading && candidates.length > 0 && (
+        <>
+          {/* Filtros por sector */}
+          <div style={{ display:'flex', gap:6, marginBottom:8, flexWrap:'wrap' }}>
+            {sectors.map(s => (
+              <button key={s} onClick={() => setFilter(s)}
+                style={{ background: filter===s ? (s==='all' ? C.green : SECTOR_COLORS[s]||C.green)+'dd' : 'none',
+                  border:`1px solid ${filter===s ? (SECTOR_COLORS[s]||C.green) : C.border}`,
+                  borderRadius:6, color: filter===s ? '#000' : C.muted,
+                  padding:'4px 12px', cursor:'pointer', fontSize:11, fontWeight: filter===s ? 700 : 400 }}>
+                {s === 'all' ? `Todos (${candidates.length})` : s}
+              </button>
+            ))}
+          </div>
+
+          {/* Bulk actions */}
+          <div style={{ display:'flex', gap:8, marginBottom:14, alignItems:'center' }}>
+            {(() => {
+              const notAdded = filtered.filter(c => !watchlist.includes(c.ticker))
+              return notAdded.length > 0 ? (
+                <button onClick={() => onAddAll(notAdded.map(c => c.ticker))}
+                  style={{ background:C.green, border:'none', borderRadius:7, color:'#000',
+                    fontWeight:700, padding:'6px 14px', cursor:'pointer', fontSize:11 }}>
+                  + Agregar {notAdded.length === filtered.length ? 'todos' : `${notAdded.length} restantes`} a watchlist
+                </button>
+              ) : null
+            })()}
+            {(() => {
+              const added = filtered.filter(c => watchlist.includes(c.ticker))
+              return added.length > 0 ? (
+                <button onClick={() => added.forEach(c => onRemove(c.ticker))}
+                  style={{ background:'none', border:`1px solid ${C.red}66`, borderRadius:7, color:C.red,
+                    fontWeight:700, padding:'6px 14px', cursor:'pointer', fontSize:11 }}>
+                  − Quitar {added.length === filtered.length ? 'todos' : added.length} de watchlist
+                </button>
+              ) : null
+            })()}
+          </div>
+        </>
+      )}
+
+      {/* Grid de candidatas */}
+      {!loading && (
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))', gap:8 }}>
+          {filtered.map(c => {
+            const added = inWatchlist(c.ticker)
+            const sectorColor = SECTOR_COLORS[c.sector] || C.muted
+            return (
+              <div key={c.ticker} style={{
+                background:C.card,
+                border:`1px solid ${added ? C.green+'55' : C.border}`,
+                borderRadius:10, padding:'12px 14px',
+                borderLeft:`3px solid ${added ? C.green : sectorColor}`,
+              }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:8 }}>
+                  <div>
+                    <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+                      <span style={{ fontSize:16, fontWeight:700, color:C.text, fontFamily:'monospace' }}>{c.ticker}</span>
+                      {added && (
+                        <span style={{ fontSize:9, background:C.green+'22', color:C.green,
+                          padding:'2px 7px', borderRadius:99, fontWeight:700 }}>
+                          ✓ En watchlist
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize:11, color:C.muted, marginTop:2,
+                      maxWidth:160, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                      {c.company}
+                    </div>
+                  </div>
+                  <button onClick={() => added ? onRemove(c.ticker) : onAdd(c.ticker)}
+                    style={{ background: added ? C.red+'22' : C.green,
+                      border: added ? `1px solid ${C.red}66` : 'none',
+                      borderRadius:7, color: added ? C.red : '#000',
+                      fontWeight:700, padding:'5px 12px', cursor:'pointer',
+                      fontSize:11, whiteSpace:'nowrap', flexShrink:0 }}>
+                    {added ? '− Quitar' : '+ Agregar'}
+                  </button>
+                </div>
+
+                <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+                  {c.sector && (
+                    <span style={{ fontSize:9, background:sectorColor+'22', color:sectorColor,
+                      padding:'2px 7px', borderRadius:99, fontWeight:600 }}>
+                      {c.sector}
+                    </span>
+                  )}
+                  {c.mktCap && (
+                    <span style={{ fontSize:9, background:C.border, color:C.muted,
+                      padding:'2px 7px', borderRadius:99 }}>
+                      {c.mktCap}
+                    </span>
+                  )}
+                  {c.revGrowth != null && (
+                    <span style={{ fontSize:9, padding:'2px 7px', borderRadius:99,
+                      background: c.revGrowth > 10 ? C.green+'22' : C.border,
+                      color: c.revGrowth > 10 ? C.green : C.muted }}>
+                      Rev {c.revGrowth > 0 ? '+' : ''}{c.revGrowth}%
+                    </span>
+                  )}
+                  {c.epsGrowth != null && (
+                    <span style={{ fontSize:9, padding:'2px 7px', borderRadius:99,
+                      background: c.epsGrowth > 0 ? C.accent+'22' : C.border,
+                      color: c.epsGrowth > 0 ? C.accent : C.muted }}>
+                      EPS {c.epsGrowth > 0 ? '+' : ''}{c.epsGrowth}%
+                    </span>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {!loading && !error && candidates.length === 0 && (
+        <div style={{ textAlign:'center', padding:'60px 20px', color:C.muted }}>
+          <div style={{ fontSize:32, marginBottom:12 }}>🔍</div>
+          <div style={{ fontSize:14 }}>No se encontraron candidatos con los criterios actuales</div>
+          <div style={{ fontSize:11, marginTop:6 }}>Intenta actualizar el screener</div>
+        </div>
+      )}
+
+      {!loading && candidates.length > 0 && (
+        <div style={{ marginTop:16, padding:'10px 14px', background:C.card, borderRadius:8,
+          border:`1px solid ${C.border}`, fontSize:11, color:C.muted }}>
+          <b style={{ color:C.amber }}>Aviso:</b> Estas acciones cumplen criterios técnicos de position trading.
+          Analiza cada una con el tab Análisis antes de operar — el screener es un punto de partida.
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Position Watchlist ───────────────────────────────────────────────────────
+function PositionWatchlist({ session, watchlist, onRemove, onAnalyze }) {
+  const [positionTrades, setPositionTrades] = useState({}) // { AAPL: { id, entry_price, status } }
+
+  useEffect(() => {
+    if (!session) return
+    supabase.from('position_trades')
+      .select('ticker, entry_price, status, score_total, decision')
+      .eq('user_id', session.user.id)
+      .in('status', ['planning', 'open'])
+      .then(({ data }) => {
+        const map = {}
+        ;(data || []).forEach(t => { if (!map[t.ticker]) map[t.ticker] = t })
+        setPositionTrades(map)
+      })
+  }, [session])
+
+  if (watchlist.length === 0) {
+    return (
+      <div style={{ maxWidth:960, margin:'0 auto', padding:'0 20px' }}>
+        <div style={{ textAlign:'center', padding:'60px', color:C.muted }}>
+          <div style={{ fontSize:28, marginBottom:12 }}>📋</div>
+          <div style={{ fontSize:14, marginBottom:6 }}>Tu watchlist de position trading está vacía</div>
+          <div style={{ fontSize:11 }}>Agrega tickers desde el Screener o ingrésalos manualmente en el tab Análisis.</div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ maxWidth:960, margin:'0 auto', padding:'0 20px' }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
+        <div style={{ fontSize:13, color:C.muted }}>{watchlist.length} acciones en seguimiento</div>
+      </div>
+
+      <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:12, overflow:'hidden', marginBottom:16 }}>
+        <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+          <thead>
+            <tr style={{ borderBottom:`1px solid ${C.border}` }}>
+              {['Ticker','Estado position','Score','Decisión','Acciones'].map(h => (
+                <th key={h} style={{ padding:'9px 12px', textAlign:'left', fontSize:10,
+                  color:C.muted, letterSpacing:'0.07em', textTransform:'uppercase', fontWeight:600 }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {watchlist.map(ticker => {
+              const trade = positionTrades[ticker]
+              return (
+                <tr key={ticker}
+                  style={{ borderBottom:`1px solid ${C.border}` }}
+                  onMouseEnter={e => e.currentTarget.style.background='#1a2d4533'}
+                  onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                  <td style={{ padding:'12px', fontWeight:700, color:C.text, fontFamily:'monospace' }}>
+                    {ticker}
+                  </td>
+                  <td style={{ padding:'12px' }}>
+                    {trade ? (
+                      <span style={{ fontSize:10, fontWeight:700,
+                        color: STATUS_COLORS[trade.status],
+                        background: STATUS_COLORS[trade.status]+'18',
+                        padding:'2px 8px', borderRadius:99 }}>
+                        {STATUS_LABELS[trade.status]}
+                      </span>
+                    ) : (
+                      <span style={{ fontSize:10, color:C.muted }}>Sin análisis</span>
+                    )}
+                  </td>
+                  <td style={{ padding:'12px', fontFamily:'monospace',
+                    color: trade ? (trade.score_total >= 38 ? C.green : trade.score_total >= 28 ? C.amber : C.red) : C.muted }}>
+                    {trade ? `${trade.score_total}/${MAX_SCORE}` : '—'}
+                  </td>
+                  <td style={{ padding:'12px' }}>
+                    {trade?.decision ? (
+                      <span style={{ fontSize:10, fontWeight:700, color: DECISION_COLOR[trade.decision] }}>
+                        {trade.decision === 'OPERAR_CONVICCION' ? 'CONVICCIÓN' :
+                         trade.decision === 'OPERAR_CAUTELA'    ? 'CAUTELA'    : 'NO OPERAR'}
+                      </span>
+                    ) : <span style={{ color:C.muted }}>—</span>}
+                  </td>
+                  <td style={{ padding:'12px' }}>
+                    <div style={{ display:'flex', gap:6 }}>
+                      <button onClick={() => onAnalyze(ticker)}
+                        style={{ background:C.green+'22', border:`1px solid ${C.green}44`,
+                          borderRadius:6, color:C.green, cursor:'pointer',
+                          padding:'4px 10px', fontSize:11, fontWeight:600 }}>
+                        Analizar
+                      </button>
+                      <button onClick={() => onRemove(ticker)}
+                        style={{ background:'none', border:`1px solid ${C.red}44`,
+                          borderRadius:6, color:C.red, cursor:'pointer',
+                          padding:'4px 8px', fontSize:11, opacity:0.7 }}>
+                        ×
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <div style={{ padding:'10px 14px', background:C.card, borderRadius:8,
+        border:`1px solid ${C.border}`, fontSize:11, color:C.muted }}>
+        <b style={{ color:C.amber }}>Tip:</b> Haz click en "Analizar" para abrir el análisis completo de position trading con scorecard y sizing.
+      </div>
+    </div>
+  )
+}
+
 // ── Position Module (contenedor principal) ──────────────────────────────────
 export default function PositionModule({ session, onBack }) {
-  const [tab, setTab] = useState('analisis')
+  const [tab,       setTab]       = useState('analisis')
+  const [watchlist, setWatchlist] = useState([])
+  const [wlLoaded,  setWlLoaded]  = useState(false)
+  const [analysisTicker, setAnalysisTicker] = useState('')
+
+  // Cargar/guardar watchlist de position desde Supabase (campo position_watchlist)
+  useEffect(() => {
+    if (!session) return
+    supabase.from('watchlist')
+      .select('position_watchlist')
+      .eq('user_id', session.user.id)
+      .single()
+      .then(({ data }) => {
+        if (data?.position_watchlist) setWatchlist(data.position_watchlist)
+        setWlLoaded(true)
+      })
+  }, [session])
+
+  const saveWatchlist = async (list) => {
+    await supabase.from('watchlist').upsert({
+      user_id:             session.user.id,
+      position_watchlist:  list,
+      updated_at:          new Date().toISOString(),
+    }, { onConflict:'user_id' })
+  }
+
+  const addToWatchlist = (ticker) => {
+    if (watchlist.includes(ticker)) return
+    const next = [ticker, ...watchlist]
+    setWatchlist(next)
+    saveWatchlist(next)
+  }
+
+  const addAllToWatchlist = (tickers) => {
+    const toAdd = tickers.filter(t => !watchlist.includes(t))
+    if (!toAdd.length) return
+    const next = [...toAdd, ...watchlist]
+    setWatchlist(next)
+    saveWatchlist(next)
+  }
+
+  const removeFromWatchlist = (ticker) => {
+    const next = watchlist.filter(t => t !== ticker)
+    setWatchlist(next)
+    saveWatchlist(next)
+  }
+
+  // Navegar al análisis con un ticker pre-cargado
+  const goToAnalysis = (ticker) => {
+    setAnalysisTicker(ticker)
+    setTab('analisis')
+  }
 
   const tabs = [
     ['analisis',  'Análisis'],
+    ['watchlist', `Watchlist · ${watchlist.length}`],
+    ['screener',  'Screener'],
     ['journal',   'Journal'],
     ['dashboard', 'Dashboard'],
   ]
@@ -908,8 +1342,12 @@ export default function PositionModule({ session, onBack }) {
 
       {/* Content */}
       <div style={{ marginTop:20 }}>
-        {tab === 'analisis'  && <PositionAnalysis session={session} />}
-        {tab === 'journal'   && <PositionJournal  session={session} />}
+        {tab === 'analisis'  && <PositionAnalysis  session={session} initialTicker={analysisTicker} />}
+        {tab === 'watchlist' && <PositionWatchlist session={session} watchlist={watchlist}
+            onRemove={removeFromWatchlist} onAnalyze={goToAnalysis} />}
+        {tab === 'screener'  && <PositionScreener  watchlist={watchlist}
+            onAdd={addToWatchlist} onRemove={removeFromWatchlist} onAddAll={addAllToWatchlist} />}
+        {tab === 'journal'   && <PositionJournal   session={session} />}
         {tab === 'dashboard' && <PositionDashboard session={session} />}
       </div>
     </div>

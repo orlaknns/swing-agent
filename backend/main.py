@@ -1424,7 +1424,6 @@ async def screener_refresh():
 async def screener():
     """Devuelve candidatas desde GitHub (generado por GitHub Actions diariamente)."""
     data = await _load_screener_json()
-    # Soporta formato nuevo (candidates) y legacy (tickers)
     if "candidates" in data:
         candidates = data["candidates"]
     else:
@@ -1440,3 +1439,96 @@ async def screener():
         },
         media_type="application/json; charset=utf-8"
     )
+
+
+# ── Position Screener ────────────────────────────────────────────────────────
+
+_POSITION_SCREENER_CACHE: dict = {}
+_POSITION_SCREENER_TS: float = 0
+_POSITION_SCREENER_TTL = 3600  # 1 hora — se actualiza semanalmente
+
+_GITHUB_RAW_POSITION = "https://raw.githubusercontent.com/orlaknns/swing-agent/main/data/screener_position.json"
+
+_POSITION_CURATED_FALLBACK = {
+    "candidates": [
+        {"ticker":"AAPL",  "company":"Apple Inc",          "sector":"Technology"},
+        {"ticker":"MSFT",  "company":"Microsoft Corp",      "sector":"Technology"},
+        {"ticker":"NVDA",  "company":"NVIDIA Corp",         "sector":"Technology"},
+        {"ticker":"GOOGL", "company":"Alphabet Inc",        "sector":"Technology"},
+        {"ticker":"META",  "company":"Meta Platforms",      "sector":"Communication"},
+        {"ticker":"AMZN",  "company":"Amazon.com",          "sector":"Consumer Cyclical"},
+        {"ticker":"JPM",   "company":"JPMorgan Chase",      "sector":"Financial"},
+        {"ticker":"V",     "company":"Visa Inc",            "sector":"Financial"},
+        {"ticker":"UNH",   "company":"UnitedHealth Group",  "sector":"Healthcare"},
+        {"ticker":"LLY",   "company":"Eli Lilly",           "sector":"Healthcare"},
+        {"ticker":"AVGO",  "company":"Broadcom Inc",        "sector":"Technology"},
+        {"ticker":"COST",  "company":"Costco Wholesale",    "sector":"Consumer Defensive"},
+        {"ticker":"NOW",   "company":"ServiceNow",          "sector":"Technology"},
+        {"ticker":"ISRG",  "company":"Intuitive Surgical",  "sector":"Healthcare"},
+        {"ticker":"GE",    "company":"GE Aerospace",        "sector":"Industrials"},
+    ],
+    "count": 15, "date": "", "updatedAt": "", "source": "curated",
+}
+
+
+async def _load_position_screener_json() -> dict:
+    """Lee screener_position.json desde GitHub raw con caché de 1 hora."""
+    global _POSITION_SCREENER_CACHE, _POSITION_SCREENER_TS
+    now = _time.time()
+    if _POSITION_SCREENER_CACHE and (now - _POSITION_SCREENER_TS) < _POSITION_SCREENER_TTL:
+        return _POSITION_SCREENER_CACHE
+    try:
+        async with httpx.AsyncClient(timeout=10) as c:
+            bust_url = f"{_GITHUB_RAW_POSITION}?t={int(now)}"
+            r = await c.get(bust_url, headers={"Cache-Control": "no-cache", "Pragma": "no-cache"})
+            if r.status_code == 200:
+                data = r.json()
+                _POSITION_SCREENER_CACHE = data
+                _POSITION_SCREENER_TS = now
+                print(f"Position screener loaded: {data.get('count', 0)} tickers | source={data.get('source')} | date={data.get('date')}")
+                return data
+    except Exception as e:
+        print(f"Error loading position screener: {e}")
+    return _POSITION_SCREENER_CACHE or _POSITION_CURATED_FALLBACK
+
+
+@app.get("/screener-position")
+async def screener_position():
+    """Devuelve candidatas de position trading desde GitHub (actualizado semanalmente)."""
+    data = await _load_position_screener_json()
+    candidates = data.get("candidates", [])
+    return JSONResponse(
+        content={
+            "candidates": candidates,
+            "count": len(candidates),
+            "date": data.get("date", ""),
+            "updatedAt": data.get("updatedAt", ""),
+            "source": data.get("source", "curated"),
+            "criteria": data.get("criteria", {}),
+        },
+        media_type="application/json; charset=utf-8"
+    )
+
+
+@app.post("/screener-position/refresh")
+async def screener_position_refresh():
+    """Dispara el workflow de GitHub Actions para actualizar el screener de position."""
+    global _POSITION_SCREENER_TS
+    token = os.environ.get("GITHUB_TOKEN_WORKFLOW", "")
+    if not token:
+        return JSONResponse(status_code=503, content={"error": "Token no configurado"})
+    url = f"https://api.github.com/repos/{_GH_OWNER}/{_GH_REPO}/actions/workflows/screener-position.yml/dispatches"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=10) as c:
+            r = await c.post(url, headers=headers, json={"ref": "main"})
+            if r.status_code == 204:
+                _POSITION_SCREENER_TS = 0
+                return JSONResponse(content={"ok": True, "message": "Screener en ejecución — listo en ~90 segundos"})
+            return JSONResponse(status_code=r.status_code, content={"error": f"GitHub respondió {r.status_code}", "detail": r.text})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
