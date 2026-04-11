@@ -1149,35 +1149,47 @@ def analyze_base(weekly_candles: list) -> dict:
 
 
 def detect_hh_hl(weekly_candles: list) -> dict:
-    """Detecta Higher Highs / Higher Lows en cierres semanales (últimas 16 semanas)."""
-    closes = [c["close"] for c in weekly_candles[-16:]] if len(weekly_candles) >= 16 else [c["close"] for c in weekly_candles]
-    if len(closes) < 5:
+    """
+    Detecta Higher Highs / Higher Lows usando highs y lows de velas semanales.
+    Usa las últimas 26 semanas (~6 meses) para capturar la estructura de tendencia.
+    Los pivots se detectan con los extremos reales de cada vela, no los cierres.
+    """
+    candles = weekly_candles[-26:] if len(weekly_candles) >= 26 else weekly_candles
+    if len(candles) < 5:
         return {"score": 0, "hh_count": 0, "hl_count": 0, "description": "Datos semanales insuficientes"}
 
+    wk_highs = [c["high"]  for c in candles]
+    wk_lows  = [c["low"]   for c in candles]
+
+    # Pivot highs: vela cuyo high supera al anterior y al siguiente
+    # Pivot lows:  vela cuyo low está por debajo del anterior y el siguiente
     highs_pivot, lows_pivot = [], []
-    for i in range(1, len(closes) - 1):
-        if closes[i] > closes[i - 1] and closes[i] > closes[i + 1]:
-            highs_pivot.append(closes[i])
-        if closes[i] < closes[i - 1] and closes[i] < closes[i + 1]:
-            lows_pivot.append(closes[i])
+    for i in range(1, len(candles) - 1):
+        if wk_highs[i] > wk_highs[i-1] and wk_highs[i] > wk_highs[i+1]:
+            highs_pivot.append(wk_highs[i])
+        if wk_lows[i] < wk_lows[i-1] and wk_lows[i] < wk_lows[i+1]:
+            lows_pivot.append(wk_lows[i])
 
-    hh_count = sum(1 for i in range(1, len(highs_pivot)) if highs_pivot[i] > highs_pivot[i - 1])
-    hl_count = sum(1 for i in range(1, len(lows_pivot)) if lows_pivot[i] > lows_pivot[i - 1])
+    # Contar cuántos pivots consecutivos son crecientes
+    hh_count = sum(1 for i in range(1, len(highs_pivot)) if highs_pivot[i] > highs_pivot[i-1])
+    hl_count = sum(1 for i in range(1, len(lows_pivot))  if lows_pivot[i]  > lows_pivot[i-1])
 
-    if hh_count >= 3 and hl_count >= 3:
+    # Score: basta con HH o HL, no necesita ambos igual de fuertes
+    combined = hh_count + hl_count
+    if combined >= 4:
         score = 3
-    elif hh_count >= 2 and hl_count >= 2:
+    elif combined >= 2:
         score = 2
-    elif hh_count >= 1 and hl_count >= 1:
+    elif combined >= 1:
         score = 1
     else:
         score = 0
 
     return {
-        "score": score,
+        "score":    score,
         "hh_count": hh_count,
         "hl_count": hl_count,
-        "description": f"{hh_count} máximos crecientes, {hl_count} mínimos crecientes (últimas 16 semanas)"
+        "description": f"{hh_count} máximos crecientes + {hl_count} mínimos crecientes (últimas 26 semanas)"
     }
 
 
@@ -1261,33 +1273,37 @@ def calc_position_scorecard(data: dict) -> dict:
     fund_score = 0
     fund_points = []
 
-    # Punto 1: Crecimiento de ingresos
-    # >10% YoY → negocios en expansión activa
-    # 0-10% → crecimiento moderado pero positivo → medio punto (se suma con otro)
-    rev_ok = False
-    if rev_growth is not None and rev_growth > 10:
+    # ── Punto 1: Crecimiento de ingresos ──────────────────────────────────────
+    rev_strong   = rev_growth is not None and rev_growth > 10
+    rev_moderate = rev_growth is not None and 0 < rev_growth <= 10
+    rev_negative = rev_growth is not None and rev_growth < 0
+
+    if rev_strong:
         fund_score += 1; fund_points.append(f"Revenue +{rev_growth}% YoY")
-        rev_ok = True
-    elif rev_growth is not None and rev_growth > 0:
+    elif rev_moderate:
         fund_points.append(f"Revenue +{rev_growth}% YoY (moderado)")
-        rev_ok = True   # no suma solo, pero se cuenta para combo
-    elif rev_growth is not None and rev_growth < 0:
+    elif rev_negative:
         fund_points.append(f"Revenue {rev_growth}% YoY (contracción)")
 
-    # Punto 2: Crecimiento de beneficios (EPS)
-    if eps_growth is not None and eps_growth > 20:
-        fund_score += 1; fund_points.append(f"EPS +{eps_growth}% YoY")
-    elif eps_growth is not None and eps_growth > 0:
+    # ── Punto 2: Crecimiento de beneficios (EPS) ──────────────────────────────
+    eps_strong   = eps_growth is not None and eps_growth > 20
+    eps_positive = eps_growth is not None and 0 < eps_growth <= 20
+    eps_negative = eps_growth is not None and eps_growth < 0
+
+    if eps_strong:
+        fund_score += 1; fund_points.append(f"EPS +{eps_growth}% YoY (acelerando)")
+    elif eps_positive:
         fund_points.append(f"EPS +{eps_growth}% YoY")
-        # Rev moderado + EPS creciendo → juntos valen 1 punto
-        if rev_ok and fund_score == 0:
-            fund_score += 1; fund_points[-1] += " | combo rev+eps ✓"
-    elif eps_growth is not None and eps_growth < 0:
+        # Rev fuerte (>10%) + EPS positivo → 2 puntos sólidos
+        if rev_strong:
+            fund_score += 1; fund_points[-1] += " ✓"
+        # Rev moderado + EPS positivo → juntos valen 1 punto
+        elif rev_moderate and fund_score == 0:
+            fund_score += 1; fund_points[-1] += " | combo growth ✓"
+    elif eps_negative:
         fund_points.append(f"EPS {eps_growth}% YoY (deterioro)")
 
-    # Punto 3: Calidad del negocio — FCF y márgenes
-    # Una empresa con FCF positivo y márgenes sanos es un negocio de calidad
-    # independientemente de su tasa de crecimiento
+    # ── Punto 3: Calidad del negocio — FCF y márgenes ─────────────────────────
     quality_ok = False
     if fcf_positive is True:
         quality_ok = True; fund_points.append("FCF positivo")
@@ -1371,9 +1387,9 @@ def calc_position_scorecard(data: dict) -> dict:
         if rr_suggested >= 3:     rr_score = 3
         elif rr_suggested >= 2:   rr_score = 2
         elif rr_suggested >= 1.5: rr_score = 1
-        else:                     rr_score = 0
-        rr_veto = rr_suggested < 2   # aviso, no bloquea — el usuario define el R/R real
-        rr_desc = f"R/R preliminar {rr_suggested:.1f}x (automático — ajustar con niveles reales)"
+        else:                     rr_score = 1  # mínimo 1: es estimado automático, el usuario ajusta
+        rr_veto = rr_suggested < 2
+        rr_desc = f"R/R preliminar {rr_suggested:.1f}x (estimado automático — ajustar con niveles reales)"
     else:
         rr_score, rr_veto = 1, False
         rr_desc = "R/R pendiente — definir entrada, stop y objetivo manualmente"
@@ -1460,25 +1476,32 @@ async def _analyze_position_inner(ticker: str):
     hh_hl_data = detect_hh_hl(weekly_candles)
     base_data  = analyze_base(weekly_candles)
 
-    # ── Sizing preliminar mejorado ──────────────────────────────────────────
-    # Entrada: precio cerca de máximos (breakout) → usar precio actual
-    #          precio en pullback a SMA50 → usar SMA50
+    # ── Sizing preliminar ──────────────────────────────────────────────────────
     high_52w_e = max(highs[-252:]) if len(highs) >= 252 else max(highs)
     near_high  = price >= high_52w_e * 0.95
-    entry_sug  = round(price, 2) if near_high else (round(sma50, 2) if sma50 else round(price, 2))
 
-    # Stop: mínimo de los últimos 40 días hábiles (~8 semanas) menos 1%
-    # Representa el suelo de la base de consolidación reciente
-    base_lows  = lows[-40:] if len(lows) >= 40 else lows
-    base_low   = min(base_lows)
-    stop_sug   = round(base_low * 0.99, 2) if base_low else None
+    # Entrada: breakout → precio actual | pullback → SMA50
+    entry_sug = round(price, 2) if near_high else (round(sma50, 2) if sma50 else round(price, 2))
 
-    # Target: ancho de la base proyectado desde el punto de entrada
-    # Ancho base = máximo de los últimos 40 días - mínimo de los últimos 40 días
-    base_highs = highs[-40:] if len(highs) >= 40 else highs
-    base_width = max(base_highs) - base_low if base_low else 0
-    if entry_sug and base_width > 0:
-        target_sug = round(entry_sug + base_width, 2)   # proyección 1× el ancho de la base
+    # Stop: en breakout usamos mínimo de la base semanal (más representativo del soporte real)
+    #       en pullback usamos mínimo de 20 días (soporte inmediato del pullback)
+    # En ambos casos aplicamos -2% de margen para evitar stops por ruido
+    if near_high:
+        # Para breakout: soporte = mínimo de las últimas 10 semanas diarias (~50 días)
+        base_lows_b = lows[-50:] if len(lows) >= 50 else lows
+        base_low    = min(base_lows_b)
+        stop_sug    = round(base_low * 0.98, 2)
+    else:
+        # Para pullback: soporte = mínimo de los últimos 20 días
+        base_lows_p = lows[-20:] if len(lows) >= 20 else lows
+        base_low    = min(base_lows_p)
+        stop_sug    = round(base_low * 0.98, 2)
+
+    # Target: proyección de 2× el riesgo desde la entrada (R/R mínimo objetivo = 2)
+    # Más conservador y consistente que proyectar el ancho de la base
+    if entry_sug and stop_sug and entry_sug > stop_sug:
+        risk_amt   = entry_sug - stop_sug
+        target_sug = round(entry_sug + risk_amt * 2.5, 2)   # objetivo R/R 2.5x
     else:
         target_sug = round(entry_sug * 1.20, 2) if entry_sug else None
 
