@@ -12,16 +12,16 @@ const C = {
 }
 
 const WEIGHTS = {
-  narrativa: 3, precio_sma200: 3, estructura_hh_hl: 2,
+  narrativa: 3, precio_sma200: 3, estructura_tecnica: 3,
   rs_relativa: 2, calidad_fundamental: 3, punto_entrada: 1,
   ratio_rr: 2,
 }
-const MAX_SCORE = 48 // (3+3+2+2+3+1+2) × 3 = 16 × 3 = 48
+const MAX_SCORE = 51 // (3+3+3+2+3+1+2) × 3 = 17 × 3 = 51
 
 const CRITERIA_LABELS = {
   narrativa:           'Narrativa activa',
   precio_sma200:       'Distancia SMA200',
-  estructura_hh_hl:    'Estructura HH/HL',
+  estructura_tecnica:  'Estructura técnica',
   rs_relativa:         'RS vs sector/SPY',
   calidad_fundamental: 'Calidad fundamental',
   punto_entrada:       'Punto de entrada',
@@ -731,6 +731,14 @@ function PositionScreener({ watchlist, onAdd, onRemove, onAddAll }) {
                       background: c.epsGrowth > 0 ? C.accent+'22' : C.border,
                       color: c.epsGrowth > 0 ? C.accent : C.muted }}>
                       EPS {c.epsGrowth > 0 ? '+' : ''}{c.epsGrowth}%
+                    </span>
+                  )}
+                  {c.weeksInBase != null && c.baseQuality !== 'none' && (
+                    <span style={{ fontSize:9, padding:'2px 7px', borderRadius:99,
+                      background: c.baseQuality === 'sound' ? C.green+'22' : C.amber+'22',
+                      color: c.baseQuality === 'sound' ? C.green : C.amber,
+                      fontWeight:600 }}>
+                      Base {c.weeksInBase}sem
                     </span>
                   )}
                 </div>

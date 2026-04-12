@@ -1211,6 +1211,7 @@ def calc_position_scorecard(data: dict) -> dict:
     rs_spy       = data["mansfield_rs"]
     rs_sector    = data["rs_sector"]
     hh_hl        = data["hh_hl"]
+    stage_data   = data.get("stage", {}) or {}
     fundamentals = data["fundamentals"] or {}
     cashflow     = data["cashflow"] or {}
     vol_ratio    = data["vol_ratio"]
@@ -1252,10 +1253,43 @@ def calc_position_scorecard(data: dict) -> dict:
             "es_veto": True
         }
 
-    # 3. Estructura HH/HL x2 — automático
-    criteria["estructura_hh_hl"] = {
-        "peso": 2, "score_sugerido": hh_hl["score"], "es_automatico": True,
-        "justificacion": hh_hl["description"]
+    # 3. Estructura técnica x3 — combina Stage Weinstein + HH/HL
+    # Stage 2 confirma la tendencia de largo plazo; HH/HL confirma la calidad de la subida.
+    # La pendiente de la SMA30 semanal distingue Stage 2 emergente (ideal) de Stage 2 tardío
+    # (SMA aplanándose → distribución inminente). Esto evita entrar en Stage 2 casi terminado.
+    stage_num   = stage_data.get("stage")
+    slope_4w    = stage_data.get("slope_4w_pct")  # % cambio SMA30 en 4 semanas
+    hh_hl_score = hh_hl["score"]  # 0–3
+
+    # Stage 2 con pendiente fuerte (>1.5%): tendencia sana, acelerando → vale 3 base
+    # Stage 2 con pendiente moderada (0.5–1.5%): tendencia establecida → vale 2 base
+    # Stage 2 con pendiente aplanando (<0.5%): Stage 2 tardío, posible distribución → vale 1 base
+    # Stage 1: acumulación, puede entrar anticipando breakout → vale 1 base
+    # Stage 3/4 o sin datos: penaliza → vale 0 base
+    if stage_num == 2:
+        if slope_4w is not None and slope_4w > 1.5:
+            stage_base = 3   # Stage 2 fuerte y acelerando
+        elif slope_4w is not None and slope_4w > 0.5:
+            stage_base = 2   # Stage 2 establecido
+        else:
+            stage_base = 1   # Stage 2 tardío — SMA30 aplanándose
+    elif stage_num == 1:
+        stage_base = 1
+    else:
+        stage_base = 0
+
+    # HH/HL añade 1 punto si es ≥ 2 (estructura alcista clara), pero no puede subir si stage_base=0
+    hh_bonus = 1 if (hh_hl_score >= 2 and stage_base > 0) else 0
+    struct_score = min(3, stage_base + hh_bonus)
+
+    slope_txt = f" (pendiente {slope_4w:+.1f}%)" if slope_4w is not None else ""
+    struct_desc = (
+        f"{stage_data.get('label', 'Stage desconocido')}{slope_txt} | "
+        f"HH/HL: {hh_hl['hh_count']} máx + {hh_hl['hl_count']} mín crecientes"
+    )
+    criteria["estructura_tecnica"] = {
+        "peso": 3, "score_sugerido": struct_score, "es_automatico": True,
+        "justificacion": struct_desc
     }
 
     # 4. RS vs sector/SPY x2 — automático
@@ -1345,9 +1379,12 @@ def calc_position_scorecard(data: dict) -> dict:
     if sma50 and price > 0:
         dist_sma50 = ((price - sma50) / sma50) * 100
 
-        # Volumen en breakout: max volumen de los últimos 5 días vs promedio 20d (datos diarios)
+        # Volumen en breakout: max volumen de los últimos 5 días vs promedio de los 20 días
+        # previos (días -25 a -5). Se excluyen los últimos 5 días del denominador para no
+        # contaminar el promedio base con el propio volumen del movimiento que se evalúa.
         recent_vol_max = max(volumes[-5:]) if len(volumes) >= 5 else None
-        avg_vol_20 = sum(volumes[-20:]) / min(20, len(volumes)) if volumes else None
+        base_vols = volumes[-25:-5] if len(volumes) >= 25 else (volumes[:-5] if len(volumes) > 5 else [])
+        avg_vol_20 = sum(base_vols) / len(base_vols) if base_vols else None
         breakout_vol_ratio = round(recent_vol_max / avg_vol_20 * 100) if (recent_vol_max and avg_vol_20) else None
         breakout_confirmed = breakout_vol_ratio and breakout_vol_ratio >= 150
 
@@ -1536,7 +1573,8 @@ async def _analyze_position_inner(ticker: str):
     scorecard = calc_position_scorecard({
         "price": price, "sma50": sma50, "sma200": sma200,
         "mansfield_rs": mansfield_rs, "rs_sector": rs_sector,
-        "hh_hl": hh_hl_data, "fundamentals": fundamentals,
+        "hh_hl": hh_hl_data, "stage": stage_data,
+        "fundamentals": fundamentals,
         "cashflow": cashflow, "vol_ratio": vol_ratio,
         "rr_suggested": rr_suggested, "next_earnings": next_earnings,
         "highs": highs, "lows": lows, "volumes": volumes,
@@ -1544,22 +1582,38 @@ async def _analyze_position_inner(ticker: str):
     })
 
     # Claude Haiku — evalúa narrativa activa
+    # Prompt enriquecido con sector, industria, fundamentales completos y contexto técnico
+    fund = fundamentals or {}
     try:
         haiku_prompt = (
-            f"Eres analista de position trading (mediano plazo 3-12 meses). "
-            f"Para {ticker} ({(fundamentals or {}).get('name','')}, sector {sector or 'desconocido'}):\n"
-            f"¿Existe un tema estructural de crecimiento que impulse esta acción? "
-            f"Score 0-3 (0=ninguno, 1=débil/especulativo, 2=activo con evidencia, 3=dominante con flujo confirmado).\n"
-            f"Datos: precio ${price}, SMA200 ${sma200}, Mansfield RS {mansfield_rs}, "
-            f"revenue_growth {(fundamentals or {}).get('revenueGrowth')}%, "
-            f"eps_growth {(fundamentals or {}).get('epsGrowth')}%, "
-            f"próximos earnings: {next_earnings or 'sin fecha'}\n"
+            f"Eres analista senior de position trading (horizonte 3-12 meses).\n"
+            f"Empresa: {fund.get('name', ticker)} ({ticker})\n"
+            f"Sector: {sector or 'desconocido'} | Industria: {fund.get('industry', 'N/A')}\n"
+            f"\nFundamentales:\n"
+            f"  Revenue growth YoY: {fund.get('revenueGrowth', 'N/A')}%\n"
+            f"  EPS growth YoY: {fund.get('epsGrowth', 'N/A')}%\n"
+            f"  Margen neto: {fund.get('profitMargin', 'N/A')}%\n"
+            f"  Margen operativo: {fund.get('operatingMargin', 'N/A')}%\n"
+            f"  P/E ratio: {fund.get('peRatio', 'N/A')}\n"
+            f"  Market cap: {fund.get('mktCap', 'N/A')}\n"
+            f"  Analistas buy/strong buy: {(fund.get('analystBuy') or 0) + (fund.get('analystStrongBuy') or 0)}\n"
+            f"\nTécnico:\n"
+            f"  Precio: ${price} | SMA200: ${sma200} | Mansfield RS vs SPY: {mansfield_rs}\n"
+            f"  Stage Weinstein: {stage_data.get('label', 'N/A')}\n"
+            f"  Próximos earnings: {next_earnings or 'sin fecha'}\n"
+            f"\nPregunta: ¿Existe un tema estructural de crecimiento que justifique esta acción como "
+            f"position trade de mediano plazo?\n"
+            f"Criterios de scoring (sé conservador — score 3 solo si hay evidencia muy clara):\n"
+            f"  0 = sin narrativa clara, negocio maduro sin catalizador visible\n"
+            f"  1 = posible catalizador pero débil, maduro o sin confirmación en números\n"
+            f"  2 = narrativa activa con evidencia en ingresos o márgenes crecientes\n"
+            f"  3 = tema dominante del mercado con flujo institucional confirmado (IA pura, GLP-1, ciberseguridad líder)\n"
             f"Responde SOLO JSON sin texto extra: "
-            + '{"narrativa_sugerida":1,"narrativa_razon":"texto breve en español"}'
+            + '{"narrativa_sugerida":1,"narrativa_razon":"razón concreta en español (máx 15 palabras)"}'
         )
         haiku_msg = client.messages.create(
             model="claude-haiku-4-5-20251001",
-            max_tokens=150,
+            max_tokens=200,
             messages=[{"role": "user", "content": haiku_prompt}]
         )
         haiku_json = extract_json(haiku_msg.content[0].text)

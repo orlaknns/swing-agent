@@ -105,8 +105,70 @@ async def fetch_finviz_position() -> list[str]:
     return filtered[:80]
 
 
+def _analyze_base_simple(weekly_candles: list) -> dict:
+    """Detecta semanas en base de consolidación (versión standalone para el screener)."""
+    if len(weekly_candles) < 3:
+        return {"weeks_in_base": 0, "base_quality": "none"}
+    closes = [c["close"] for c in weekly_candles]
+    highs  = [c["high"]  for c in weekly_candles]
+    lows   = [c["low"]   for c in weekly_candles]
+    base_start = len(closes) - 1
+    base_high  = highs[-1]
+    base_low   = lows[-1]
+    for i in range(len(closes) - 2, max(0, len(closes) - 53), -1):
+        new_high = max(base_high, highs[i])
+        new_low  = min(base_low, lows[i])
+        rng = (new_high - new_low) / new_low * 100 if new_low > 0 else 999
+        if rng > 35:
+            break
+        if closes[i] < base_low * 0.85:
+            break
+        base_high  = new_high
+        base_low   = new_low
+        base_start = i
+    weeks_in_base = len(closes) - base_start
+    quality = "sound" if weeks_in_base >= 7 else "short" if weeks_in_base >= 3 else "none"
+    return {"weeks_in_base": weeks_in_base, "base_quality": quality}
+
+
+async def fetch_weekly_candles(ticker: str, client: httpx.AsyncClient) -> list:
+    """Obtiene velas semanales ajustadas desde Alpha Vantage (últimas 52)."""
+    if not AV_KEY:
+        return []
+    try:
+        url = (
+            f"https://www.alphavantage.co/query?function=TIME_SERIES_WEEKLY_ADJUSTED"
+            f"&symbol={ticker}&apikey={AV_KEY}"
+        )
+        r = await client.get(url, timeout=15)
+        if r.status_code != 200:
+            return []
+        data = r.json()
+        weekly = data.get("Weekly Adjusted Time Series", {})
+        if not weekly:
+            return []
+        candles = []
+        for date_str in sorted(weekly.keys(), reverse=True)[:52]:
+            w = weekly[date_str]
+            try:
+                candles.append({
+                    "date":  date_str,
+                    "close": float(w["5. adjusted close"]),
+                    "high":  float(w["2. high"]),
+                    "low":   float(w["3. low"]),
+                    "volume": float(w.get("6. volume", 0)),
+                })
+            except Exception:
+                pass
+        candles.reverse()  # cronológico
+        return candles
+    except Exception as e:
+        print(f"  AV weekly error for {ticker}: {e}")
+        return []
+
+
 async def enrich_ticker(ticker: str, client: httpx.AsyncClient) -> dict:
-    """Obtiene nombre, sector y fundamentals básicos desde Alpha Vantage OVERVIEW."""
+    """Obtiene nombre, sector, fundamentals y base analysis desde Alpha Vantage."""
     if not AV_KEY:
         return {"ticker": ticker, "company": "", "sector": ""}
     try:
@@ -160,10 +222,23 @@ async def enrich_all(tickers: list[str]) -> list[dict]:
             if result is None:
                 print(f"  [{i+1}/{len(tickers)}] {ticker} — sin datos (posible ETF/fondo)")
                 continue
+
+            # Obtener velas semanales y calcular base analysis
+            await asyncio.sleep(0.9)  # respetar rate limit antes de segunda llamada
+            weekly = await fetch_weekly_candles(ticker, client)
+            if weekly:
+                base = _analyze_base_simple(weekly)
+                result["weeksInBase"]  = base["weeks_in_base"]
+                result["baseQuality"]  = base["base_quality"]
+            else:
+                result["weeksInBase"]  = None
+                result["baseQuality"]  = None
+
             results.append(result)
             name = result.get("company", "")[:30]
             sector = result.get("sector", "")
-            print(f"  [{i+1}/{len(tickers)}] {ticker} — {name} | {sector}")
+            base_txt = f" | base {result['weeksInBase']}sem ({result['baseQuality']})" if result.get("weeksInBase") else ""
+            print(f"  [{i+1}/{len(tickers)}] {ticker} — {name} | {sector}{base_txt}")
             await asyncio.sleep(0.9)
     print(f"Enriquecimiento completo: {len(results)} acciones con datos")
     return results

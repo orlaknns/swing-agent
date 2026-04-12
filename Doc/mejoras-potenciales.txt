@@ -1,5 +1,5 @@
-SWING TRADING AGENT — MEJORAS POTENCIALES
-Última revisión: 2026-04-05 (actualizado)
+KNNS TRADEAGENT — MEJORAS POTENCIALES
+Última revisión: 2026-04-10
 ========================================
 
 ESTADO LEYENDA
@@ -8,90 +8,194 @@ ESTADO LEYENDA
 [x] Implementada
 
 
-------------------------------------------------------------------------
-PRIORIDAD ALTA — Alto impacto, baja complejidad
-------------------------------------------------------------------------
-
-[x] 1. MINI CHART EN TARJETA (sparkline 7–30 días)
-    Impacto usuario: Alto
-    Complejidad: Baja (datos ya disponibles en Alpha Vantage TIME_SERIES_DAILY)
-    Ver detalle en sección inferior.
-
-[~] 2. POSITION SIZING INTEGRADO
-    Impacto usuario: Alto
-    Complejidad: Baja
-    Ver detalle en sección inferior.
-
-[x] 3. VISTA TABLA COMPARATIVA DE WATCHLIST
-    Impacto usuario: Medio-alto
-    Complejidad: Baja
-    Ver detalle en sección inferior.
+========================================
+MÓDULO SWING TRADING
+========================================
 
 ------------------------------------------------------------------------
-PRIORIDAD MEDIA — Alto impacto, complejidad media
+IMPLEMENTADAS
 ------------------------------------------------------------------------
 
-[ ] 4. ALERTAS DE PRECIO
-    Impacto usuario: Muy alto
-    Complejidad: Media
-    Descripción: Notificar al usuario cuando el precio de una acción entra
-    al rango de entrada (entryLow–entryHigh), cuando se activa el stop-loss,
-    o cuando el setup decay llega a zona roja.
-    Canales posibles: email (Supabase Edge Functions + Resend/SendGrid),
-    notificación push (Web Push API o servicio externo).
-    Transforma la app de "consulta manual" a "agente proactivo".
+[x] 1. MINI CHART EN TARJETA (sparkline 30 días + SMA21 + crosshair)
+    Gráfico pequeño (72px) + modal expandido (260px). Crosshair vertical+horizontal.
 
-[ ] 5. ANALYTICS DEL JOURNAL (patrones personales)
-    Impacto usuario: Alto
-    Complejidad: Media
-    Descripción: Extraer patrones del historial propio del usuario.
-    Win rate por sector, por señal (buy/watch), por rango de RSI, por día
-    de la semana. Mostrar "tus mejores condiciones de entrada" calculado
-    desde sus propios trades. Convierte el journal en un coach personal
-    basado en datos reales.
+[x] 2. VISTA TABLA COMPARATIVA DE WATCHLIST
+    Columnas ordenables: ticker, score, señal, RSI, dist, R/R, estrellas contexto.
 
-[ ] 6. CONTEXTO MACRO / CLIMA DE MERCADO
-    Impacto usuario: Medio
-    Complejidad: Baja
-    Descripción: Barra de contexto visible en todas las tarjetas con
-    indicadores de mercado: VIX, tendencia S&P500, Fear & Greed index.
-    El análisis técnico no vive en un vacío — un trade antes de datos
-    de inflación o reunión Fed tiene más riesgo.
+[x] 3. PERSISTENCIA DE CACHE EN SUPABASE
+    analysis_cache jsonb — no se pierde al recargar la página.
+
+[x] 4. JOURNAL DE SWING TRADING
+    CRUD completo con filtros por estado y búsqueda por ticker.
+
+[x] 5. DASHBOARD SWING (P&L mensual)
+    ComposedChart barras + línea. Win rate total y por señal.
+
+[x] 6. ESTRELLAS DE CONTEXTO (0–3★)
+    Descuentan por earnings próximos, ex-dividend, precio sobre target analistas.
+
+[x] 7. LISTA "EN SEGUIMIENTO" (monitor_tickers)
+    Tab separado para acciones en monitoreo sin ser parte de la watchlist activa.
+
+[x] 8. SCREENER SWING AUTOMÁTICO
+    GitHub Actions cron → Finviz → data/screener.json. Badge LIVE/CURADA.
+
 
 ------------------------------------------------------------------------
-PRIORIDAD MEDIA-ALTA — Alto impacto, complejidad alta
+PENDIENTES SWING
 ------------------------------------------------------------------------
 
-[ ] 7. BACKTESTING BÁSICO DEL SCREENER
-    Impacto usuario: Alto
-    Complejidad: Alta
-    Descripción: Para cada candidato del screener, mostrar cuántas veces
-    históricamente esa acción cumplió los mismos criterios (SMA21>SMA50,
-    RSI 30–60) y cuál fue el resultado promedio. Da confianza cuantificada
-    en el setup, no solo señales técnicas.
+[ ] A. ALERTAS DE PRECIO
+    Impacto: Muy alto | Complejidad: Media
+    Notificar cuando precio entra al rango de entrada (entryLow–entryHigh),
+    se activa stop-loss, o el setup decae.
+    Canales: email (Supabase Edge Functions + Resend), Web Push API.
 
-[ ] 8. MODO MULTI-USUARIO / PORTAFOLIO COMPARTIDO
-    Impacto industria: Alto
-    Complejidad: Alta
-    Descripción: Workspaces compartidos para fondos pequeños, grupos de
-    inversión familiar, o mentores con alumnos. Un usuario "admin" edita,
-    otros "viewer" solo ven. Comentarios por acción visibles para todos.
-    Abre la app a un segmento de mercado completamente nuevo (B2B pequeño).
+[ ] B. ANALYTICS DEL JOURNAL (patrones personales)
+    Impacto: Alto | Complejidad: Media
+    Win rate por sector, por señal, por rango RSI, por día de semana.
+    "Tus mejores condiciones de entrada" calculado desde historial real.
+
+[ ] C. CONTEXTO MACRO / VIX / FEAR & GREED
+    Impacto: Medio | Complejidad: Baja
+    Barra global visible en todas las tarjetas: VIX, tendencia S&P500,
+    Fear & Greed index. Advertencia si mercado en condición desfavorable.
+
+[ ] D. BACKTESTING BÁSICO DEL SCREENER
+    Impacto: Alto | Complejidad: Alta
+    Para cada candidato, mostrar cuántas veces históricamente cumplió los
+    mismos criterios y cuál fue el resultado promedio.
+
+[ ] E. MODO MULTI-USUARIO / PORTAFOLIO COMPARTIDO
+    Impacto industria: Alto | Complejidad: Alta
+    Workspaces con admin + viewers. Comentarios visibles para todos.
+
+
+========================================
+MÓDULO POSITION TRADING
+========================================
 
 ------------------------------------------------------------------------
-RESUMEN TABLA
+IMPLEMENTADAS
 ------------------------------------------------------------------------
 
-#  Funcionalidad                  Impacto usuario   Complejidad   Estado
--  ------------------------------  ----------------  ------------  ------
-1  Mini chart en tarjeta           Alto              Baja          [x]
-2  Position sizing integrado       Alto              Baja          [~]
-3  Vista tabla comparativa         Medio-alto        Baja          [x]
-4  Alertas de precio               Muy alto          Media         [ ]
-5  Analytics del journal           Alto              Media         [ ]
-6  Contexto macro / VIX            Medio             Baja          [ ]
-7  Backtesting screener            Alto              Alta          [ ]
-8  Multi-usuario / compartido      Alto (industria)  Alta          [ ]
+[x] 1. SCORECARD AUTOMÁTICO 8 CRITERIOS
+    MAX_SCORE=51. Automático vía Alpha Vantage + Claude Haiku (narrativa, catalizador).
+    Vetos absolutos: precio<SMA200 y R/R≤1.
+
+[x] 2. WATCHLIST CON TARJETAS Y TABLA
+    Igual que swing: cache persistido en Supabase, toggle cards/tabla,
+    auto-análisis solo si no hay cache, ↻ manual por tarjeta.
+
+[x] 3. TARJETA DETALLADA (PositionCard)
+    Precio + SMAs, macro SPY, score bar, vetos, 6 indicadores, Entry/Stop/Target
+    sugeridos, R/R, earnings, scorecard expandible con justificaciones y fundamentales.
+
+[x] 4. SCREENER POSITION TRADING
+    Criterios Finviz: Precio>SMA200, SMA50>SMA200 (golden cross), RSI 40–65,
+    Vol>500k, Cap>$300M. Cron lunes 14:00 UTC. Enriquece con AV OVERVIEW.
+
+[x] 5. JOURNAL POSITION (position_trades)
+    CRUD con estados: planning / open / closed.
+
+[x] 6. DASHBOARD POSITION
+    P&L mensual, win rate total, win rate por decisión (convicción/cautela).
+
+[x] 7. HH/HL DETECTION (estructura alcista)
+    Algoritmo de pivot highs/lows en velas semanales. Score 0–3.
+
+[x] 8. RS SECTOR (Mansfield vs ETF del sector)
+    SECTOR_ETF_MAP: Technology→XLK, Healthcare→XLV, etc. Cache 60min.
+
+
+------------------------------------------------------------------------
+PENDIENTES POSITION
+------------------------------------------------------------------------
+
+[x] 5. WEEKS_IN_BASE EN SCREENER
+    GitHub Actions llama AV Weekly por candidato → analyze_base() → weeksInBase + baseQuality
+    Frontend PositionScreener muestra badge "Base Nsem" (verde=sound, ámbar=short).
+
+[x] 7. MERGE STAGE + HH/HL → "Estructura técnica" (peso ×3)
+    Stage Weinstein + HH/HL combinados. Stage 2 + HH/HL fuerte = 3 | Stage 2 solo = 2 | Stage 1 + HH/HL = 2.
+    MAX_SCORE actualizado a 51. WEIGHTS y CRITERIA_LABELS actualizados.
+
+[x] 8. MEJOR PROMPT HAIKU
+    Prompt enriquecido: sector, industria, márgenes, P/E, mktCap, analistas, Stage Weinstein.
+    max_tokens=200. Score default=2 (era 1).
+
+[ ] F. ANÁLISIS MANUAL EDITABLE
+    Permitir que el usuario ajuste los scores sugeridos por el sistema
+    (sliders editables post-análisis automático). Guardar versión manual vs AUTO.
+
+[ ] G. SIZING CALCULATOR INTEGRADO EN TARJETA
+    Capital × % riesgo → número de acciones, % del portafolio, R/R real.
+    Actualmente el cálculo es orientativo (entry/stop/target sugeridos).
+    Falta: input de capital real del usuario y riesgo por operación.
+
+[ ] H. SEGUIMIENTO DE POSICIÓN ACTIVA
+    Una vez abierta la posición, mostrar P&L en tiempo real vs entry price.
+    Alertas de stop-loss alcanzado o target 1 alcanzado.
+
+[ ] I. TESIS DE INVALIDACIÓN
+    Campo en el journal: "¿Qué invalidaría esta tesis?" con seguimiento
+    de si se cumplió al cerrar la posición.
+
+[ ] J. HISTORIAL DE ANÁLISIS POR TICKER
+    Guardar múltiples snapshots del scorecard para el mismo ticker en el tiempo.
+    Ver cómo evolucionó la puntuación semana a semana.
+
+[ ] K. CONTEXTO MACRO INTEGRADO (similar a swing)
+    Panel global: SPY vs SMA200, VIX, líderes/rezagados por sector.
+    Las tarjetas ya muestran macro_context individual — este sería un panel global.
+
+[ ] L. EXPORTAR RESUMEN DE OPERACIÓN
+    Generar tarjeta resumen con todos los datos (scorecard + sizing + tesis)
+    y poder copiarla al portapapeles o exportar a PDF.
+
+[ ] M. NOTIFICACIONES SEMANALES
+    Email automático los lunes con el resultado del screener semanal.
+    "Esta semana hay N candidatos nuevos que cumplen criterios."
+
+
+========================================
+MEJORAS TRANSVERSALES (ambos módulos)
+========================================
+
+[ ] N. AUTENTICACIÓN CON GOOGLE
+    Actualmente solo email/password de Supabase. Agregar OAuth Google.
+
+[ ] O. APP MÓVIL (PWA)
+    Instalar como app desde el navegador móvil. Actualmente responsive
+    pero no tiene manifest ni service worker.
+
+[ ] P. DATOS EN TIEMPO REAL (WebSocket)
+    Alpha Vantage tiene límites. Evaluar Polygon.io o Alpaca para
+    streaming de precios sin delay durante horario de mercado.
+
+
+========================================
+RESUMEN TABLA PRIORIDADES
+========================================
+
+#  Funcionalidad                        Módulo    Impacto  Complejidad  Estado
+-  ------------------------------------  --------  -------  -----------  ------
+A  Alertas de precio                    Swing     Muy alto  Media        [ ]
+B  Analytics del journal (patrones)     Swing     Alto      Media        [ ]
+C  Contexto macro / VIX                 Swing     Medio     Baja         [ ]
+D  Backtesting del screener             Swing     Alto      Alta         [ ]
+E  Multi-usuario / compartido           Swing     Alto      Alta         [ ]
+F  Análisis manual editable             Position  Alto      Media        [ ]
+G  Sizing calculator integrado real     Position  Alto      Baja         [ ]
+H  Seguimiento posición activa          Position  Alto      Media        [ ]
+I  Tesis de invalidación                Position  Medio     Baja         [ ]
+J  Historial análisis por ticker        Position  Medio     Media        [ ]
+K  Contexto macro global position       Position  Medio     Baja         [ ]
+L  Exportar resumen operación           Position  Medio     Baja         [ ]
+M  Notificaciones semanales screener    Position  Medio     Media        [ ]
+N  Auth Google                          Ambos     Medio     Baja         [ ]
+O  PWA / app móvil                      Ambos     Bajo      Media        [ ]
+P  Datos en tiempo real (WebSocket)     Ambos     Alto      Alta         [ ]
 
 ========================================
 FIN DEL DOCUMENTO

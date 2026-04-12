@@ -181,6 +181,8 @@ lows_ideal[-1]   = 149.0
 volumes_ideal[-5:] = [600_000] * 5
 volumes_ideal[-20:] = [800_000] * 20 + volumes_ideal[-5:]  # avg ~800k, last 5 = 600k
 
+stage_ideal = detect_stage(make_weekly_candles_stage2(40))  # Stage 2
+
 sc1 = calc_position_scorecard({
     "price":        150,
     "sma50":        140,
@@ -188,6 +190,7 @@ sc1 = calc_position_scorecard({
     "mansfield_rs": 3.5,
     "rs_sector":    2.0,
     "hh_hl":        hh_hl_ideal,
+    "stage":        stage_ideal,
     "fundamentals": {
         "revenueGrowth":   25,
         "epsGrowth":       40,
@@ -219,7 +222,7 @@ for k, v in sc1.items():
 check("Score total ≥ 32 (CONVICCIÓN)", score1 >= 32, score1, ">= 32")
 check("precio_sma200 = 3 (no veto)", sc1["precio_sma200"]["score_sugerido"] == 3, sc1["precio_sma200"]["score_sugerido"], "3")
 check("precio_sma200.es_veto == False", sc1["precio_sma200"]["es_veto"] == False, sc1["precio_sma200"]["es_veto"], "False")
-check("estructura_hh_hl >= 2", sc1["estructura_hh_hl"]["score_sugerido"] >= 2, sc1["estructura_hh_hl"]["score_sugerido"], ">= 2")
+check("estructura_tecnica >= 2", sc1["estructura_tecnica"]["score_sugerido"] >= 2, sc1["estructura_tecnica"]["score_sugerido"], ">= 2")
 check("rs_relativa = 3 (líder vs SPY y sector)", sc1["rs_relativa"]["score_sugerido"] == 3, sc1["rs_relativa"]["score_sugerido"], "3")
 check("calidad_fundamental >= 2", sc1["calidad_fundamental"]["score_sugerido"] >= 2, sc1["calidad_fundamental"]["score_sugerido"], ">= 2")
 check("ratio_rr = 2 (rr=2.8)", sc1["ratio_rr"]["score_sugerido"] == 2, sc1["ratio_rr"]["score_sugerido"], "2")
@@ -233,29 +236,27 @@ check("narrativa = 3 (simulado Haiku)", sc1["narrativa"]["score_sugerido"] == 3,
 section("CASO 2 — Acción mediocre (22 ≤ score ≤ 31 → CAUTELA)")
 
 # Objetivo: score 22-31 con datos mediocres
-# Desglose objetivo:
-#   narrativa       : 2 × 3 = 6
-#   precio_sma200   : 3 × 3 = 9  (precio > SMA200, no es veto)
-#   hh_hl           : 1 × 2 = 2  (combined=1, estructura débil)
-#   rs_relativa     : 2 × 2 = 4  (mansfield=0.5 → score=2, no líder sectorial)
-#   calidad_fund    : 2 × 2 = 4  (rev moderado + eps positivo + fcf)
-#   punto_entrada   : 1 × 2 = 2  (precio BAJO SMA50 → debilidad)
-#   ratio_rr        : 2 × 2 = 4  (rr=2.0 → score=2)
-# Total esperado: 6+9+2+4+4+2+4 = 31
+# Desglose objetivo (con estructura_tecnica peso×3):
+#   narrativa          : 2 × 3 = 6
+#   precio_sma200      : 3 × 3 = 9  (precio > SMA200 >15% → score=3)
+#   estructura_tecnica : 1 × 3 = 3  (Stage 1 + hh_hl=1 → score=1)
+#   rs_relativa        : 2 × 2 = 4  (mansfield=0.5 → score=2, no líder sectorial)
+#   calidad_fund       : 1 × 3 = 3  (rev moderate + eps positive → combo growth → fund_score=1)
+#   punto_entrada      : 1 × 1 = 1  (precio BAJO SMA50 → debilidad)
+#   ratio_rr           : 2 × 2 = 4  (rr=2.0 → score=2)
+# Total esperado: 6+9+3+4+3+1+4 = 30
 
 # HH/HL: usamos dict sintético con combined=1 (score=1)
-# Esto verifica calc_position_scorecard aceptando el formato correcto.
-# detect_hh_hl ya se prueba en casos 5 y 6.
 hh_hl_cautela = {
     "score": 1,
     "hh_count": 1,
     "hl_count": 0,
     "description": "1 máximos crecientes + 0 mínimos crecientes (últimas 26 semanas)"
 }
+# Stage 1 (acumulación) — precio consolida bajo SMA30
+stage_cautela = {"stage": 1, "label": "Acumulación (Stage 1)", "slope_4w_pct": 0.2, "price_above_sma30": False}
 
 # Datos diarios: precio BAJO SMA50 → punto_entrada score=1
-# Con make_daily_data(260, start=80), SMA50 = ~closes[-50:].mean() ≈ 80
-# Forzamos precio actual = 75 para que esté bajo SMA50=80
 closes_c, highs_c, lows_c, volumes_c = make_daily_data(260, price_start=80, trend_pct=0.0)
 closes_c[-1] = 75.0
 highs_c[-1]  = 75.5
@@ -268,6 +269,7 @@ sc2 = calc_position_scorecard({
     "mansfield_rs": 0.5,
     "rs_sector":    0.3,
     "hh_hl":        hh_hl_cautela,
+    "stage":        stage_cautela,
     "fundamentals": {
         "revenueGrowth": 5,
         "epsGrowth":     8,
@@ -313,6 +315,7 @@ sc3 = calc_position_scorecard({
     "mansfield_rs": 2.5,
     "rs_sector":    1.5,
     "hh_hl":        hh_hl_veto,
+    "stage":        {"stage": 4, "label": "Declive (Stage 4)", "slope_4w_pct": -1.5, "price_above_sma30": False},
     "fundamentals": {
         "revenueGrowth": 20,
         "epsGrowth":     30,
@@ -357,6 +360,7 @@ sc4 = calc_position_scorecard({
     "mansfield_rs": -3,
     "rs_sector":    -2,
     "hh_hl":        hh_hl_bad,
+    "stage":        {"stage": 4, "label": "Declive (Stage 4)", "slope_4w_pct": -2.0, "price_above_sma30": False},
     "fundamentals": {
         "revenueGrowth": -5,
         "epsGrowth":     -10,
@@ -545,6 +549,7 @@ _base_data_fund = {
     "price": 100, "sma50": 95, "sma200": 80,
     "mansfield_rs": 1.0, "rs_sector": 0.5,
     "hh_hl": {"score": 2, "hh_count": 2, "hl_count": 1, "description": "test"},
+    "stage": {"stage": 2, "label": "Avance (Stage 2)", "slope_4w_pct": 1.0, "price_above_sma30": True},
     "vol_ratio": 100, "rr_suggested": 2.5,
     "next_earnings": None,
     "highs": _highs_f, "lows": _lows_f, "volumes": _volumes_f,
@@ -592,6 +597,50 @@ check("fund D: rev=-5, eps=-10, fcf=False → 0", fD == 0, fD, "0")
 fE = fund_score_for(rev=None, eps=None, profit_margin=20, fcf_positive=True)
 print(f"  E) rev=None, eps=None, pm=20, fcf=True → score={fE} (esperado: 1)")
 check("fund E: rev=None, eps=None, pm=20, fcf=True → 1", fE == 1, fE, "1")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  CASO 11 — Stage 2 tardío (SMA30 aplanándose) → estructura_tecnica <= 2
+#  Verifica que una acción como AAPL en Stage 2 tardío no reciba score máximo
+# ═══════════════════════════════════════════════════════════════════════════════
+
+section("CASO 11 — Stage 2 tardío (pendiente aplanándose) → estructura_tecnica ≤ 2")
+
+# Stage 2 con pendiente 0.3% (aplanando → Stage 2 tardío) + HH/HL fuerte (score=3)
+stage_tardio = {"stage": 2, "label": "Avance (Stage 2)", "slope_4w_pct": 0.3, "price_above_sma30": True}
+hh_hl_fuerte = {"score": 3, "hh_count": 3, "hl_count": 3, "description": "3 máx + 3 mín crecientes"}
+
+_closes_11, _highs_11, _lows_11, _volumes_11 = make_daily_data(260, price_start=100, trend_pct=0.0005)
+sc11_data = dict(_base_data_fund)
+sc11_data.update({
+    "price": 105, "sma50": 100, "sma200": 85,
+    "mansfield_rs": 1.5, "rs_sector": 0.8,
+    "hh_hl": hh_hl_fuerte,
+    "stage": stage_tardio,
+    "fundamentals": {"revenueGrowth": 8, "epsGrowth": 10, "profitMargin": 12},
+    "cashflow": {"fcf_positive": True},
+    "highs": _highs_11, "lows": _lows_11, "volumes": _volumes_11,
+})
+sc11 = calc_position_scorecard(sc11_data)
+struct11 = sc11["estructura_tecnica"]["score_sugerido"]
+
+print(f"\n  Stage 2 tardío (slope=+0.3%) + HH/HL fuerte (score=3)")
+print(f"  estructura_tecnica score: {struct11}  (esperado: ≤ 2, no debe ser 3)")
+print(f"  Justificación: {sc11['estructura_tecnica']['justificacion']}")
+
+check("Stage 2 tardío: estructura_tecnica ≤ 2", struct11 <= 2, struct11, "<= 2")
+check("Stage 2 tardío: estructura_tecnica >= 1", struct11 >= 1, struct11, ">= 1 (no es 0)")
+
+# Stage 2 fuerte (pendiente 2.5%) + HH/HL fuerte → debe ser 3
+stage_fuerte = {"stage": 2, "label": "Avance (Stage 2)", "slope_4w_pct": 2.5, "price_above_sma30": True}
+sc11b_data = dict(sc11_data)
+sc11b_data["stage"] = stage_fuerte
+sc11b = calc_position_scorecard(sc11b_data)
+struct11b = sc11b["estructura_tecnica"]["score_sugerido"]
+
+print(f"\n  Stage 2 fuerte (slope=+2.5%) + HH/HL fuerte (score=3)")
+print(f"  estructura_tecnica score: {struct11b}  (esperado: 3)")
+check("Stage 2 fuerte: estructura_tecnica == 3", struct11b == 3, struct11b, "3")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
