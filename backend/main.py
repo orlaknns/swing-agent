@@ -307,6 +307,21 @@ def calc_mansfield_rs(stock_closes: list, spy_closes: list) -> float | None:
         return None
 
 
+def calc_mansfield_rs_raw(stock_closes: list, spy_closes: list) -> float | None:
+    """Retorna el RS real sin normalizar ni capear (% vs SPY en 52 semanas)."""
+    try:
+        if len(stock_closes) < 20 or len(spy_closes) < 20:
+            return None
+        periods = min(len(stock_closes), len(spy_closes), 252)
+        stock_now = stock_closes[-1]; stock_52w = stock_closes[-periods]
+        spy_now   = spy_closes[-1];   spy_52w   = spy_closes[-periods]
+        if stock_52w == 0 or spy_52w == 0:
+            return None
+        return round(((stock_now / stock_52w) / (spy_now / spy_52w) - 1) * 100, 1)
+    except Exception:
+        return None
+
+
 def calc_atr(highs: list, lows: list, closes: list, period: int = 14) -> float:
     """Average True Range — volatilidad diaria promedio."""
     if len(closes) < period + 1:
@@ -1454,6 +1469,31 @@ def calc_position_scorecard(data: dict) -> dict:
         "es_veto": rr_veto
     }
 
+    # ── Confidence score — cuántos criterios tienen datos reales vs defaults ──
+    # Criterios que dependen de datos externos que pueden faltar:
+    # narrativa: siempre subjetivo/IA — contar si Haiku lo actualizó (se marca luego)
+    # precio_sma200: siempre real (precio + SMA200 siempre disponibles)
+    # estructura_tecnica: real si stage_num != 0 (no desconocido)
+    # rs_relativa: real si rs_spy is not None
+    # calidad_fundamental: real si hay al menos un dato fundamental
+    # punto_entrada: siempre real (precio + SMA50)
+    # ratio_rr: real si rr_suggested is not None
+    data_flags = {
+        "precio_sma200":      True,  # siempre disponible
+        "estructura_tecnica": stage_data.get("stage", 0) != 0,
+        "rs_relativa":        rs_spy is not None,
+        "calidad_fundamental": any(fundamentals.get(k) is not None
+                                   for k in ["revenueGrowth","epsGrowth","profitMargin","operatingMargin"]),
+        "punto_entrada":      True,  # siempre disponible
+        "ratio_rr":           rr_suggested is not None,
+        "narrativa":          False,  # se actualiza a True si Haiku responde (ver _analyze_position_inner)
+    }
+    criteria["_confidence"] = {
+        "total": len(data_flags),
+        "real": sum(data_flags.values()),
+        "flags": data_flags,
+    }
+
     return criteria
 
 
@@ -1499,7 +1539,8 @@ async def _analyze_position_inner(ticker: str):
     sma200 = calc_sma(closes, 200)
     rsi    = calc_rsi(closes)
     atr    = calc_atr(highs, lows, closes)
-    mansfield_rs = calc_mansfield_rs(closes, spy_closes)
+    mansfield_rs     = calc_mansfield_rs(closes, spy_closes)
+    mansfield_rs_raw = calc_mansfield_rs_raw(closes, spy_closes)
 
     avg_vol   = sum(volumes[-20:]) / min(20, len(volumes))
     cur_vol   = rt_quote.get("volume", volumes[-1]) if rt_quote else volumes[-1]
@@ -1619,6 +1660,9 @@ async def _analyze_position_inner(ticker: str):
         haiku_json = extract_json(haiku_msg.content[0].text)
         scorecard["narrativa"]["score_sugerido"] = int(haiku_json.get("narrativa_sugerida", 1))
         scorecard["narrativa"]["justificacion"]   = haiku_json.get("narrativa_razon", scorecard["narrativa"]["justificacion"])
+        if scorecard.get("_confidence"):
+            scorecard["_confidence"]["flags"]["narrativa"] = True
+            scorecard["_confidence"]["real"] = sum(scorecard["_confidence"]["flags"].values())
     except Exception as e:
         print(f"Haiku position error {ticker}: {e}")
 
@@ -1648,8 +1692,9 @@ async def _analyze_position_inner(ticker: str):
         "rsi":             rsi,
         "vol_ratio":       vol_ratio,
         "atr":             round(atr, 2),
-        "mansfield_rs":    mansfield_rs,
-        "rs_sector":       rs_sector,
+        "mansfield_rs":     mansfield_rs,
+        "mansfield_rs_raw": mansfield_rs_raw,
+        "rs_sector":        rs_sector,
         "macro_context":   macro_context,
         "hh_hl":           hh_hl_data,
         "stage":           stage_data,

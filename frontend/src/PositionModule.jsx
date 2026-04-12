@@ -803,6 +803,9 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove }) {
   const hasRRVeto = data?.rr_suggested != null && data.rr_suggested < 2
 
   const savedAt = data?._savedAt
+  const cacheAgeHours = savedAt ? (new Date() - new Date(savedAt)) / (1000*60*60) : null
+  const cacheStale = cacheAgeHours != null && cacheAgeHours > 24
+  const cacheVeryStale = cacheAgeHours != null && cacheAgeHours > 48
   const savedLabel = savedAt ? (() => {
     const d = new Date(savedAt), now = new Date()
     const dDate   = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
@@ -817,6 +820,21 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove }) {
     if (dDate === yesterDate) return 'ayer'
     return `hace ${Math.floor((now-d)/(1000*60*60*24))}d`
   })() : null
+
+  // Earnings warning
+  const nextEarnings = data?.next_earnings
+  const daysToEarnings = nextEarnings ? (() => {
+    try { return Math.ceil((new Date(nextEarnings) - new Date()) / (1000*60*60*24)) } catch { return null }
+  })() : null
+
+  // Ex-dividend warning
+  const exDivDate = data?.fundamentals?.exDividendDate
+  const divYield  = data?.fundamentals?.dividendYield || 0
+  const divPerShare = data?.fundamentals?.dividendPerShare
+  const daysToExDiv = exDivDate ? (() => {
+    try { return Math.ceil((new Date(exDivDate) - new Date()) / (1000*60*60*24)) } catch { return null }
+  })() : null
+  const showExDivWarning = daysToExDiv != null && daysToExDiv >= 0 && daysToExDiv <= 14 && divYield > 0.3
 
   const decisionColor = DECISION_COLOR[decision] || C.muted
   const decisionLabel = DECISION_LABEL[decision] || ''
@@ -862,7 +880,21 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove }) {
               )}
             </div>
           )}
-          {savedLabel && <div style={{ fontSize:9, color:C.muted, marginTop:1 }}>Actualizado {savedLabel}</div>}
+          {savedLabel && (
+            <div style={{ fontSize:9, marginTop:1, display:'flex', alignItems:'center', gap:5 }}>
+              <span style={{ color: cacheVeryStale ? C.red : cacheStale ? C.amber : C.muted }}>
+                Actualizado {savedLabel}
+              </span>
+              {cacheStale && (
+                <span style={{ fontSize:9, fontWeight:700, padding:'1px 5px', borderRadius:99,
+                  background: cacheVeryStale ? C.red+'22' : C.amber+'22',
+                  color: cacheVeryStale ? C.red : C.amber,
+                  border: `1px solid ${cacheVeryStale ? C.red : C.amber}44` }}>
+                  {cacheVeryStale ? '⚠ +48h' : '⚠ +24h'}
+                </span>
+              )}
+            </div>
+          )}
         </div>
         <div style={{ display:'flex', gap:5, alignItems:'center', flexShrink:0 }}>
           <button onClick={runAnalysis} disabled={loading} title="Re-analizar"
@@ -980,6 +1012,21 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove }) {
             </div>
           )}
 
+          {/* Confidence score */}
+          {data.scorecard?._confidence && (() => {
+            const conf = data.scorecard._confidence
+            const pct  = Math.round((conf.real / conf.total) * 100)
+            const color = pct >= 85 ? C.green : pct >= 57 ? C.amber : C.red
+            const label = pct >= 85 ? 'Alta' : pct >= 57 ? 'Media' : 'Baja'
+            return (
+              <div style={{ display:'flex', alignItems:'center', gap:7, fontSize:10, color:C.muted }}>
+                <span>Confianza del análisis:</span>
+                <span style={{ fontWeight:700, color }}>{label}</span>
+                <span style={{ color:C.muted }}>({conf.real}/{conf.total} criterios con datos reales)</span>
+              </div>
+            )
+          })()}
+
           {/* Vetos */}
           {hasVeto && (
             <div style={{ fontSize:10, color:C.red, background:'#ff406015',
@@ -998,7 +1045,10 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove }) {
           <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:6 }}>
             {[
               ['RSI', data.rsi != null ? data.rsi : '—',   data.rsi > 65 ? C.red : data.rsi < 40 ? C.amber : C.green],
-              ['RS Mansfield', data.mansfield_rs != null ? data.mansfield_rs : '—', data.mansfield_rs > 0 ? C.green : C.red],
+              ['RS vs SPY', data.mansfield_rs_raw != null
+                ? `${data.mansfield_rs_raw > 0 ? '+' : ''}${data.mansfield_rs_raw}%`
+                : data.mansfield_rs != null ? data.mansfield_rs : '—',
+                data.mansfield_rs > 0 ? C.green : C.red],
               ['HH/HL', data.hh_hl ? `${data.hh_hl.hh_count}/${data.hh_hl.hl_count}` : '—', data.hh_hl?.score >= 2 ? C.green : C.muted],
               ['Volumen%', data.vol_ratio != null ? `${data.vol_ratio}%` : '—', data.vol_ratio > 120 ? C.green : C.muted],
               ['ATR', data.atr != null ? `$${data.atr}` : '—', C.muted],
@@ -1120,10 +1170,38 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove }) {
             )
           })()}
 
-          {/* Earnings */}
-          {data.next_earnings && (
+          {/* Earnings warning */}
+          {daysToEarnings != null && daysToEarnings >= 0 && daysToEarnings <= 21 && (
+            <div style={{ fontSize:10, borderRadius:6, padding:'7px 10px',
+              background: daysToEarnings < 7 ? C.red+'22' : daysToEarnings < 14 ? C.amber+'22' : C.bg,
+              border: `1px solid ${daysToEarnings < 7 ? C.red : daysToEarnings < 14 ? C.amber : C.border}55`,
+              display:'flex', alignItems:'center', gap:6 }}>
+              <span>{daysToEarnings < 7 ? '🔴' : daysToEarnings < 14 ? '⚠️' : '📅'}</span>
+              <span style={{ color: daysToEarnings < 7 ? C.red : daysToEarnings < 14 ? C.amber : C.muted, fontWeight: daysToEarnings < 14 ? 700 : 400 }}>
+                Earnings en <strong>{daysToEarnings} días</strong> ({nextEarnings})
+                {daysToEarnings < 7 && ' — riesgo muy alto, evitar entrada'}
+                {daysToEarnings >= 7 && daysToEarnings < 14 && ' — considerar esperar resultado'}
+              </span>
+            </div>
+          )}
+          {daysToEarnings != null && daysToEarnings < 0 && nextEarnings && (
             <div style={{ fontSize:10, color:C.muted, background:C.bg, borderRadius:6, padding:'5px 9px' }}>
-              Próximos earnings: <span style={{ color:C.amber, fontWeight:600 }}>{data.next_earnings}</span>
+              Último earnings: <span style={{ fontWeight:600 }}>{nextEarnings}</span>
+            </div>
+          )}
+
+          {/* Ex-dividend warning */}
+          {showExDivWarning && (
+            <div style={{ fontSize:10, borderRadius:6, padding:'7px 10px',
+              background: daysToExDiv < 7 ? C.red+'22' : C.amber+'22',
+              border: `1px solid ${daysToExDiv < 7 ? C.red : C.amber}55`,
+              display:'flex', alignItems:'center', gap:6 }}>
+              <span>{daysToExDiv < 7 ? '🔴' : '⚠️'}</span>
+              <span style={{ color: daysToExDiv < 7 ? C.red : C.amber, fontWeight:700 }}>
+                Ex-dividend en <strong>{daysToExDiv} días</strong> ({exDivDate})
+                {divPerShare ? ` · $${divPerShare}/acción` : ''}
+                {daysToExDiv < 7 ? ' — precio caerá el monto del dividendo' : ' — presión bajista próxima'}
+              </span>
             </div>
           )}
 
@@ -1291,12 +1369,24 @@ function PositionWatchlistTable({ tickers, cache, onRemove, onRefresh, refreshin
                     <span style={{ fontFamily:'monospace', fontWeight:700, color:C.text }}>{ticker}</span>
                     {d?._savedAt && (() => {
                       const dt = new Date(d._savedAt), now = new Date()
+                      const ageH = (now - dt) / (1000*60*60)
                       const dDate = `${dt.getFullYear()}-${dt.getMonth()}-${dt.getDate()}`
                       const nDate = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`
                       const h = dt.getHours().toString().padStart(2,'0')
                       const m = dt.getMinutes().toString().padStart(2,'0')
                       const label = dDate===nDate ? `hoy ${h}:${m}` : 'ayer'
-                      return <div style={{ fontSize:9, color:C.muted, marginTop:1 }}>{label}</div>
+                      const staleColor = ageH > 48 ? C.red : ageH > 24 ? C.amber : null
+                      return (
+                        <div style={{ display:'flex', alignItems:'center', gap:4, marginTop:1 }}>
+                          <span style={{ fontSize:9, color: staleColor || C.muted }}>{label}</span>
+                          {staleColor && (
+                            <span style={{ fontSize:8, fontWeight:700, padding:'0px 4px', borderRadius:99,
+                              background: staleColor+'22', color: staleColor }}>
+                              {ageH > 48 ? '+48h' : '+24h'}
+                            </span>
+                          )}
+                        </div>
+                      )
                     })()}
                   </td>
                   <td style={{ padding:'10px', fontFamily:'monospace', color:C.text }}>
@@ -1307,13 +1397,43 @@ function PositionWatchlistTable({ tickers, cache, onRemove, onRefresh, refreshin
                     {scoreTotal != null ? `${scoreTotal}/${MAX_SCORE}` : '—'}
                   </td>
                   <td style={{ padding:'10px' }}>
-                    {decision ? (
-                      <span style={{ fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:99,
-                        color:dc, background:dc+'18' }}>
-                        {decision==='OPERAR_CONVICCION'?'CONVICCIÓN':decision==='OPERAR_CAUTELA'?'CAUTELA':'NO OPERAR'}
-                      </span>
-                    ) : <span style={{ color:C.muted }}>—</span>}
-                    {hasVeto && <span style={{ fontSize:9, color:C.red, marginLeft:5 }}>⛔</span>}
+                    <div style={{ display:'flex', alignItems:'center', gap:4, flexWrap:'wrap' }}>
+                      {decision ? (
+                        <span style={{ fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:99,
+                          color:dc, background:dc+'18' }}>
+                          {decision==='OPERAR_CONVICCION'?'CONVICCIÓN':decision==='OPERAR_CAUTELA'?'CAUTELA':'NO OPERAR'}
+                        </span>
+                      ) : <span style={{ color:C.muted }}>—</span>}
+                      {hasVeto && <span style={{ fontSize:9, color:C.red }}>⛔</span>}
+                      {d?.next_earnings && (() => {
+                        try {
+                          const days = Math.ceil((new Date(d.next_earnings) - new Date()) / (1000*60*60*24))
+                          if (days >= 0 && days < 14) return (
+                            <span title={`Earnings en ${days}d (${d.next_earnings})`}
+                              style={{ fontSize:9, fontWeight:700, padding:'1px 5px', borderRadius:99,
+                                background: days < 7 ? C.red+'22' : C.amber+'22',
+                                color: days < 7 ? C.red : C.amber }}>
+                              E{days}d
+                            </span>
+                          )
+                        } catch {}
+                        return null
+                      })()}
+                      {d?.fundamentals?.exDividendDate && (() => {
+                        try {
+                          const days = Math.ceil((new Date(d.fundamentals.exDividendDate) - new Date()) / (1000*60*60*24))
+                          const dy = d.fundamentals.dividendYield || 0
+                          if (days >= 0 && days <= 14 && dy > 0.3) return (
+                            <span title={`Ex-div en ${days}d (${d.fundamentals.exDividendDate})`}
+                              style={{ fontSize:9, fontWeight:700, padding:'1px 5px', borderRadius:99,
+                                background: C.amber+'22', color: C.amber }}>
+                              X{days}d
+                            </span>
+                          )
+                        } catch {}
+                        return null
+                      })()}
+                    </div>
                   </td>
                   <td style={{ padding:'10px', fontFamily:'monospace',
                     color: analyzed && d.rsi > 65 ? C.red : analyzed && d.rsi < 40 ? C.green : C.text }}>
@@ -1321,7 +1441,11 @@ function PositionWatchlistTable({ tickers, cache, onRemove, onRefresh, refreshin
                   </td>
                   <td style={{ padding:'10px', fontFamily:'monospace',
                     color: analyzed && d.mansfield_rs > 0 ? C.green : analyzed && d.mansfield_rs < 0 ? C.red : C.muted }}>
-                    {analyzed ? d.mansfield_rs : '—'}
+                    {analyzed
+                      ? d.mansfield_rs_raw != null
+                        ? `${d.mansfield_rs_raw > 0 ? '+' : ''}${d.mansfield_rs_raw}%`
+                        : d.mansfield_rs
+                      : '—'}
                   </td>
                   <td style={{ padding:'10px', maxWidth:130 }}>
                     {analyzed && d.sector ? (

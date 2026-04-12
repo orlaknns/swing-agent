@@ -1,5 +1,5 @@
 # KNNS TradeAgent — Contexto del Proyecto
-> Versión actual: **v19.0** · Última actualización: 2026-04-10
+> Versión actual: **v20.0** · Última actualización: 2026-04-12
 > Usar este archivo al inicio de nuevas conversaciones con Claude para retomar el proyecto sin perder contexto.
 
 ---
@@ -35,7 +35,7 @@
 swing-agent/
 ├── frontend/src/
 │   ├── App.jsx               — Selector de módulos + SwingModule completo
-│   ├── PositionModule.jsx    — Módulo completo de position trading (~1700 líneas)
+│   ├── PositionModule.jsx    — Módulo completo de position trading (~1800 líneas)
 │   ├── StockCard.jsx         — Tarjeta swing con sparkline + modal chart
 │   ├── Journal.jsx           — Journal swing (CRUD trades)
 │   ├── Dashboard.jsx         — Dashboard swing (P&L mensual)
@@ -44,8 +44,9 @@ swing-agent/
 ├── backend/
 │   └── main.py               — FastAPI: todos los endpoints
 ├── scripts/
-│   ├── test_scoring.py       — 45 tests del scoring swing (correr antes de push)
-│   └── run_screener_position.py — Screener position (corre en GitHub Actions)
+│   ├── test_scoring.py           — 45 tests del scoring swing (correr antes de push)
+│   ├── test_position_scoring.py  — 36 tests del scoring position (correr antes de push)
+│   └── run_screener_position.py  — Screener position (corre en GitHub Actions)
 ├── data/
 │   ├── screener.json             — Candidatos swing (actualizado por Actions)
 │   └── screener_position.json    — Candidatos position (actualizado por Actions)
@@ -54,8 +55,6 @@ swing-agent/
 │   └── screener-position.yml     — Cron position: lunes 14:00 UTC
 └── Doc/
     ├── contexto-proyecto.md              — Este archivo
-    ├── swing-agent-arquitectura.docx     — Documentación técnica (pendiente actualizar)
-    ├── guia-inversionista-swing-agent.docx — Guía de uso (pendiente actualizar)
     ├── mejoras-potenciales.txt           — Backlog de funcionalidades
     └── prompt_position_trading_app.md    — Prompt original de diseño position trading
 ```
@@ -179,35 +178,85 @@ GET /screener           — candidatos del screener swing
 ## ══════════════════════════════════════
 
 ### Tabs del módulo
-**Watchlist · Screener · Journal · Dashboard**
+**Watchlist · Screener · Mercado · Journal · Dashboard**
 
-### Scorecard — 8 criterios (MAX_SCORE = 51)
+### Scorecard — 7 criterios (MAX_SCORE = 51)
 
-| Criterio | Peso | Automático | Escala |
-|----------|------|-----------|--------|
-| narrativa | ×3 | Claude Haiku | 0–3 |
-| precio_sma200 | ×3 | Sí | 0 ó 3 (binario) |
-| estructura_hh_hl | ×2 | Sí (weekly candles) | 0–3 |
-| rs_relativa | ×2 | Sí (Mansfield RS) | 0–3 |
-| calidad_fundamental | ×2 | Sí (AV OVERVIEW) | 0–3 |
-| punto_entrada | ×2 | Sí | 0–3 |
-| ratio_rr | ×2 | Sí | 0–3 |
-| catalizador | ×1 | Claude Haiku | 0–3 |
+| Criterio | Peso | Automático | Escala | Notas |
+|----------|------|-----------|--------|-------|
+| narrativa | ×3 | Claude Haiku | 0–3 | Catalizador estructural de crecimiento |
+| precio_sma200 | ×3 | Sí | 0–3 | Gradual: >15%=3, 5-15%=2, 0-5%=1, bajo=0+VETO |
+| estructura_tecnica | ×3 | Sí (Stage + HH/HL) | 0–3 | Stage 2 fuerte+HH/HL=3, Stage 2+HH/HL=3, Stage 2 tardío=2, Stage 1=1 |
+| rs_relativa | ×2 | Sí (Mansfield RS) | 0–3 | Bonus +1 si lidera sector (rs_sector > 1) |
+| calidad_fundamental | ×3 | Sí (AV OVERVIEW) | 0–3 | Rev+EPS+FCF/márgenes |
+| punto_entrada | ×1 | Sí | 0–3 | Breakout con vol / pullback SMA50 / extendido |
+| ratio_rr | ×2 | Sí | 0–3 | R/R 2.5x fijo, veto si < 2 |
 
 **Decisiones:**
-- ≥38 → OPERAR CON CONVICCIÓN
-- 28–37 → OPERAR CON CAUTELA
-- <28 → NO OPERAR
+- ≥32 → OPERAR CON CONVICCIÓN
+- 22–31 → OPERAR CON CAUTELA
+- <22 → NO OPERAR
 
 **Vetos absolutos** (independiente del score):
-- `precio_sma200 === 0` → VETO
-- `ratio_rr <= 1` → VETO
+- `precio_sma200 === 0` (precio bajo SMA200) → VETO
+- `ratio_rr < 2` → VETO
+
+**Ajuste macro:**
+- SPY < SMA200 (mercado bajista) → `score_total -= 4` (penalización Weinstein)
+
+### Lógica de `estructura_tecnica` (criterio clave v20)
+
+Combina Stage Weinstein + HH/HL. La **pendiente** de SMA30 semanal distingue Stage 2 emergente de Stage 2 tardío — diferencia crítica en Weinstein:
+
+```python
+if stage == 2 and slope > 1.5%:   stage_base = 3  # Stage 2 fuerte, acelerando
+if stage == 2 and slope 0.5-1.5%: stage_base = 2  # Stage 2 establecido
+if stage == 2 and slope < 0.5%:   stage_base = 1  # Stage 2 tardío (distribución inminente)
+if stage == 1:                     stage_base = 1  # Acumulación
+else (3/4/None):                   stage_base = 0  # Penaliza
+
+hh_bonus = 1 si hh_hl_score >= 2 AND stage_base > 0
+struct_score = min(3, stage_base + hh_bonus)
+```
+
+### Lógica de `detect_hh_hl`
+
+- Usa **highs y lows reales** de velas semanales (no closes)
+- Ventana: últimas 26 semanas
+- Pivot high: `high[i] > high[i-1] AND high[i] > high[i+1]`
+- Cuenta solo pares consecutivos con movimiento mínimo 0.5%
+- Score: combined (HH+HL) ≥4=3, ≥2=2, ≥1=1, 0=0
+- **Requiere oscilaciones reales** — tendencia lineal sin pullbacks no genera pivots (correcto)
+
+### Lógica de `analyze_base`
+
+- Recorre hacia atrás desde la última vela semanal
+- Base válida: rango total ≤ 35%, sin cierre > 15% bajo el soporte
+- `sound` ≥7 semanas, `short` 3–6 semanas, `none` <3 semanas
+- El **stop sugerido** usa `base_low_weekly × 0.98` (soporte real, no % arbitrario)
+- Fallback si no hay base: mínimo de últimos 10 días diarios × 0.98
+
+### Entry / Stop / Target
+
+```python
+# Entrada
+entry = price si near_52w_high (breakout) else SMA50 (pullback)
+
+# Stop: low real de la base semanal detectada
+stop = base_low_weekly * 0.98
+# Fallback si no hay base: min(lows[-10:]) * 0.98
+
+# Target: R/R 2.5x fijo
+target = entry + (entry - stop) * 2.5
+rr = (target - entry) / (entry - stop)  # siempre ~2.5
+```
 
 ### Endpoints position
 ```
 GET  /analyze-position/{ticker}     — análisis completo + scorecard
 GET  /screener-position             — candidatos (lee data/screener_position.json)
 POST /screener-position/refresh     — trigger manual de refresh
+GET  /sector-rotation               — RS Mansfield 11 sectores SPDR vs SPY (cache 1h)
 ```
 
 ### Respuesta de `/analyze-position/{ticker}`
@@ -217,12 +266,15 @@ POST /screener-position/refresh     — trigger manual de refresh
   "price", "sma20", "sma50", "sma200",
   "rsi", "vol_ratio", "atr", "mansfield_rs", "rs_sector",
   "macro_context": { "spy_price", "spy_sma200", "spy_above_sma200", "market_regime" },
-  "hh_hl": { "hh_count", "hl_count", "score" },
+  "hh_hl": { "hh_count", "hl_count", "score", "description" },
+  "stage": { "stage", "label", "slope_4w_pct", "price_above_sma30", "description" },
+  "base": { "weeks_in_base", "base_quality", "range_pct", "breakout_vol", "description" },
   "next_earnings",
   "entry_suggested", "stop_suggested", "target_suggested", "rr_suggested",
-  "scorecard": { [criterio]: { "score_sugerido", "peso", "justificacion", "automatico" } },
+  "scorecard": { [criterio]: { "score_sugerido", "peso", "justificacion", "es_automatico" } },
   "score_total_suggested",
-  "fundamentals": { "name", "sector", "revenueGrowth", "epsGrowth", "peRatio", "mktCap", ... },
+  "market_penalty",
+  "fundamentals": { "name", "sector", "industry", "revenueGrowth", "epsGrowth", "peRatio", "mktCap", ... },
   "cashflow"
 }
 ```
@@ -232,21 +284,33 @@ POST /screener-position/refresh     — trigger manual de refresh
 **`PositionCard`**
 - Auto-analiza SOLO si no hay cache (usa `hasFetched` ref — nunca re-analiza al re-montar)
 - Botón ↻ individual: re-analiza manualmente y actualiza cache
-- Muestra: precio + SMAs, macro context SPY, score bar, vetos, 6 indicadores (RSI/RS Mansfield/HH-HL/Vol%/ATR/RS Sector), Entry/Stop/Target sugeridos, R/R, earnings, **scorecard expandible** con justificaciones y fundamentales
+- Muestra: precio + SMAs, macro context SPY, Stage badge, base analysis badge
+- Warning Stage 4, warning mercado bajista (SPY < SMA200)
+- Score bar con decisión color-coded, vetos destacados
+- 6 indicadores: RSI / RS Mansfield / HH-HL / Vol% / ATR / RS Sector
+- Entry/Stop/Target sugeridos + R/R
+- Sizing calculator: capital × %riesgo → acciones, monto, % portafolio
+- Scorecard expandible con justificaciones y fundamentales
 
 **`PositionWatchlistTable`**
-- Columnas: ticker, precio, score/51, decisión, RSI, RS SPY, macro ▲/▼, HH/HL, acciones
+- Columnas: ticker, precio, score/51, decisión, RSI, RS SPY, Stage, macro ▲/▼, sector, acciones
 - Click fila → modal con PositionCard
 
 **`PositionScreener`**
 - Candidatos de Finviz vía `/api/screener-position`
 - Criterios: Precio>SMA200, SMA50>SMA200 (golden cross), RSI 40–65, Vol>500k, Cap>$300M
+- Cada candidato enriquecido con: company, sector, revGrowth, epsGrowth, mktCap, **weeksInBase**, **baseQuality**
+- Badge "Base Nsem" en tarjeta (verde=sound, ámbar=short)
 - Actualización semanal automática (lunes 14:00 UTC)
 - Filtros por sector, agregar/quitar de watchlist
 
+**`SectorRotation`** (tab Mercado)
+- Tabla de 11 sectores SPDR ordenados por RS Mansfield desc
+- Badges TOP/WEAK, SPY header, cache 1h
+
 **`PositionJournal`** — CRUD sobre tabla `position_trades`
 
-**`PositionDashboard`** — P&L mensual, win rate, win rate por decisión
+**`PositionDashboard`** — P&L mensual, win rate, win rate por decisión (convicción/cautela)
 
 ### Screener position (GitHub Actions)
 ```yaml
@@ -255,9 +319,18 @@ cron: '0 14 * * 1'  # Lunes 14:00 UTC = 10:00 AM ET
 ```
 Script `scripts/run_screener_position.py`:
 - Scraping Finviz con filtros position
-- Enriquece con AV OVERVIEW (revGrowth, epsGrowth, mktCap)
+- Enriquece con AV OVERVIEW (revGrowth, epsGrowth, mktCap, sector, industry)
+- **Llama AV Weekly Adjusted** por candidato para calcular `weeksInBase` y `baseQuality`
 - Fallback: datos previos → lista curada 20 large-caps
 - Guarda `data/screener_position.json` y hace commit
+
+### Tests position trading
+```bash
+python3 scripts/test_position_scoring.py   # 36 tests, todos deben pasar antes de push
+```
+Casos cubiertos: ideal (CONVICCIÓN), mediocre (CAUTELA), veto SMA200, rezagada (NO OPERAR),
+HH/HL alcista/bajista, base sólida, Stage 2, R/R consistencia, fundamentales 5 combos,
+Stage 2 tardío vs emergente.
 
 ---
 
@@ -308,7 +381,8 @@ const C = {
 
 ## Convenciones
 
-- Tests antes de push swing: `python3 scripts/test_scoring.py` (45 tests, todos deben pasar)
+- Tests antes de push swing: `python3 scripts/test_scoring.py` (45 tests)
+- Tests antes de push position: `python3 scripts/test_position_scoring.py` (36 tests)
 - Commits con `Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>`
 - Push siempre con `git pull --rebase origin main && git push origin main`
 - Todos los estilos inline (sin CSS externo ni Tailwind)
@@ -334,12 +408,35 @@ const C = {
 
 8. **Screener cron**: GitHub Actions puede tener 1–1.5h de delay real.
 
+9. **detect_hh_hl requiere oscilaciones reales**: Tendencias lineales sin pullbacks no generan pivots (score=0). Esto es correcto — en datos de mercado reales siempre hay oscilaciones.
+
+10. **analyze_base con tendencia alcista larga**: Puede detectar una "base" con range 20-35% si la acción lleva muchas semanas subiendo. El stop resultante queda más lejos. Es técnicamente válido para position trading (stops amplios) pero revisar manualmente.
+
+11. **Haiku no conoce noticias recientes**: El prompt usa datos históricos de AV. Eventos recientes (earnings, aranceles, cambios de CEO) no están incluidos. Siempre revisar noticias antes de ejecutar.
+
+---
+
+## Lo que la app hace y lo que no hace
+
+### Hace bien
+- Identifica acciones en Stage 2 **emergente** (no tardío) con fundamentos sólidos y RS positiva
+- Distingue empresa buena de entrada técnica buena (AAPL fundamentales excelentes pero Stage 3 = NO OPERAR)
+- Calcula stop técnicamente válido (base semanal real, no % arbitrario)
+- Fuerza disciplina R/R 2.5x en cada operación
+- Penaliza entradas en mercado bajista (Weinstein: nunca comprar Stage 2 individual en Stage 4 de mercado)
+
+### No hace (revisar manualmente antes de ejecutar)
+- Noticias recientes del ticker (earnings, aranceles, cambios de guidance)
+- Volumen intradiario en tiempo real (15 min delay)
+- Decisión de % del portafolio total a concentrar en una posición
+
 ---
 
 ## Historial de versiones
 
 | Versión | Cambios principales |
 |---------|-------------------|
+| v20.0 | estructura_tecnica: Stage 2 tardío vs emergente (slope SMA30). Volumen breakout corregido (volumes[-25:-5]). Haiku conservador. weeks_in_base en screener. Sector Rotation tab. 36 tests position. |
 | v19.0 | Módulo Position Trading completo: watchlist con tarjetas/tabla, cache persistido, screener semanal, journal, dashboard. Selector de módulos. Rename a KNNS TradeAgent. |
 | v18.0 | Mini chart 30d + SMA21 + crosshair, tabla comparativa con ordenamiento/filtros, persistencia analysisCache en Supabase, búsqueda en Journal, columna estrellas contexto |
 | v17.0 | exit_date para Dashboard mensual, confirmación al cerrar/reabrir trade, Dashboard ComposedChart, entryZone 4 estados |
