@@ -1666,10 +1666,11 @@ async def _analyze_position_inner(ticker: str):
     except Exception as e:
         print(f"Haiku position error {ticker}: {e}")
 
-    # Score total sugerido
+    # Score total sugerido (excluir _confidence que no es criterio)
     score_total = sum(
         v["score_sugerido"] * v["peso"]
-        for v in scorecard.values()
+        for k, v in scorecard.items()
+        if k != "_confidence"
     )
 
     # Ajuste macro: en mercado bajista (SPY < SMA200) aplicar penalización
