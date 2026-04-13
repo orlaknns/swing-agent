@@ -1963,8 +1963,9 @@ async def sector_rotation():
 
     try:
         async with httpx.AsyncClient(timeout=25) as http:
-            spy_closes, *etf_results = await asyncio.gather(
+            spy_closes, vix_closes, *etf_results = await asyncio.gather(
                 fetch_spy_closes(http),
+                fetch_sector_etf_closes("VIX", http),
                 *[fetch_sector_etf_closes(etf, http) for _, etf in SECTOR_ETFS],
             )
 
@@ -2010,6 +2011,15 @@ async def sector_rotation():
         spy_past_20 = spy_closes[-21] if len(spy_closes) >= 21 else (spy_closes[0] if spy_closes else None)
         spy_mom_4w  = round((spy_closes[-1] - spy_past_20) / spy_past_20 * 100, 1) if spy_past_20 else None
 
+        # VIX actual
+        vix_price = round(vix_closes[-1], 2) if vix_closes else None
+        vix_regime = (
+            "bajo"   if vix_price and vix_price < 15 else
+            "normal" if vix_price and vix_price < 20 else
+            "elevado" if vix_price and vix_price < 30 else
+            "extremo" if vix_price else None
+        )
+
         result = {
             "sectors": sectors,
             "spy": {
@@ -2017,6 +2027,10 @@ async def sector_rotation():
                 "sma200":       round(spy_sma200, 2) if spy_sma200 else None,
                 "above_sma200": (spy_closes[-1] > spy_sma200) if (spy_closes and spy_sma200) else None,
                 "momentum_4w":  spy_mom_4w,
+            },
+            "vix": {
+                "price":  vix_price,
+                "regime": vix_regime,
             },
             "updated_at": __import__("datetime").datetime.utcnow().isoformat() + "Z",
         }

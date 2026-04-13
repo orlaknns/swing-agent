@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from './supabase.js'
 import {
-  ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid,
+  ComposedChart, Bar, Line, LineChart, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, ReferenceLine, Cell,
 } from 'recharts'
 
@@ -768,7 +768,7 @@ function PositionScreener({ watchlist, onAdd, onRemove, onAddAll }) {
 }
 
 // ── Position Card ────────────────────────────────────────────────────────────
-function PositionCard({ ticker, cachedData, onAnalysed, onRemove }) {
+function PositionCard({ ticker, cachedData, onAnalysed, onRemove, scoreHistory }) {
   const [data,       setData]       = useState(cachedData || null)
   const [loading,    setLoading]    = useState(false)
   const [error,      setError]      = useState(null)
@@ -1008,6 +1008,33 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove }) {
               <div style={{ height:6, background:C.bg, borderRadius:99, overflow:'hidden', border:`1px solid ${C.border}` }}>
                 <div style={{ height:'100%', width:`${Math.min(100,(scoreTotal/MAX_SCORE)*100)}%`,
                   background: decisionColor, borderRadius:99, transition:'width 0.4s' }} />
+              </div>
+            </div>
+          )}
+
+          {/* Historial de score */}
+          {scoreHistory && scoreHistory.length >= 2 && (
+            <div>
+              <div style={{ fontSize:9, color:C.muted, marginBottom:4, textTransform:'uppercase', letterSpacing:'0.05em' }}>
+                Historial score ({scoreHistory.length} análisis)
+              </div>
+              <ResponsiveContainer width="100%" height={52}>
+                <LineChart data={scoreHistory} margin={{ top:2, right:4, left:0, bottom:0 }}>
+                  <YAxis domain={[0, 51]} hide />
+                  <ReferenceLine y={32} stroke={C.green}  strokeDasharray="3 3" strokeOpacity={0.4} />
+                  <ReferenceLine y={22} stroke={C.amber}  strokeDasharray="3 3" strokeOpacity={0.4} />
+                  <Tooltip
+                    contentStyle={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:6, fontSize:10 }}
+                    formatter={(v, _, p) => [`${v}/51 — ${p.payload.decision}`, '']}
+                    labelFormatter={l => l}
+                  />
+                  <Line type="monotone" dataKey="score" stroke={C.accent} strokeWidth={2}
+                    dot={{ r:3, fill:C.accent }} activeDot={{ r:4 }} />
+                </LineChart>
+              </ResponsiveContainer>
+              <div style={{ display:'flex', gap:10, fontSize:9, color:C.muted, marginTop:2 }}>
+                <span style={{ color:C.green }}>— ≥32 Convicción</span>
+                <span style={{ color:C.amber }}>— ≥22 Cautela</span>
               </div>
             </div>
           )}
@@ -1503,6 +1530,72 @@ function PositionWatchlistTable({ tickers, cache, onRemove, onRefresh, refreshin
   )
 }
 
+// ── Macro Panel global ───────────────────────────────────────────────────────
+function MacroPanel() {
+  const [data,    setData]    = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetch('/api/sector-rotation')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setData(d) })
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading) return null
+  if (!data)   return null
+
+  const spy    = data.spy
+  const vix    = data.vix
+  const spyOk  = spy?.above_sma200
+  const vixColor = vix?.regime === 'bajo' ? C.green : vix?.regime === 'normal' ? '#7fd4a0'
+    : vix?.regime === 'elevado' ? C.amber : C.red
+  const vixLabel = vix?.regime === 'bajo' ? 'Bajo' : vix?.regime === 'normal' ? 'Normal'
+    : vix?.regime === 'elevado' ? 'Elevado' : 'Extremo'
+
+  return (
+    <div style={{ background: spyOk ? '#00e09608' : '#ff406008',
+      border:`1px solid ${spyOk ? C.green+'33' : C.red+'33'}`,
+      borderRadius:8, padding:'8px 14px', marginBottom:12,
+      display:'flex', alignItems:'center', gap:16, flexWrap:'wrap', fontSize:11 }}>
+      {/* SPY */}
+      <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+        <span style={{ color:C.muted }}>Mercado:</span>
+        <span style={{ fontWeight:700, color: spyOk ? C.green : C.red }}>
+          {spyOk ? '▲' : '▼'} SPY ${spy?.price}
+        </span>
+        <span style={{ color:C.muted, fontSize:10 }}>/ SMA200 ${spy?.sma200}</span>
+        {spy?.momentum_4w != null && (
+          <span style={{ fontSize:10, color: spy.momentum_4w > 0 ? C.green : C.red }}>
+            {spy.momentum_4w > 0 ? '+' : ''}{spy.momentum_4w}% 4sem
+          </span>
+        )}
+      </div>
+      {/* Separador */}
+      <span style={{ color:C.border }}>|</span>
+      {/* VIX */}
+      <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+        <span style={{ color:C.muted }}>VIX:</span>
+        <span style={{ fontWeight:700, color: vixColor }}>{vix?.price ?? '—'}</span>
+        <span style={{ fontSize:10, padding:'1px 6px', borderRadius:99,
+          background: vixColor+'22', color: vixColor, fontWeight:600 }}>
+          {vixLabel}
+        </span>
+      </div>
+      {/* Advertencia si condición desfavorable */}
+      {(!spyOk || vix?.regime === 'extremo') && (
+        <>
+          <span style={{ color:C.border }}>|</span>
+          <span style={{ fontSize:10, fontWeight:700, color: C.red }}>
+            ⚠ {!spyOk ? 'Mercado bajista' : ''}{!spyOk && vix?.regime === 'extremo' ? ' · ' : ''}{vix?.regime === 'extremo' ? 'VIX extremo' : ''}
+            {' '}— ser muy selectivo
+          </span>
+        </>
+      )}
+    </div>
+  )
+}
+
 // ── Sector Rotation Tracker ──────────────────────────────────────────────────
 function SectorRotation() {
   const [data,    setData]    = useState(null)
@@ -1679,35 +1772,41 @@ export default function PositionModule({ session, onBack }) {
 
   // Cache de análisis position
   const [posCache,   setPosCache]   = useState({})
-  const posCacheRef  = useRef({})
-  const dbLoaded     = useRef(false)
+  const posCacheRef   = useRef({})
+  const dbLoaded      = useRef(false)
+  const [posHistory,  setPosHistory]  = useState({})  // { TICKER: [{date,score,decision},...] }
+  const posHistoryRef = useRef({})
 
   // ── Carga inicial desde Supabase ──────────────────────────────────────────
   useEffect(() => {
     if (!session) return
     dbLoaded.current = false
     supabase.from('watchlist')
-      .select('position_watchlist, position_cache')
+      .select('position_watchlist, position_cache, position_score_history')
       .eq('user_id', session.user.id)
       .single()
       .then(({ data }) => {
-        const wl    = data?.position_watchlist?.length ? data.position_watchlist : []
+        const wl   = data?.position_watchlist?.length ? data.position_watchlist : []
         const cache = data?.position_cache || {}
+        const hist  = data?.position_score_history || {}
 
-        watchlistRef.current = wl
-        posCacheRef.current  = cache
+        watchlistRef.current  = wl
+        posCacheRef.current   = cache
+        posHistoryRef.current = hist
         setWatchlist(wl)
         if (Object.keys(cache).length > 0) setPosCache(cache)
+        if (Object.keys(hist).length  > 0) setPosHistory(hist)
         dbLoaded.current = true
       })
   }, [session])
 
-  const upsertAll = async (wl, cache) => {
+  const upsertAll = async (wl, cache, hist) => {
     const payload = {
-      user_id:            session.user.id,
-      position_watchlist: wl    ?? watchlistRef.current,
-      position_cache:     cache ?? posCacheRef.current,
-      updated_at:         new Date().toISOString(),
+      user_id:                  session.user.id,
+      position_watchlist:       wl    ?? watchlistRef.current,
+      position_cache:           cache ?? posCacheRef.current,
+      position_score_history:   hist  ?? posHistoryRef.current,
+      updated_at:               new Date().toISOString(),
     }
     const { error } = await supabase.from('watchlist').upsert(payload, { onConflict:'user_id' })
     if (error) console.error('[position upsertAll error]', error)
@@ -1718,7 +1817,26 @@ export default function PositionModule({ session, onBack }) {
     const next  = { ...posCacheRef.current, [ticker]: entry }
     posCacheRef.current = next
     setPosCache(next)
-    if (dbLoaded.current) upsertAll(null, next)
+
+    // Guardar snapshot en historial (máx 12 por ticker)
+    const scoreTotal = data.scorecard
+      ? Object.entries(data.scorecard).reduce((s,[k,v]) =>
+          k === '_confidence' ? s : s + (v.score_sugerido ?? 0) * (WEIGHTS[k] || 1), 0)
+      : null
+    if (scoreTotal != null) {
+      const decision = scoreTotal >= 32 ? 'CONVICCIÓN' : scoreTotal >= 22 ? 'CAUTELA' : 'NO OPERAR'
+      const snapshot = { date: new Date().toISOString().slice(0,10), score: scoreTotal, decision }
+      const prev = posHistoryRef.current[ticker] || []
+      // Evitar duplicado del mismo día
+      const filtered = prev.filter(s => s.date !== snapshot.date)
+      const updated  = [...filtered, snapshot].slice(-12)
+      const nextHist = { ...posHistoryRef.current, [ticker]: updated }
+      posHistoryRef.current = nextHist
+      setPosHistory(nextHist)
+      if (dbLoaded.current) upsertAll(null, next, nextHist)
+    } else {
+      if (dbLoaded.current) upsertAll(null, next)
+    }
   }
 
   const add = () => {
@@ -1809,6 +1927,9 @@ export default function PositionModule({ session, onBack }) {
             <span style={{ fontSize:11, color:C.muted }}>Position Trading · Mediano plazo</span>
           </div>
 
+          {/* Panel macro global — solo en watchlist */}
+          {tab === 'watchlist' && <MacroPanel />}
+
           {/* Barra de búsqueda — solo en watchlist */}
           {tab === 'watchlist' && (
             <div style={{ display:'flex', gap:7, marginBottom:14 }}>
@@ -1886,6 +2007,7 @@ export default function PositionModule({ session, onBack }) {
                     cachedData={posCache[t] || null}
                     onAnalysed={cacheAnalysis}
                     onRemove={remove}
+                    scoreHistory={posHistory[t] || []}
                   />
                 ))}
               </div>
@@ -1924,6 +2046,7 @@ export default function PositionModule({ session, onBack }) {
               cachedData={posCache[tableModal] || null}
               onAnalysed={cacheAnalysis}
               onRemove={t => { remove(t); setTableModal(null) }}
+              scoreHistory={posHistory[tableModal] || []}
             />
             <button onClick={() => setTableModal(null)}
               style={{ marginTop:10, width:'100%', background:'none', border:`1px solid ${C.border}`,
