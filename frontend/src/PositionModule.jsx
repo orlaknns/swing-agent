@@ -2225,7 +2225,7 @@ export default function PositionModule({ session, onBack }) {
                 />
               </div>
             ) : (
-              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(300px, 1fr))', gap:11 }}>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(260px, 1fr))', gap:11 }}>
                 {wl.map(t => (
                   <PositionCard key={t} ticker={t}
                     cachedData={posCache[t] || null}
