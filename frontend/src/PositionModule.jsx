@@ -511,9 +511,10 @@ function PositionScreener({ watchlist, onAdd, onRemove, onAddAll }) {
   const [loading,      setLoading]      = useState(false)
   const [error,        setError]        = useState(null)
   const [filter,       setFilter]       = useState('all')
-  const [screenerDate, setScreenerDate] = useState(null)
-  const [source,       setSource]       = useState(null)
-  const [updatedAt,    setUpdatedAt]    = useState(null)
+  const [screenerDate,  setScreenerDate]  = useState(null)
+  const [source,        setSource]        = useState(null)
+  const [updatedAt,     setUpdatedAt]     = useState(null)
+  const [historyWeeks,  setHistoryWeeks]  = useState(0)
   const [refreshing,   setRefreshing]   = useState(false)
   const [refreshMsg,   setRefreshMsg]   = useState(null)
 
@@ -527,6 +528,7 @@ function PositionScreener({ watchlist, onAdd, onRemove, onAddAll }) {
       setScreenerDate(data.date || null)
       setSource(data.source || null)
       setUpdatedAt(data.updatedAt || null)
+      setHistoryWeeks(data.historyWeeks || 0)
     } catch {
       setError('No se pudo conectar con el screener.')
     }
@@ -594,6 +596,12 @@ function PositionScreener({ watchlist, onAdd, onRemove, onAddAll }) {
             <span style={{ color:C.muted }}>Cargando...</span>
           )}
           <span style={{ color:C.muted, fontSize:10 }}>· Actualización semanal (lunes)</span>
+          {historyWeeks > 0 && (
+            <span style={{ fontSize:10, color:C.accent, background:C.accent+'15',
+              padding:'1px 7px', borderRadius:99 }}>
+              📋 {historyWeeks} sem de historial
+            </span>
+          )}
         </div>
       </div>
 
@@ -739,6 +747,14 @@ function PositionScreener({ watchlist, onAdd, onRemove, onAddAll }) {
                       color: c.baseQuality === 'sound' ? C.green : C.amber,
                       fontWeight:600 }}>
                       Base {c.weeksInBase}sem
+                    </span>
+                  )}
+                  {c.weeksInScreener > 0 && (
+                    <span title={`Primera vez: ${c.firstSeen || '—'}`}
+                      style={{ fontSize:9, padding:'2px 7px', borderRadius:99, fontWeight:600,
+                        background: c.weeksInScreener >= 3 ? C.accent+'22' : C.border,
+                        color: c.weeksInScreener >= 3 ? C.accent : C.muted }}>
+                      📋 {c.weeksInScreener}sem
                     </span>
                   )}
                 </div>

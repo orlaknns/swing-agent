@@ -252,6 +252,28 @@ def load_existing() -> dict | None:
     return None
 
 
+def update_history(date_str: str, tickers: list[str]) -> None:
+    """Agrega el snapshot semanal al historial acumulativo."""
+    path = "data/screener_position_history.json"
+    if os.path.exists(path):
+        with open(path) as f:
+            history = json.load(f)
+    else:
+        history = {"snapshots": []}
+
+    # Evitar duplicado del mismo día
+    history["snapshots"] = [s for s in history["snapshots"] if s["date"] != date_str]
+    history["snapshots"].append({"date": date_str, "tickers": tickers})
+
+    # Mantener máximo 52 semanas
+    history["snapshots"] = sorted(history["snapshots"], key=lambda s: s["date"])[-52:]
+    history["updated_at"] = date_str
+
+    with open(path, "w") as f:
+        json.dump(history, f, indent=2)
+    print(f"Historial actualizado: {len(history['snapshots'])} semanas acumuladas")
+
+
 CURATED_FALLBACK = [
     {"ticker":"AAPL",  "company":"Apple Inc",            "sector":"Technology",          "mktCap":"$3.0T"},
     {"ticker":"MSFT",  "company":"Microsoft Corp",        "sector":"Technology",          "mktCap":"$3.1T"},
@@ -332,6 +354,10 @@ async def main():
     with open("data/screener_position.json", "w") as f:
         json.dump(result, f, indent=2)
     print(f"Guardado — source: {result['source']}, count: {result['count']}")
+
+    # Actualizar historial acumulativo solo si los datos son frescos de Finviz
+    if result.get("source") == "finviz" and result.get("tickers"):
+        update_history(date_str, result["tickers"])
 
 
 if __name__ == "__main__":

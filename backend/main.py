@@ -1839,7 +1839,10 @@ _POSITION_SCREENER_CACHE: dict = {}
 _POSITION_SCREENER_TS: float = 0
 _POSITION_SCREENER_TTL = 3600  # 1 hora — se actualiza semanalmente
 
-_GITHUB_RAW_POSITION = "https://raw.githubusercontent.com/orlaknns/swing-agent/main/data/screener_position.json"
+_GITHUB_RAW_POSITION         = "https://raw.githubusercontent.com/orlaknns/swing-agent/main/data/screener_position.json"
+_GITHUB_RAW_POSITION_HISTORY = "https://raw.githubusercontent.com/orlaknns/swing-agent/main/data/screener_position_history.json"
+_POSITION_HISTORY_CACHE: dict = {}
+_POSITION_HISTORY_TS: float   = 0
 
 _POSITION_CURATED_FALLBACK = {
     "candidates": [
@@ -1884,11 +1887,50 @@ async def _load_position_screener_json() -> dict:
     return _POSITION_SCREENER_CACHE or _POSITION_CURATED_FALLBACK
 
 
+async def _load_position_history() -> dict:
+    """Lee screener_position_history.json desde GitHub raw con caché de 1 hora."""
+    global _POSITION_HISTORY_CACHE, _POSITION_HISTORY_TS
+    now = _time.time()
+    if _POSITION_HISTORY_CACHE and (now - _POSITION_HISTORY_TS) < 3600:
+        return _POSITION_HISTORY_CACHE
+    try:
+        async with httpx.AsyncClient(timeout=10) as c:
+            r = await c.get(f"{_GITHUB_RAW_POSITION_HISTORY}?t={int(now)}",
+                            headers={"Cache-Control": "no-cache"})
+            if r.status_code == 200:
+                _POSITION_HISTORY_CACHE = r.json()
+                _POSITION_HISTORY_TS    = now
+                return _POSITION_HISTORY_CACHE
+    except Exception:
+        pass
+    return _POSITION_HISTORY_CACHE or {"snapshots": []}
+
+
 @app.get("/screener-position")
 async def screener_position():
     """Devuelve candidatas de position trading desde GitHub (actualizado semanalmente)."""
-    data = await _load_position_screener_json()
+    data, history = await asyncio.gather(
+        _load_position_screener_json(),
+        _load_position_history(),
+    )
     candidates = data.get("candidates", [])
+
+    # Calcular frecuencia histórica por ticker
+    snapshots = history.get("snapshots", [])
+    ticker_weeks: dict[str, int] = {}
+    ticker_first: dict[str, str] = {}
+    for snap in snapshots:
+        for t in snap.get("tickers", []):
+            ticker_weeks[t] = ticker_weeks.get(t, 0) + 1
+            if t not in ticker_first:
+                ticker_first[t] = snap["date"]
+
+    # Enriquecer candidatos con datos históricos
+    for c in candidates:
+        t = c.get("ticker", "")
+        c["weeksInScreener"] = ticker_weeks.get(t, 0)
+        c["firstSeen"]       = ticker_first.get(t)
+
     return JSONResponse(
         content={
             "candidates": candidates,
@@ -1897,6 +1939,7 @@ async def screener_position():
             "updatedAt": data.get("updatedAt", ""),
             "source": data.get("source", "curated"),
             "criteria": data.get("criteria", {}),
+            "historyWeeks": len(snapshots),
         },
         media_type="application/json; charset=utf-8"
     )
