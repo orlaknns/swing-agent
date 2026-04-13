@@ -506,7 +506,7 @@ const SECTOR_COLORS = {
 }
 
 // ── Position Screener ────────────────────────────────────────────────────────
-function PositionScreener({ watchlist, onAdd, onRemove, onAddAll }) {
+function PositionScreener({ watchlist, onAdd, onRemove, onAddAll, posCache }) {
   const [candidates,   setCandidates]   = useState([])
   const [loading,      setLoading]      = useState(false)
   const [error,        setError]        = useState(null)
@@ -517,6 +517,9 @@ function PositionScreener({ watchlist, onAdd, onRemove, onAddAll }) {
   const [historyWeeks,  setHistoryWeeks]  = useState(0)
   const [refreshing,   setRefreshing]   = useState(false)
   const [refreshMsg,   setRefreshMsg]   = useState(null)
+  const [preview,      setPreview]      = useState(null)   // ticker en modal
+  const [previewData,  setPreviewData]  = useState(null)   // datos del análisis
+  const [previewLoad,  setPreviewLoad]  = useState(false)
 
   const load = async () => {
     setLoading(true); setError(null)
@@ -536,6 +539,22 @@ function PositionScreener({ watchlist, onAdd, onRemove, onAddAll }) {
   }
 
   useEffect(() => { load() }, [])
+
+  const openPreview = async (ticker) => {
+    setPreview(ticker)
+    // Usar caché si existe
+    if (posCache?.[ticker]) {
+      setPreviewData(posCache[ticker])
+      return
+    }
+    setPreviewData(null)
+    setPreviewLoad(true)
+    try {
+      const res = await fetch(`/api/analyze-position/${ticker}`)
+      if (res.ok) setPreviewData(await res.json())
+    } catch {}
+    setPreviewLoad(false)
+  }
 
   const triggerRefresh = async () => {
     setRefreshing(true); setRefreshMsg(null)
@@ -682,12 +701,17 @@ function PositionScreener({ watchlist, onAdd, onRemove, onAddAll }) {
             const added = inWatchlist(c.ticker)
             const sectorColor = SECTOR_COLORS[c.sector] || C.muted
             return (
-              <div key={c.ticker} style={{
-                background:C.card,
-                border:`1px solid ${added ? C.green+'55' : C.border}`,
-                borderRadius:10, padding:'12px 14px',
-                borderLeft:`3px solid ${added ? C.green : sectorColor}`,
-              }}>
+              <div key={c.ticker} onClick={() => openPreview(c.ticker)}
+                style={{
+                  background:C.card,
+                  border:`1px solid ${added ? C.green+'55' : C.border}`,
+                  borderRadius:10, padding:'12px 14px',
+                  borderLeft:`3px solid ${added ? C.green : sectorColor}`,
+                  cursor:'pointer', transition:'border-color 0.15s',
+                }}
+                onMouseEnter={e => e.currentTarget.style.borderColor = added ? C.green : C.accent+'66'}
+                onMouseLeave={e => e.currentTarget.style.borderColor = added ? C.green+'55' : C.border}
+              >
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:8 }}>
                   <div>
                     <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
@@ -704,7 +728,7 @@ function PositionScreener({ watchlist, onAdd, onRemove, onAddAll }) {
                       {c.company}
                     </div>
                   </div>
-                  <button onClick={() => added ? onRemove(c.ticker) : onAdd(c.ticker)}
+                  <button onClick={e => { e.stopPropagation(); added ? onRemove(c.ticker) : onAdd(c.ticker) }}
                     style={{ background: added ? C.red+'22' : C.green,
                       border: added ? `1px solid ${C.red}66` : 'none',
                       borderRadius:7, color: added ? C.red : '#000',
@@ -777,6 +801,131 @@ function PositionScreener({ watchlist, onAdd, onRemove, onAddAll }) {
           border:`1px solid ${C.border}`, fontSize:11, color:C.muted }}>
           <b style={{ color:C.amber }}>Aviso:</b> Estas acciones cumplen criterios técnicos de position trading.
           Analiza cada una con el tab Análisis antes de operar — el screener es un punto de partida.
+        </div>
+      )}
+
+      {/* Modal vista previa */}
+      {preview && (
+        <div onClick={() => { setPreview(null); setPreviewData(null) }}
+          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.75)', zIndex:3000,
+            display:'flex', alignItems:'center', justifyContent:'center', padding:'24px 16px' }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:14,
+              width:'100%', maxWidth:360, padding:'18px', display:'flex', flexDirection:'column', gap:12 }}>
+
+            {/* Header modal */}
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                <span style={{ fontSize:18, fontWeight:700, fontFamily:'monospace', color:C.text }}>{preview}</span>
+                {previewData && (() => {
+                  const sc = previewData.scorecard
+                  const total = sc ? Object.entries(sc).reduce((s,[k,v]) =>
+                    k==='_confidence' ? s : s+(v.score_sugerido??0)*(WEIGHTS[k]||1), 0) : null
+                  const dec = total == null ? null : total >= 32 ? 'OPERAR_CONVICCION' : total >= 22 ? 'OPERAR_CAUTELA' : 'NO_OPERAR'
+                  const dc = DECISION_COLOR[dec] || C.muted
+                  const dl = DECISION_LABEL[dec] || ''
+                  return total != null ? (
+                    <>
+                      <span style={{ fontSize:9, fontWeight:700, padding:'2px 8px', borderRadius:99,
+                        color:dc, background:dc+'18', border:`1px solid ${dc}44` }}>{dl}</span>
+                      <span style={{ fontSize:13, fontWeight:700, fontFamily:'monospace', color:dc }}>{total}/51</span>
+                    </>
+                  ) : null
+                })()}
+              </div>
+              <button onClick={() => { setPreview(null); setPreviewData(null) }}
+                style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:5,
+                  color:C.muted, cursor:'pointer', padding:'3px 8px', fontSize:13 }}>×</button>
+            </div>
+
+            {/* Loading */}
+            {previewLoad && (
+              <div style={{ textAlign:'center', padding:'24px', color:C.muted, fontSize:12 }}>
+                Analizando {preview}…
+              </div>
+            )}
+
+            {/* Sin datos */}
+            {!previewLoad && !previewData && (
+              <div style={{ textAlign:'center', padding:'16px', color:C.muted, fontSize:11 }}>
+                No se pudo obtener el análisis
+              </div>
+            )}
+
+            {/* Datos */}
+            {previewData && !previewLoad && (() => {
+              const d = previewData
+              const daysToEarn = d.next_earnings ? (() => {
+                try { return Math.ceil((new Date(d.next_earnings) - new Date()) / (1000*60*60*24)) } catch { return null }
+              })() : null
+
+              return (
+                <>
+                  {/* 4 indicadores clave */}
+                  <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:6 }}>
+                    {[
+                      ['RSI', d.rsi != null ? d.rsi?.toFixed(1) : '—',
+                        d.rsi > 65 ? C.red : d.rsi < 40 ? C.amber : C.green],
+                      ['RS vs SPY', d.mansfield_rs_raw != null
+                        ? `${d.mansfield_rs_raw > 0?'+':''}${d.mansfield_rs_raw}%`
+                        : d.mansfield_rs ?? '—',
+                        d.mansfield_rs > 0 ? C.green : C.red],
+                      ['HH/HL', d.hh_hl ? `${d.hh_hl.hh_count}/${d.hh_hl.hl_count}` : '—',
+                        d.hh_hl?.score >= 2 ? C.green : C.muted],
+                      ['Stage', d.stage?.stage != null ? `S${d.stage.stage} — ${d.stage.label || ''}` : 'Desconocido',
+                        d.stage?.stage === 2 ? C.green : d.stage?.stage === 1 ? C.muted : d.stage?.stage === 3 ? C.amber : d.stage?.stage === 4 ? C.red : C.muted],
+                    ].map(([label, val, color]) => (
+                      <div key={label} style={{ background:C.bg, borderRadius:6, padding:'7px 10px' }}>
+                        <div style={{ fontSize:8, color:C.muted, textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:2 }}>{label}</div>
+                        <div style={{ fontSize:11, fontWeight:700, color, fontFamily:'monospace' }}>{val}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Entrada / Stop / Target */}
+                  {(d.entry_suggested || d.stop_suggested || d.target_suggested) && (
+                    <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:6 }}>
+                      {[
+                        ['Entrada', d.entry_suggested, C.amber],
+                        ['Stop',    d.stop_suggested,  C.red],
+                        ['Target',  d.target_suggested, C.green],
+                      ].map(([label, val, color]) => (
+                        <div key={label} style={{ background:C.bg, borderRadius:6, padding:'6px 8px', textAlign:'center' }}>
+                          <div style={{ fontSize:8, color:C.muted, textTransform:'uppercase', marginBottom:2 }}>{label}</div>
+                          <div style={{ fontSize:11, fontWeight:700, color, fontFamily:'monospace' }}>
+                            {val ? `$${val}` : '—'}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Earnings warning */}
+                  {daysToEarn != null && daysToEarn >= 0 && daysToEarn <= 21 && (
+                    <div style={{ fontSize:10, borderRadius:6, padding:'6px 10px',
+                      background: daysToEarn < 7 ? C.red+'22' : C.amber+'22',
+                      border: `1px solid ${daysToEarn < 7 ? C.red : C.amber}44`,
+                      color: daysToEarn < 7 ? C.red : C.amber, fontWeight:600 }}>
+                      {daysToEarn < 7 ? '🔴' : '⚠️'} Earnings en {daysToEarn} días ({d.next_earnings})
+                    </div>
+                  )}
+
+                  {/* Botón agregar */}
+                  <button onClick={() => {
+                    watchlist.includes(preview) ? onRemove(preview) : onAdd(preview)
+                    setPreview(null); setPreviewData(null)
+                  }} style={{
+                    background: watchlist.includes(preview) ? C.red+'22' : C.green,
+                    border: watchlist.includes(preview) ? `1px solid ${C.red}66` : 'none',
+                    borderRadius:8, color: watchlist.includes(preview) ? C.red : '#000',
+                    fontWeight:700, padding:'9px', cursor:'pointer', fontSize:12, width:'100%'
+                  }}>
+                    {watchlist.includes(preview) ? '− Quitar de watchlist' : '+ Agregar a watchlist'}
+                  </button>
+                </>
+              )
+            })()}
+          </div>
         </div>
       )}
     </div>
@@ -2097,7 +2246,8 @@ export default function PositionModule({ session, onBack }) {
         {/* Screener */}
         <div style={{ display: tab==='screener' ? 'block' : 'none' }}>
           <PositionScreener watchlist={wl}
-            onAdd={addToWatchlist} onRemove={remove} onAddAll={addAllToWatchlist} />
+            onAdd={addToWatchlist} onRemove={remove} onAddAll={addAllToWatchlist}
+            posCache={posCache} />
         </div>
 
         {/* Mercado */}
