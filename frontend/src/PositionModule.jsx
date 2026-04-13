@@ -1121,6 +1121,12 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove, scoreHistory }
           Analizando {ticker}...
         </div>
       )}
+      {loading && data && (
+        <div style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 0' }}>
+          <div style={{ width:13, height:13, border:`2px solid ${C.border}`, borderTop:`2px solid ${C.green}`, borderRadius:'50%', animation:'spin 0.7s linear infinite', flexShrink:0 }}/>
+          <span style={{ fontSize:12, color:C.muted }}>Obteniendo datos actualizados…</span>
+        </div>
+      )}
 
       {/* ── Datos ── */}
       {data && (
