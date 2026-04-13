@@ -1962,12 +1962,17 @@ async def sector_rotation():
                             media_type="application/json; charset=utf-8")
 
     try:
+        import asyncio as _aio
+        # Llamadas secuenciales con delay para evitar rate limit de AV
+        # Solo se ejecuta si no hay caché válido (1h TTL por ETF)
         async with httpx.AsyncClient(timeout=25) as http:
-            spy_closes, vix_closes, *etf_results = await asyncio.gather(
-                fetch_spy_closes(http),
-                fetch_sector_etf_closes("VIX", http),
-                *[fetch_sector_etf_closes(etf, http) for _, etf in SECTOR_ETFS],
-            )
+            spy_closes = await fetch_spy_closes(http)
+            await _aio.sleep(0.5)
+            vix_closes = await fetch_sector_etf_closes("VIX", http)
+            etf_results = []
+            for _, etf in SECTOR_ETFS:
+                await _aio.sleep(0.5)
+                etf_results.append(await fetch_sector_etf_closes(etf, http))
 
         sectors = []
         for (sector_name, etf_symbol), closes in zip(SECTOR_ETFS, etf_results):
