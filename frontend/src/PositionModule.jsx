@@ -2145,8 +2145,10 @@ export default function PositionModule({ session, onBack }) {
                 padding:'3px 9px', cursor:'pointer', fontSize:10, marginRight:4 }}>
               ← Módulos
             </button>
-            <h1 style={{ fontSize:22, fontWeight:700, letterSpacing:'-0.02em' }}>KNNS TradeAgent</h1>
-            <span style={{ fontSize:11, color:C.muted }}>Position Trading · Mediano plazo</span>
+            <div>
+              <span style={{ fontSize:11, color:C.muted, letterSpacing:'0.04em', textTransform:'uppercase' }}>KNNS TradeAgent</span>
+              <h1 style={{ fontSize:22, fontWeight:700, letterSpacing:'-0.02em', color:'#00e096', margin:0 }}>Position Trading</h1>
+            </div>
           </div>
 
           {/* Panel macro global — solo en watchlist */}

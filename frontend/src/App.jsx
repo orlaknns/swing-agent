@@ -557,8 +557,10 @@ export default function App() {
                 padding:'3px 9px', cursor:'pointer', fontSize:10, marginRight:4 }}>
               ← Módulos
             </button>
-            <h1 style={{ fontSize:22, fontWeight:700, letterSpacing:'-0.02em' }}>KNNS TradeAgent</h1>
-            <span style={{ fontSize:11, color:C.muted }}>Swing Trading · NYSE / NASDAQ</span>
+            <div>
+              <span style={{ fontSize:11, color:C.muted, letterSpacing:'0.04em', textTransform:'uppercase' }}>KNNS TradeAgent</span>
+              <h1 style={{ fontSize:22, fontWeight:700, letterSpacing:'-0.02em', color:C.accent, margin:0 }}>Swing Trading</h1>
+            </div>
           </div>
 
           {tab === 'watchlist' && (
