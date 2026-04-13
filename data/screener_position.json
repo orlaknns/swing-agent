@@ -3,402 +3,562 @@
     {
       "ticker": "NVDA",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "FSLY",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "MU",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "AAPL",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "PFE",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "APLD",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "VG",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "CIFR",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "XOM",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "RIVN",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "GOOGL",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "RKLB",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "CDE",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "CSCO",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "CORZ",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "WBD",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "LUNR",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "RIOT",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "WMT",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "SLB",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "TSM",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "RF",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "AXTI",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "HPE",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "GOOG",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "ASTS",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "AG",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "HAL",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "KO",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "ERIC",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "AGNC",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "DOW",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "PCG",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "SAN",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "KMI",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "DOCN",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "COP",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "OXY",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "DVN",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "PR",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "APH",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "MRK",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "B",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "CNH",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "PL",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "KEY",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "TFC",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "BP",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "SATS",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "BE",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "PTEN",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "CSX",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "QXO",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "ET",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "BMY",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "MCHP",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "HL",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "DAL",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "RCAT",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "HST",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "WFC",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "CVE",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "FITB",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "BCS",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "ARM",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "USB",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "JNJ",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "GAP",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "LITE",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "MO",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "ANET",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "VTRS",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "XP",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "KGC",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "NEM",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "MRNA",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "ON",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "BKR",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "CNQ",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     },
     {
       "ticker": "KIM",
       "company": "",
-      "sector": ""
+      "sector": "",
+      "weeksInBase": null,
+      "baseQuality": null
     }
   ],
   "tickers": [
@@ -484,8 +644,8 @@
     "KIM"
   ],
   "count": 80,
-  "date": "2026-04-11",
-  "updatedAt": "2026-04-11 23:38 UTC",
+  "date": "2026-04-13",
+  "updatedAt": "2026-04-13 02:32 UTC",
   "source": "finviz",
   "criteria": {
     "exchange": "NYSE, NASDAQ",
