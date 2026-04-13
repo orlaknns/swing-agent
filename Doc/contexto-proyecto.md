@@ -1,5 +1,5 @@
 # KNNS TradeAgent — Contexto del Proyecto
-> Versión actual: **v20.0** · Última actualización: 2026-04-12
+> Versión actual: **v21.0** · Última actualización: 2026-04-13
 > Usar este archivo al inicio de nuevas conversaciones con Claude para retomar el proyecto sin perder contexto.
 
 ---
@@ -289,8 +289,13 @@ GET  /sector-rotation               — RS Mansfield 11 sectores SPDR vs SPY (ca
 - Score bar con decisión color-coded, vetos destacados
 - 6 indicadores: RSI / RS Mansfield / HH-HL / Vol% / ATR / RS Sector
 - Entry/Stop/Target sugeridos + R/R
-- Sizing calculator: capital × %riesgo → acciones, monto, % portafolio
+- Sizing calculator integrado: capital × %riesgo → acciones, monto, % portafolio, ganancia/pérdida potencial
 - Scorecard expandible con justificaciones y fundamentales
+- Badge caché viejo (>24h naranja, >48h rojo)
+- Earnings warning prominente (<7d rojo, 7-14d naranja)
+- Ex-dividend warning (<7d rojo, 7-14d naranja, solo si yield >0.3%)
+- RS SPY sin cap: valor real en % (ej: +43% vs SPY)
+- Confidence score: cuántos de los 7 criterios tienen datos reales vs defaults
 
 **`PositionWatchlistTable`**
 - Columnas: ticker, precio, score/51, decisión, RSI, RS SPY, Stage, macro ▲/▼, sector, acciones
@@ -436,6 +441,7 @@ const C = {
 
 | Versión | Cambios principales |
 |---------|-------------------|
+| v21.0 | Sizing calculator en PositionCard (capital+riskPct → acciones/monto/ganancia). Badge caché viejo. Earnings y ex-dividend warnings prominentes. RS SPY sin cap (valor real %). Confidence score del análisis (datos reales vs defaults). |
 | v20.0 | estructura_tecnica: Stage 2 tardío vs emergente (slope SMA30). Volumen breakout corregido (volumes[-25:-5]). Haiku conservador. weeks_in_base en screener. Sector Rotation tab. 36 tests position. |
 | v19.0 | Módulo Position Trading completo: watchlist con tarjetas/tabla, cache persistido, screener semanal, journal, dashboard. Selector de módulos. Rename a KNNS TradeAgent. |
 | v18.0 | Mini chart 30d + SMA21 + crosshair, tabla comparativa con ordenamiento/filtros, persistencia analysisCache en Supabase, búsqueda en Journal, columna estrellas contexto |

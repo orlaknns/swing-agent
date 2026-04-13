@@ -1,5 +1,5 @@
 KNNS TRADEAGENT — MEJORAS POTENCIALES
-Última revisión: 2026-04-12
+Última revisión: 2026-04-13
 ========================================
 
 ESTADO LEYENDA
@@ -151,10 +151,10 @@ PENDIENTES POSITION
     Permitir que el usuario ajuste los scores sugeridos por el sistema
     (sliders editables post-análisis automático). Guardar versión manual vs AUTO.
 
-[ ] G. SIZING CALCULATOR INTEGRADO EN TARJETA
+[x] G. SIZING CALCULATOR INTEGRADO EN TARJETA
     Capital × % riesgo → número de acciones, % del portafolio, R/R real.
-    Actualmente el cálculo es orientativo (entry/stop/target sugeridos).
-    Falta: input de capital real del usuario y riesgo por operación.
+    Inputs en PositionCard: capital (USD) + % riesgo → acciones, monto invertido,
+    ganancia potencial, pérdida máxima. Default 1% riesgo.
 
 [ ] H. SEGUIMIENTO DE POSICIÓN ACTIVA
     Una vez abierta la posición, mostrar P&L en tiempo real vs entry price.
@@ -214,7 +214,7 @@ C  Contexto macro / VIX                 Swing     Medio     Baja         [ ]
 D  Backtesting del screener             Swing     Alto      Alta         [ ]
 E  Multi-usuario / compartido           Swing     Alto      Alta         [ ]
 F  Análisis manual editable             Position  Alto      Media        [ ]
-G  Sizing calculator integrado real     Position  Alto      Baja         [ ]
+G  Sizing calculator integrado real     Position  Alto      Baja         [x]
 H  Seguimiento posición activa          Position  Alto      Media        [ ]
 I  Tesis de invalidación                Position  Medio     Baja         [ ]
 J  Historial análisis por ticker        Position  Medio     Media        [ ]
