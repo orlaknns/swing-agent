@@ -775,10 +775,27 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove, scoreHistory }
   const [expanded,   setExpanded]   = useState(false)
   const [capital,    setCapital]    = useState('')
   const [riskPct,    setRiskPct]    = useState('1')
+  // Overrides manuales: { criterio: scoreManual (0-3) }
+  const [overrides,  setOverrides]  = useState(cachedData?._overrides || {})
+
   // Si cachedData cambia (e.g. tras ↻ manual), sincronizar
   useEffect(() => {
-    if (cachedData) setData(cachedData)
+    if (cachedData) {
+      setData(cachedData)
+      setOverrides(cachedData._overrides || {})
+    }
   }, [cachedData])
+
+  const setOverride = (key, val) => {
+    const next = { ...overrides, [key]: val }
+    // Si el valor manual coincide con el sugerido, eliminar override
+    const suggested = data?.scorecard?.[key]?.score_sugerido ?? 0
+    if (val === suggested) delete next[key]
+    setOverrides(next)
+    // Persistir en caché
+    const updated = { ...data, _overrides: next }
+    onAnalysed(ticker, updated)
+  }
 
   const runAnalysis = async () => {
     setLoading(true); setError(null)
@@ -792,14 +809,19 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove, scoreHistory }
     setLoading(false)
   }
 
-  // Score total
+  // Score total — aplica overrides manuales si existen
   const scoreTotal = data?.scorecard
-    ? Object.entries(data.scorecard).reduce((s, [k, v]) => s + (v.score_sugerido ?? 0) * (WEIGHTS[k] || 1), 0)
+    ? Object.entries(data.scorecard).reduce((s, [k, v]) => {
+        if (k === '_confidence') return s
+        const score = overrides[k] != null ? overrides[k] : (v.score_sugerido ?? 0)
+        return s + score * (WEIGHTS[k] || 1)
+      }, 0)
     : null
+  const hasOverrides = Object.keys(overrides).length > 0
   const decision = scoreTotal == null ? null :
     scoreTotal >= 32 ? 'OPERAR_CONVICCION' :
     scoreTotal >= 22 ? 'OPERAR_CAUTELA' : 'NO_OPERAR'
-  const hasVeto = data?.scorecard?.precio_sma200?.score_sugerido === 0
+  const hasVeto = (overrides['precio_sma200'] ?? data?.scorecard?.precio_sma200?.score_sugerido) === 0
   const hasRRVeto = data?.rr_suggested != null && data.rr_suggested < 2
 
   const savedAt = data?._savedAt
@@ -857,6 +879,12 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove, scoreHistory }
               <span style={{ fontSize:9, fontWeight:700, padding:'2px 8px', borderRadius:99,
                 color: decisionColor, background: decisionColor+'18', border:`1px solid ${decisionColor}44` }}>
                 {decisionLabel}
+              </span>
+            )}
+            {hasOverrides && !loading && (
+              <span style={{ fontSize:9, fontWeight:700, padding:'2px 7px', borderRadius:99,
+                color: C.amber, background: C.amber+'18', border:`1px solid ${C.amber}44` }}>
+                ✏ EDITADO
               </span>
             )}
           </div>
@@ -1245,25 +1273,33 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove, scoreHistory }
 
               {expanded && (
                 <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-                  {Object.entries(data.scorecard).map(([key, crit]) => {
-                    const score  = crit.score_sugerido ?? 0
+                  {Object.entries(data.scorecard).filter(([k]) => k !== '_confidence').map(([key, crit]) => {
+                    const suggested = crit.score_sugerido ?? 0
+                    const score     = overrides[key] != null ? overrides[key] : suggested
+                    const isOverridden = overrides[key] != null
                     const peso   = crit.peso ?? WEIGHTS[key] ?? 1
                     const color  = scoreColors[Math.min(score, 3)]
                     const esVeto = (key === 'precio_sma200' && score === 0) || (key === 'ratio_rr' && score === 0)
                     return (
                       <div key={key} style={{ padding:'8px 10px', borderRadius:7, background:C.bg,
-                        border:`1px solid ${esVeto ? C.red+'44' : C.border}` }}>
+                        border:`1px solid ${esVeto ? C.red+'44' : isOverridden ? C.amber+'44' : C.border}` }}>
                         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:3 }}>
-                          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                          <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
                             <span style={{ fontSize:11, fontWeight:600, color:C.text }}>
                               {CRITERIA_LABELS[key] || key}
                             </span>
                             <span style={{ fontSize:9, color:C.muted, background:C.card,
                               border:`1px solid ${C.border}`, borderRadius:99, padding:'1px 5px' }}>×{peso}</span>
-                            {crit.automatico && (
-                              <span style={{ fontSize:9, color:C.accent, background:C.accent+'15',
-                                border:`1px solid ${C.accent}33`, borderRadius:99, padding:'1px 5px' }}>AUTO</span>
-                            )}
+                            {isOverridden
+                              ? <span style={{ fontSize:9, color:C.amber, background:C.amber+'15',
+                                  border:`1px solid ${C.amber}33`, borderRadius:99, padding:'1px 5px' }}>
+                                  ✏ MANUAL (AUTO:{suggested})
+                                </span>
+                              : crit.es_automatico && (
+                                  <span style={{ fontSize:9, color:C.accent, background:C.accent+'15',
+                                    border:`1px solid ${C.accent}33`, borderRadius:99, padding:'1px 5px' }}>AUTO</span>
+                                )
+                            }
                             {esVeto && <span style={{ fontSize:9, color:C.red, fontWeight:700 }}>⚠ VETO</span>}
                           </div>
                           <div style={{ display:'flex', alignItems:'center', gap:5 }}>
@@ -1276,10 +1312,31 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove, scoreHistory }
                           <div style={{ height:'100%', width:`${(score/3)*100}%`, background:color, borderRadius:99 }} />
                         </div>
                         {crit.justificacion && (
-                          <div style={{ fontSize:10, color: esVeto ? C.red : C.muted, lineHeight:1.5 }}>
+                          <div style={{ fontSize:10, color: esVeto ? C.red : C.muted, lineHeight:1.5, marginBottom:6 }}>
                             {crit.justificacion}
                           </div>
                         )}
+                        {/* Botones de ajuste manual */}
+                        <div style={{ display:'flex', alignItems:'center', gap:4, marginTop:2 }}>
+                          <span style={{ fontSize:9, color:C.muted }}>Ajustar:</span>
+                          {[0,1,2,3].map(v => (
+                            <button key={v} onClick={() => setOverride(key, v)}
+                              style={{ width:22, height:22, borderRadius:4, fontSize:10, fontWeight:700,
+                                cursor:'pointer', border:'none',
+                                background: score === v ? scoreColors[v] : C.card,
+                                color: score === v ? '#000' : C.muted,
+                                outline: score === v ? `2px solid ${scoreColors[v]}` : 'none' }}>
+                              {v}
+                            </button>
+                          ))}
+                          {isOverridden && (
+                            <button onClick={() => setOverride(key, suggested)}
+                              style={{ fontSize:9, padding:'2px 6px', borderRadius:4, cursor:'pointer',
+                                background:'none', border:`1px solid ${C.border}`, color:C.muted }}>
+                              Reset
+                            </button>
+                          )}
+                        </div>
                       </div>
                     )
                   })}
