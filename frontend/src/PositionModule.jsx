@@ -2161,8 +2161,28 @@ export default function PositionModule({ session, onBack }) {
           {/* Panel macro global — solo en watchlist */}
           {tab === 'watchlist' && <MacroPanel />}
 
-          {/* Barra de búsqueda — solo en watchlist */}
-          {tab === 'watchlist' && (
+          {/* Tabs */}
+          <div style={{ display:'flex', borderTop:`1px solid ${C.border}` }}>
+            {tabs.map(([key, label]) => (
+              <button key={key} onClick={() => setTab(key)}
+                style={{ background:'none', border:'none',
+                  borderBottom: tab===key ? `2px solid ${M}` : '2px solid transparent',
+                  color: tab===key ? M : C.muted,
+                  padding:'10px 18px', cursor:'pointer', fontSize:12,
+                  fontWeight: tab===key ? 700 : 400 }}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div style={{ marginTop:20 }}>
+
+        {/* Watchlist */}
+        <div style={{ display: tab==='watchlist' ? 'block' : 'none' }}>
+          <div style={{ maxWidth:960, margin:'0 auto', padding:'0 20px' }}>
             <div style={{ display:'flex', gap:7, marginBottom:14 }}>
               <input value={search} onChange={e => setSearch(e.target.value.toUpperCase())}
                 onKeyDown={e => e.key==='Enter' && add()}
@@ -2186,30 +2206,6 @@ export default function PositionModule({ session, onBack }) {
                 {viewMode==='cards' ? '☰' : '⊞'}
               </button>
             </div>
-          )}
-
-          {/* Tabs */}
-          <div style={{ display:'flex', borderTop:`1px solid ${C.border}` }}>
-            {tabs.map(([key, label]) => (
-              <button key={key} onClick={() => setTab(key)}
-                style={{ background:'none', border:'none',
-                  borderBottom: tab===key ? `2px solid ${M}` : '2px solid transparent',
-                  color: tab===key ? M : C.muted,
-                  padding:'10px 18px', cursor:'pointer', fontSize:12,
-                  fontWeight: tab===key ? 700 : 400 }}>
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Content */}
-      <div style={{ marginTop:20 }}>
-
-        {/* Watchlist */}
-        <div style={{ display: tab==='watchlist' ? 'block' : 'none' }}>
-          <div style={{ maxWidth:960, margin:'0 auto', padding:'0 20px' }}>
             {!isLoaded ? (
               <div style={{ textAlign:'center', padding:'60px', color:C.muted, fontSize:13 }}>Cargando watchlist...</div>
             ) : wl.length === 0 ? (

@@ -563,30 +563,6 @@ export default function App() {
             </div>
           </div>
 
-          {tab === 'watchlist' && (
-            <div style={{ display:'flex', gap:7, marginBottom:14 }}>
-              <input value={search} onChange={e => setSearch(e.target.value.toUpperCase())}
-                onKeyDown={e => e.key==='Enter' && add()}
-                placeholder="Agregar ticker… ej: COIN, PLTR, SOFI"
-                style={{ flex:1, background:'#0f1929', border:`1px solid ${C.border}`, borderRadius:9, padding:'10px 14px', color:C.text, fontSize:13, outline:'none' }}
-                onFocus={e => e.target.style.borderColor=C.accent}
-                onBlur={e  => e.target.style.borderColor=C.border}
-              />
-              <button onClick={add}
-                style={{ background:C.accent, border:'none', borderRadius:9, color:'#000', fontWeight:700, padding:'10px 16px', cursor:'pointer', fontSize:13 }}>
-                + Agregar
-              </button>
-              <button onClick={() => setViewModeWatchlist(v => v === 'cards' ? 'table' : 'cards')}
-                title={viewModeWatchlist === 'cards' ? 'Ver tabla' : 'Ver tarjetas'}
-                style={{ background: viewModeWatchlist === 'table' ? C.accent+'22' : 'none',
-                  border:`1px solid ${viewModeWatchlist === 'table' ? C.accent : C.border}`,
-                  borderRadius:9, color: viewModeWatchlist === 'table' ? C.accent : C.muted,
-                  padding:'10px 13px', cursor:'pointer', fontSize:13 }}>
-                {viewModeWatchlist === 'cards' ? '☰' : '⊞'}
-              </button>
-            </div>
-          )}
-
           {/* Tabs */}
           <div style={{ display:'flex', borderTop:`1px solid ${C.border}` }}>
             {tabs.map(([key, label]) => (
@@ -618,6 +594,27 @@ export default function App() {
         {/* Watchlist activa — display:none para preservar estado */}
         <div style={{ display: tab === 'watchlist' ? 'block' : 'none' }}>
           <div style={{ maxWidth:960, margin:'0 auto', padding:'0 20px' }}>
+            <div style={{ display:'flex', gap:7, marginBottom:14 }}>
+              <input value={search} onChange={e => setSearch(e.target.value.toUpperCase())}
+                onKeyDown={e => e.key==='Enter' && add()}
+                placeholder="Agregar ticker… ej: COIN, PLTR, SOFI"
+                style={{ flex:1, background:'#0f1929', border:`1px solid ${C.border}`, borderRadius:9, padding:'10px 14px', color:C.text, fontSize:13, outline:'none' }}
+                onFocus={e => e.target.style.borderColor=C.accent}
+                onBlur={e  => e.target.style.borderColor=C.border}
+              />
+              <button onClick={add}
+                style={{ background:C.accent, border:'none', borderRadius:9, color:'#000', fontWeight:700, padding:'10px 16px', cursor:'pointer', fontSize:13 }}>
+                + Agregar
+              </button>
+              <button onClick={() => setViewModeWatchlist(v => v === 'cards' ? 'table' : 'cards')}
+                title={viewModeWatchlist === 'cards' ? 'Ver tabla' : 'Ver tarjetas'}
+                style={{ background: viewModeWatchlist === 'table' ? C.accent+'22' : 'none',
+                  border:`1px solid ${viewModeWatchlist === 'table' ? C.accent : C.border}`,
+                  borderRadius:9, color: viewModeWatchlist === 'table' ? C.accent : C.muted,
+                  padding:'10px 13px', cursor:'pointer', fontSize:13 }}>
+                {viewModeWatchlist === 'cards' ? '☰' : '⊞'}
+              </button>
+            </div>
             {!isLoaded ? (
               <div style={{ textAlign:'center', padding:'60px', color:C.muted, fontSize:13 }}>Cargando watchlist...</div>
             ) : (
