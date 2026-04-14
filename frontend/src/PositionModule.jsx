@@ -2284,10 +2284,10 @@ export default function PositionModule({ session, onBack, swingExposedTickers = 
     setRefreshingTickers(prev => { const n={...prev}; delete n[ticker]; return n })
   }
 
-  const [wlFilters, setWlFilters] = useState({ decision:'all', rsiMin:'', rsiMax:'', stage:'all', hhhl:'all' })
+  const [wlFilters, setWlFilters] = useState({ decision:'all', rsiMin:'', rsiMax:'', stage:'all', hhhl:'all', sector:'all' })
   const toggleWlFilter = (key, val) => setWlFilters(f => ({ ...f, [key]: f[key]===val ? 'all' : val }))
-  const resetWlFilters = () => setWlFilters({ decision:'all', rsiMin:'', rsiMax:'', stage:'all', hhhl:'all' })
-  const hasWlFilters = wlFilters.decision!=='all' || wlFilters.rsiMin!=='' || wlFilters.rsiMax!=='' || wlFilters.stage!=='all' || wlFilters.hhhl!=='all'
+  const resetWlFilters = () => setWlFilters({ decision:'all', rsiMin:'', rsiMax:'', stage:'all', hhhl:'all', sector:'all' })
+  const hasWlFilters = wlFilters.decision!=='all' || wlFilters.rsiMin!=='' || wlFilters.rsiMax!=='' || wlFilters.stage!=='all' || wlFilters.hhhl!=='all' || wlFilters.sector!=='all'
 
   const wl = watchlist || []
   const isLoaded = watchlist !== null
@@ -2298,9 +2298,12 @@ export default function PositionModule({ session, onBack, swingExposedTickers = 
       k==='_confidence' ? s : s+(v.score_sugerido??0)*(WEIGHTS[k]||1), 0)
   }
 
+  // Sectores disponibles en la watchlist actual (para el dropdown)
+  const availableSectors = [...new Set(wl.map(t => posCache[t]?.sector).filter(Boolean))].sort()
+
   const filteredWl = wl.filter(t => {
     const d = posCache[t]
-    if (!d) return wlFilters.decision==='all' && wlFilters.rsiMin==='' && wlFilters.rsiMax==='' && wlFilters.stage==='all' && wlFilters.hhhl==='all'
+    if (!d) return wlFilters.decision==='all' && wlFilters.rsiMin==='' && wlFilters.rsiMax==='' && wlFilters.stage==='all' && wlFilters.hhhl==='all' && wlFilters.sector==='all'
     const score = calcScore(d)
     const dec = calcDecision(score, d)
     if (wlFilters.decision !== 'all' && dec !== wlFilters.decision) return false
@@ -2322,6 +2325,7 @@ export default function PositionModule({ session, onBack, swingExposedTickers = 
       if (wlFilters.hhhl === 'strong' && !(score_hh >= 2)) return false
       if (wlFilters.hhhl === 'weak'   && !(score_hh < 2)) return false
     }
+    if (wlFilters.sector !== 'all' && d.sector !== wlFilters.sector) return false
     return true
   })
 
@@ -2443,6 +2447,16 @@ export default function PositionModule({ session, onBack, swingExposedTickers = 
                   <option value="all">Estructura: todas</option>
                   <option value="strong">Alcista confirmada (≥2 HH/HL)</option>
                   <option value="weak">Sin estructura clara</option>
+                </select>
+                <select value={wlFilters.sector}
+                  onChange={e => setWlFilters(f => ({ ...f, sector: e.target.value }))}
+                  style={{ background:'#0f1929', border:`1px solid ${wlFilters.sector!=='all' ? C.accent : C.border}`,
+                    borderRadius:6, color: wlFilters.sector!=='all' ? C.accent : C.text,
+                    fontSize:10, padding:'3px 8px', cursor:'pointer', outline:'none' }}>
+                  <option value="all">Sector: todos</option>
+                  {availableSectors.map(s => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
                 </select>
                 {hasWlFilters && (
                   <button onClick={resetWlFilters}
