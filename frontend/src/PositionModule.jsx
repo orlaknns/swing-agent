@@ -2146,7 +2146,7 @@ export default function PositionModule({ session, onBack }) {
               </button>
             </div>
           </div>
-          <div style={{ display:'flex', alignItems:'baseline', gap:10, marginBottom: tab==='watchlist' ? 14 : 10 }}>
+          <div style={{ display:'flex', alignItems:'baseline', gap:10, marginBottom: 10 }}>
             <button onClick={onBack}
               style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:6, color:C.muted,
                 padding:'3px 9px', cursor:'pointer', fontSize:10, marginRight:4 }}>
