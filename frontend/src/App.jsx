@@ -576,10 +576,6 @@ export default function App() {
                 style={{ background:C.accent, border:'none', borderRadius:9, color:'#000', fontWeight:700, padding:'10px 16px', cursor:'pointer', fontSize:13 }}>
                 + Agregar
               </button>
-              <button onClick={() => { setAnalysisCache({}); setRefreshKey(k=>k+1) }}
-                style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:9, color:C.muted, padding:'10px 13px', cursor:'pointer', fontSize:13 }}>
-                ↻
-              </button>
               <button onClick={() => setViewModeWatchlist(v => v === 'cards' ? 'table' : 'cards')}
                 title={viewModeWatchlist === 'cards' ? 'Ver tabla' : 'Ver tarjetas'}
                 style={{ background: viewModeWatchlist === 'table' ? C.accent+'22' : 'none',

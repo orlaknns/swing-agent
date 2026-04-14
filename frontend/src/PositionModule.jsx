@@ -2177,10 +2177,6 @@ export default function PositionModule({ session, onBack }) {
                   fontWeight:700, padding:'10px 16px', cursor:'pointer', fontSize:13 }}>
                 + Agregar
               </button>
-              <button onClick={() => { posCacheRef.current={}; setPosCache({}); upsertAll(null, {}) }}
-                style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:9,
-                  color:C.muted, padding:'10px 13px', cursor:'pointer', fontSize:13 }}
-                title="Limpiar cache y re-analizar todo">↻</button>
               <button onClick={() => setViewMode(v => v==='cards'?'table':'cards')}
                 title={viewMode==='cards'?'Ver tabla':'Ver tarjetas'}
                 style={{ background: viewMode==='table' ? M+'22' : 'none',
