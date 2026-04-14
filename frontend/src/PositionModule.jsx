@@ -2302,7 +2302,7 @@ export default function PositionModule({ session, onBack, swingExposedTickers = 
     const d = posCache[t]
     if (!d) return wlFilters.decision==='all' && wlFilters.rsiMin==='' && wlFilters.rsiMax==='' && wlFilters.stage==='all' && wlFilters.hhhl==='all'
     const score = calcScore(d)
-    const dec = score == null ? null : score >= 32 ? 'OPERAR_CONVICCION' : score >= 22 ? 'OPERAR_CAUTELA' : 'NO_OPERAR'
+    const dec = calcDecision(score, d)
     if (wlFilters.decision !== 'all' && dec !== wlFilters.decision) return false
     if (wlFilters.rsiMin !== '' || wlFilters.rsiMax !== '') {
       const rsi = d.rsi
