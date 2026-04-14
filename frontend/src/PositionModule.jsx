@@ -40,6 +40,19 @@ const ENTRY_SIGNALS = [
 const STATUS_LABELS = { planning:'Planificando', open:'Activo', closed:'Cerrado' }
 const STATUS_COLORS = { planning: C.amber, open: C.green, closed: C.muted }
 const DECISION_COLOR = { OPERAR_CONVICCION: C.green, OPERAR_CAUTELA: C.amber, NO_OPERAR: C.red }
+
+function calcDecision(scoreTotal, d) {
+  if (scoreTotal == null) return null
+  const hasVeto    = d?.scorecard?.precio_sma200?.score_sugerido === 0
+  const hasRRVeto  = d?.rr_suggested != null && d.rr_suggested < 2
+  const daysToEarn = d?.next_earnings ? (() => {
+    try { return Math.ceil((new Date(d.next_earnings) - new Date()) / (1000*60*60*24)) } catch { return null }
+  })() : null
+  const earningsNearby = daysToEarn != null && daysToEarn >= 0 && daysToEarn <= 7
+  if (hasVeto || hasRRVeto) return 'NO_OPERAR'
+  if (earningsNearby && scoreTotal >= 32) return 'OPERAR_CAUTELA'
+  return scoreTotal >= 32 ? 'OPERAR_CONVICCION' : scoreTotal >= 22 ? 'OPERAR_CAUTELA' : 'NO_OPERAR'
+}
 const DECISION_LABEL = {
   OPERAR_CONVICCION: 'OPERAR CON CONVICCIÓN',
   OPERAR_CAUTELA:    'OPERAR CON CAUTELA',
@@ -822,7 +835,7 @@ function PositionScreener({ watchlist, onAdd, onRemove, onAddAll, posCache }) {
                   const sc = previewData.scorecard
                   const total = sc ? Object.entries(sc).reduce((s,[k,v]) =>
                     k==='_confidence' ? s : s+(v.score_sugerido??0)*(WEIGHTS[k]||1), 0) : null
-                  const dec = total == null ? null : total >= 32 ? 'OPERAR_CONVICCION' : total >= 22 ? 'OPERAR_CAUTELA' : 'NO_OPERAR'
+                  const dec = calcDecision(total, previewData)
                   const dc = DECISION_COLOR[dec] || C.muted
                   const dl = DECISION_LABEL[dec] || ''
                   return total != null ? (
@@ -984,21 +997,16 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove, scoreHistory }
       }, 0)
     : null
   const hasOverrides = Object.keys(overrides).length > 0
-  const hasVeto = (overrides['precio_sma200'] ?? data?.scorecard?.precio_sma200?.score_sugerido) === 0
+  const hasVeto   = (overrides['precio_sma200'] ?? data?.scorecard?.precio_sma200?.score_sugerido) === 0
   const hasRRVeto = data?.rr_suggested != null && data.rr_suggested < 2
 
-  // Earnings ≤7d degrada la decisión a CAUTELA (no es veto duro en position trading)
-  const nextEarnings = data?.next_earnings
+  const nextEarnings   = data?.next_earnings
   const daysToEarnings = nextEarnings ? (() => {
     try { return Math.ceil((new Date(nextEarnings) - new Date()) / (1000*60*60*24)) } catch { return null }
   })() : null
   const hasEarningsNearby = daysToEarnings != null && daysToEarnings >= 0 && daysToEarnings <= 7
 
-  const decision = scoreTotal == null ? null :
-    (hasVeto || hasRRVeto) ? 'NO_OPERAR' :
-    (hasEarningsNearby && scoreTotal >= 32) ? 'OPERAR_CAUTELA' :
-    scoreTotal >= 32 ? 'OPERAR_CONVICCION' :
-    scoreTotal >= 22 ? 'OPERAR_CAUTELA' : 'NO_OPERAR'
+  const decision = calcDecision(scoreTotal, data)
 
   const savedAt = data?._savedAt
   const cacheAgeHours = savedAt ? (new Date() - new Date(savedAt)) / (1000*60*60) : null
@@ -1612,9 +1620,7 @@ function PositionWatchlistTable({ tickers, cache, onRemove, onRefresh, refreshin
           </thead>
           <tbody>
             {rows.map(({ ticker, d, scoreTotal, analyzed }) => {
-              const decision = scoreTotal == null ? null :
-                scoreTotal >= 32 ? 'OPERAR_CONVICCION' :
-                scoreTotal >= 22 ? 'OPERAR_CAUTELA' : 'NO_OPERAR'
+              const decision = calcDecision(scoreTotal, d)
               const dc = DECISION_COLOR[decision] || C.muted
               const hasVeto = d?.scorecard?.precio_sma200?.score_sugerido === 0
               return (
