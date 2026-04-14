@@ -1524,7 +1524,12 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove, scoreHistory, 
                     <span style={{ fontSize:10, color }}>
                       {isOverdue ? `vencida hace ${Math.abs(daysLeft)}d` : daysLeft === 0 ? 'hoy' : `en ${daysLeft}d`}
                     </span>
-                    <div style={{ marginLeft:'auto', display:'flex', gap:6 }}>
+                    <div style={{ marginLeft:'auto', display:'flex', flexDirection:'column', gap:4, alignItems:'stretch' }}>
+                      <button onClick={() => setEditingDate(true)}
+                        style={{ background:'none', border:`1px solid ${C.border}`,
+                          borderRadius:6, color:C.muted, cursor:'pointer', fontSize:10, padding:'3px 8px' }}>
+                        ✏ Cambiar
+                      </button>
                       {savedDate && (
                         <button onClick={() => saveDate(null)} title="Restaurar fecha automática"
                           style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:6,
@@ -1532,11 +1537,6 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove, scoreHistory, 
                           ↺ Auto
                         </button>
                       )}
-                      <button onClick={() => setEditingDate(true)}
-                        style={{ background:'none', border:`1px solid ${C.border}`,
-                          borderRadius:6, color:C.muted, cursor:'pointer', fontSize:10, padding:'3px 8px' }}>
-                        ✏ Cambiar
-                      </button>
                     </div>
                   </div>
                   <div style={{ fontSize:10, color: isOverdue || stage === 3 ? color : C.muted, marginTop:3 }}>
