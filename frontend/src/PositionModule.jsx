@@ -2225,15 +2225,16 @@ export default function PositionModule({ session, onBack }) {
             {isLoaded && wl.length > 0 && (
               <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:10, alignItems:'center' }}>
                 {/* Decisión */}
-                {[['OPERAR_CONVICCION','Convicción',C.green],['OPERAR_CAUTELA','Cautela',C.amber],['NO_OPERAR','No operar',C.red]].map(([val,label,color]) => (
-                  <button key={val} onClick={() => toggleWlFilter('decision', val)}
-                    style={{ background: wlFilters.decision===val ? color+'22' : 'none',
-                      border:`1px solid ${wlFilters.decision===val ? color : C.border}`,
-                      borderRadius:6, color: wlFilters.decision===val ? color : C.muted,
-                      padding:'3px 10px', cursor:'pointer', fontSize:10, fontWeight: wlFilters.decision===val ? 700 : 400 }}>
-                    {label}
-                  </button>
-                ))}
+                <select value={wlFilters.decision}
+                  onChange={e => setWlFilters(f => ({ ...f, decision: e.target.value }))}
+                  style={{ background:'#0f1929', border:`1px solid ${wlFilters.decision!=='all' ? C.accent : C.border}`,
+                    borderRadius:6, color: wlFilters.decision!=='all' ? C.accent : C.muted,
+                    fontSize:10, padding:'3px 8px', cursor:'pointer', outline:'none' }}>
+                  <option value="all">Decisión: todas</option>
+                  <option value="OPERAR_CONVICCION">Convicción (≥32)</option>
+                  <option value="OPERAR_CAUTELA">Cautela (22–31)</option>
+                  <option value="NO_OPERAR">No operar (&lt;22)</option>
+                </select>
                 <div style={{ width:1, height:16, background:C.border }} />
                 {/* Score */}
                 {[['high','≥32',C.green],['medium','22-31',C.amber],['low','<22',C.red]].map(([val,label,color]) => (
