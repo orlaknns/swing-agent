@@ -20,7 +20,10 @@ const SECTOR_COLORS = {
   'Utilities':           '#38bdf8',
 }
 
-export default function Discover({ watchlist, monitorList = [], openTrades = {}, onAdd, onRemove, onAddAll }) {
+const SIGNAL_LABEL = { buy:'COMPRAR', sell:'VENDER', hold:'ESPERAR', avoid:'EVITAR', monitor:'MONITOREAR' }
+const SIGNAL_COLOR = { buy:'#00e096', sell:'#ff4060', hold:'#ffb800', avoid:'#888888', monitor:'#00aaff' }
+
+export default function Discover({ watchlist, monitorList = [], openTrades = {}, analysisCache = {}, onAdd, onRemove, onAddAll }) {
   const [candidates, setCandidates] = useState([])
   const [loading, setLoading]       = useState(false)
   const [error, setError]           = useState(null)
@@ -30,6 +33,24 @@ export default function Discover({ watchlist, monitorList = [], openTrades = {},
   const [updatedAt, setUpdatedAt]   = useState(null)
   const [refreshing, setRefreshing] = useState(false)
   const [refreshMsg, setRefreshMsg] = useState(null)
+  const [preview, setPreview]       = useState(null)
+  const [previewData, setPreviewData] = useState(null)
+  const [previewLoad, setPreviewLoad] = useState(false)
+
+  const openPreview = async (ticker) => {
+    setPreview(ticker)
+    if (analysisCache[ticker]) {
+      setPreviewData(analysisCache[ticker])
+      return
+    }
+    setPreviewData(null)
+    setPreviewLoad(true)
+    try {
+      const res = await fetch(`/api/analyze/${ticker}`)
+      if (res.ok) setPreviewData(await res.json())
+    } catch {}
+    setPreviewLoad(false)
+  }
 
   const load = async () => {
     setLoading(true); setError(null)
@@ -201,12 +222,16 @@ export default function Discover({ watchlist, monitorList = [], openTrades = {},
             // Color del borde izquierdo según estado
             const leftBorder = openTrade ? C.green : monitoring ? '#00aaff' : added ? C.accent : sectorColor
             return (
-              <div key={c.ticker} style={{
+              <div key={c.ticker} onClick={() => openPreview(c.ticker)} style={{
                 background:C.card,
                 border:`1px solid ${openTrade ? C.green+'44' : monitoring ? '#00aaff33' : added ? C.accent+'44' : C.border}`,
                 borderRadius:10, padding:'12px 14px',
-                borderLeft:`3px solid ${leftBorder}`
-              }}>
+                borderLeft:`3px solid ${leftBorder}`,
+                cursor:'pointer', transition:'border-color 0.15s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.borderColor = C.accent+'66'}
+              onMouseLeave={e => e.currentTarget.style.borderColor = openTrade ? C.green+'44' : monitoring ? '#00aaff33' : added ? C.accent+'44' : C.border}
+              >
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:8 }}>
                   <div>
                     <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
@@ -239,7 +264,7 @@ export default function Discover({ watchlist, monitorList = [], openTrades = {},
                     </span>
                   ) : (
                     <button
-                      onClick={() => added ? onRemove(c.ticker) : onAdd(c.ticker)}
+                      onClick={e => { e.stopPropagation(); added ? onRemove(c.ticker) : onAdd(c.ticker) }}
                       style={{
                         background: added ? C.red+'22' : C.accent,
                         border: added ? `1px solid ${C.red}66` : 'none',
@@ -291,6 +316,117 @@ export default function Discover({ watchlist, monitorList = [], openTrades = {},
           border:`1px solid ${C.border}`, fontSize:11, color:C.muted }}>
           <b style={{ color:C.amber }}>Aviso:</b> Estas acciones cumplen criterios técnicos iniciales.
           Analiza cada una con la app antes de operar — el screener es un punto de partida, no una recomendación de compra.
+        </div>
+      )}
+
+      {/* Modal vista previa */}
+      {preview && (
+        <div onClick={() => { setPreview(null); setPreviewData(null) }}
+          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.75)', zIndex:3000,
+            display:'flex', alignItems:'center', justifyContent:'center', padding:'24px 16px' }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:14,
+              width:'100%', maxWidth:360, padding:'18px', display:'flex', flexDirection:'column', gap:12 }}>
+
+            {/* Header */}
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                <span style={{ fontSize:18, fontWeight:700, fontFamily:'monospace', color:C.text }}>{preview}</span>
+                {previewData?.signal && (
+                  <span style={{ fontSize:9, fontWeight:700, padding:'2px 8px', borderRadius:99,
+                    color: SIGNAL_COLOR[previewData.signal], background: SIGNAL_COLOR[previewData.signal]+'18',
+                    border:`1px solid ${SIGNAL_COLOR[previewData.signal]}44` }}>
+                    {SIGNAL_LABEL[previewData.signal] || previewData.signal}
+                  </span>
+                )}
+              </div>
+              <button onClick={() => { setPreview(null); setPreviewData(null) }}
+                style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:5,
+                  color:C.muted, cursor:'pointer', padding:'3px 8px', fontSize:13 }}>×</button>
+            </div>
+
+            {/* Loading */}
+            {previewLoad && (
+              <div style={{ textAlign:'center', padding:'24px', color:C.muted, fontSize:12 }}>
+                Analizando {preview}…
+              </div>
+            )}
+
+            {/* Sin datos */}
+            {!previewLoad && !previewData && (
+              <div style={{ textAlign:'center', padding:'16px', color:C.muted, fontSize:11 }}>
+                No hay análisis en caché — agrega a watchlist para analizar
+              </div>
+            )}
+
+            {/* Datos */}
+            {previewData && !previewLoad && (() => {
+              const d = previewData
+              const daysToEarn = d.next_earnings ? (() => {
+                try { return Math.ceil((new Date(d.next_earnings) - new Date()) / (1000*60*60*24)) } catch { return null }
+              })() : null
+              return (
+                <>
+                  {/* 4 indicadores */}
+                  <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:6 }}>
+                    {[
+                      ['RSI', d.rsi != null ? d.rsi?.toFixed(1) : '—',
+                        d.rsi > 65 ? C.red : d.rsi < 40 ? C.amber : C.green],
+                      ['SMA21', d.sma21 != null ? `$${d.sma21?.toFixed(2)}` : '—', C.accent],
+                      ['Score', d.score != null ? `${d.score}` : '—',
+                        d.score >= 75 ? C.green : d.score >= 45 ? C.amber : C.red],
+                      ['R:B', d.risk_reward != null ? `${d.risk_reward?.toFixed(1)}x` : '—',
+                        d.risk_reward >= 2.5 ? C.green : C.red],
+                    ].map(([label, val, color]) => (
+                      <div key={label} style={{ background:C.bg, borderRadius:6, padding:'7px 10px' }}>
+                        <div style={{ fontSize:8, color:C.muted, textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:2 }}>{label}</div>
+                        <div style={{ fontSize:11, fontWeight:700, color, fontFamily:'monospace' }}>{val}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Entrada / Stop / Target */}
+                  {(d.entry_low || d.stop_loss || d.target) && (
+                    <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:6 }}>
+                      {[
+                        ['Entrada', d.entry_mid ? `$${d.entry_mid?.toFixed(2)}` : d.entry_low ? `$${d.entry_low?.toFixed(2)}` : '—', C.amber],
+                        ['Stop',    d.stop_loss  ? `$${d.stop_loss?.toFixed(2)}`  : '—', C.red],
+                        ['Target',  d.target     ? `$${d.target?.toFixed(2)}`     : '—', C.green],
+                      ].map(([label, val, color]) => (
+                        <div key={label} style={{ background:C.bg, borderRadius:6, padding:'6px 8px', textAlign:'center' }}>
+                          <div style={{ fontSize:8, color:C.muted, textTransform:'uppercase', marginBottom:2 }}>{label}</div>
+                          <div style={{ fontSize:11, fontWeight:700, color, fontFamily:'monospace' }}>{val}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Earnings warning */}
+                  {daysToEarn != null && daysToEarn >= 0 && daysToEarn <= 21 && (
+                    <div style={{ fontSize:10, borderRadius:6, padding:'6px 10px',
+                      background: daysToEarn < 7 ? C.red+'22' : C.amber+'22',
+                      border:`1px solid ${daysToEarn < 7 ? C.red : C.amber}44`,
+                      color: daysToEarn < 7 ? C.red : C.amber, fontWeight:600 }}>
+                      {daysToEarn < 7 ? '🔴' : '⚠️'} Earnings en {daysToEarn} días ({d.next_earnings})
+                    </div>
+                  )}
+
+                  {/* Botón agregar */}
+                  <button onClick={() => {
+                    watchlist.includes(preview) ? onRemove(preview) : onAdd(preview)
+                    setPreview(null); setPreviewData(null)
+                  }} style={{
+                    background: watchlist.includes(preview) ? C.red+'22' : C.accent,
+                    border: watchlist.includes(preview) ? `1px solid ${C.red}66` : 'none',
+                    borderRadius:8, color: watchlist.includes(preview) ? C.red : '#000',
+                    fontWeight:700, padding:'9px', cursor:'pointer', fontSize:12, width:'100%'
+                  }}>
+                    {watchlist.includes(preview) ? '− Quitar de watchlist' : '+ Agregar a watchlist'}
+                  </button>
+                </>
+              )
+            })()}
+          </div>
         </div>
       )}
     </div>

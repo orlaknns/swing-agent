@@ -733,6 +733,7 @@ export default function App() {
               watchlist={wl}
               monitorList={monitor}
               openTrades={openTrades}
+              analysisCache={analysisCache}
               onAdd={ticker => {
                 if (!wl.includes(ticker) && !monitor.includes(ticker)) setWatchlist(p => [ticker, ...(p||[])])
               }}
