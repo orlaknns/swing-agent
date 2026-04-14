@@ -1408,12 +1408,15 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove, scoreHistory, 
 
           {/* Cross-module warning */}
           {inSwingModule && (
-            <div style={{ display:'flex' }}>
-              <span style={{ fontSize:10, fontWeight:700, color:'#00d4ff',
+            <div style={{ fontSize:10, borderRadius:6, padding:'7px 10px',
+              background:'#00d4ff11', border:'1px solid #00d4ff44',
+              display:'flex', alignItems:'center', gap:8 }}>
+              <span style={{ fontWeight:700, color:'#00d4ff',
                 background:'#00d4ff18', border:'1px solid #00d4ff44',
-                borderRadius:99, padding:'3px 9px' }}>
+                borderRadius:99, padding:'2px 8px', whiteSpace:'nowrap' }}>
                 ⚡ Swing
               </span>
+              <span style={{ color:'#00d4ff' }}>Este ticker está en tu watchlist de Swing Trading</span>
             </div>
           )}
 
