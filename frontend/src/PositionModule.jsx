@@ -1644,7 +1644,7 @@ function PositionWatchlistTable({ tickers, cache, onRemove, onRefresh, refreshin
                         style={{ marginLeft:5, fontSize:9, fontWeight:700, color:'#00d4ff',
                           background:'#00d4ff18', border:'1px solid #00d4ff44',
                           borderRadius:99, padding:'1px 5px' }}>
-                        SW
+                        ⚡ Swing
                       </span>
                     )}
                     {d?._savedAt && (() => {

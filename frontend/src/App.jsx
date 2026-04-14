@@ -197,7 +197,7 @@ function WatchlistTable({ tickers, analysisCache, openTrades, lastClosedTrades, 
                         style={{ marginLeft:5, fontSize:9, fontWeight:700, color:'#a78bfa',
                           background:'#a78bfa18', border:'1px solid #a78bfa44',
                           borderRadius:99, padding:'1px 5px' }}>
-                        POS
+                        📈 Position
                       </span>
                     )}
                     {d?._savedAt && <div style={{ fontSize:9, color:C.muted, marginTop:1 }}>{savedAtLabel(d._savedAt)}</div>}
