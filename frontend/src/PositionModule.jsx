@@ -1517,7 +1517,7 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove, scoreHistory, 
                   </div>
                 ) : (
                   <>
-                  <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:6 }}>
+                  <div style={{ display:'flex', alignItems:'flex-start', gap:8, marginTop:6 }}>
                     <span style={{ fontSize:14, fontWeight:700, fontFamily:'monospace', color }}>
                       {reviewDate.toLocaleDateString('es', { day:'numeric', month:'short', year:'numeric' })}
                     </span>
