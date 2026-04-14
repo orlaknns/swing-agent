@@ -428,8 +428,15 @@ export default function StockCard({ ticker, onRemove, session, onMonitor, onAnal
 
       {/* Cross-module warning */}
       {inPositionModule && (
-        <div style={{ background:'#1a0f2e', border:'1px solid #a78bfa44', borderRadius:7, padding:'6px 10px', display:'flex', alignItems:'center', gap:6 }}>
-          <span style={{ fontSize:10, color:'#a78bfa', fontWeight:700 }}>⚠ Tienes una posición activa en Position Trading</span>
+        <div style={{ fontSize:10, borderRadius:6, padding:'7px 10px',
+          background:'#a78bfa11', border:'1px solid #a78bfa44',
+          display:'flex', alignItems:'center', gap:8 }}>
+          <span style={{ fontWeight:700, color:'#a78bfa',
+            background:'#a78bfa18', border:'1px solid #a78bfa44',
+            borderRadius:99, padding:'2px 8px', whiteSpace:'nowrap' }}>
+            📈 Position
+          </span>
+          <span style={{ color:'#a78bfa' }}>Este ticker está en tu watchlist de Position Trading</span>
         </div>
       )}
 
