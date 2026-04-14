@@ -987,15 +987,16 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove, scoreHistory }
   const hasVeto = (overrides['precio_sma200'] ?? data?.scorecard?.precio_sma200?.score_sugerido) === 0
   const hasRRVeto = data?.rr_suggested != null && data.rr_suggested < 2
 
-  // Earnings ≤7d actúa como veto — no operar independiente del score
+  // Earnings ≤7d degrada la decisión a CAUTELA (no es veto duro en position trading)
   const nextEarnings = data?.next_earnings
   const daysToEarnings = nextEarnings ? (() => {
     try { return Math.ceil((new Date(nextEarnings) - new Date()) / (1000*60*60*24)) } catch { return null }
   })() : null
-  const hasEarningsVeto = daysToEarnings != null && daysToEarnings >= 0 && daysToEarnings <= 7
+  const hasEarningsNearby = daysToEarnings != null && daysToEarnings >= 0 && daysToEarnings <= 7
 
   const decision = scoreTotal == null ? null :
-    (hasVeto || hasRRVeto || hasEarningsVeto) ? 'NO_OPERAR' :
+    (hasVeto || hasRRVeto) ? 'NO_OPERAR' :
+    (hasEarningsNearby && scoreTotal >= 32) ? 'OPERAR_CAUTELA' :
     scoreTotal >= 32 ? 'OPERAR_CONVICCION' :
     scoreTotal >= 22 ? 'OPERAR_CAUTELA' : 'NO_OPERAR'
 
@@ -1035,9 +1036,9 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove, scoreHistory }
 
   return (
     <div style={{ background:C.card,
-      border:`1px solid ${hasVeto||hasRRVeto||hasEarningsVeto ? C.red+'55' : decision==='OPERAR_CONVICCION' ? C.green+'44' : C.border}`,
+      border:`1px solid ${hasVeto||hasRRVeto ? C.red+'55' : decision==='OPERAR_CONVICCION' ? C.green+'44' : C.border}`,
       borderRadius:12, padding:'16px', display:'flex', flexDirection:'column', gap:11,
-      borderLeft:`3px solid ${hasVeto||hasRRVeto||hasEarningsVeto ? C.red : decisionColor}` }}>
+      borderLeft:`3px solid ${hasVeto||hasRRVeto ? C.red : decisionColor}` }}>
 
       {/* Header */}
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
