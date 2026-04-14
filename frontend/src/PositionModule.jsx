@@ -1494,22 +1494,14 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove, scoreHistory, 
             return (
               <div style={{ background:C.bg, borderRadius:8, padding:'9px 12px',
                 border:`1px solid ${isOverdue ? C.red+'44' : isSoon ? C.amber+'44' : stage === 3 ? C.amber+'44' : C.border}` }}>
-                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:8 }}>
-                  <div style={{ display:'flex', alignItems:'center', gap:7 }}>
-                    <span style={{ fontSize:9, color:C.muted, textTransform:'uppercase', letterSpacing:'0.07em' }}>
-                      Próxima revisión
-                    </span>
-                    <span style={{ fontSize:9, color:C.muted, background:C.card,
-                      border:`1px solid ${C.border}`, borderRadius:99, padding:'1px 6px' }}>
-                      {stage ? `Stage ${stage} · ${suggestedWeeks}s` : `${suggestedWeeks}s`}
-                    </span>
-                  </div>
-                  {!editingDate && (
-                    <button onClick={() => setEditingDate(true)}
-                      style={{ background:'none', border:'none', color:C.muted, cursor:'pointer', fontSize:10, padding:'0 2px' }}>
-                      ✏
-                    </button>
-                  )}
+                <div style={{ display:'flex', alignItems:'center', gap:7 }}>
+                  <span style={{ fontSize:9, color:C.muted, textTransform:'uppercase', letterSpacing:'0.07em' }}>
+                    Próxima revisión
+                  </span>
+                  <span style={{ fontSize:9, color:C.muted, background:C.card,
+                    border:`1px solid ${C.border}`, borderRadius:99, padding:'1px 6px' }}>
+                    {stage ? `Stage ${stage} · ${suggestedWeeks}s` : `${suggestedWeeks}s`}
+                  </span>
                 </div>
                 {editingDate ? (
                   <div style={{ display:'flex', gap:6, marginTop:6, alignItems:'center' }}>
@@ -1525,17 +1517,23 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove, scoreHistory, 
                   </div>
                 ) : (
                   <>
-                  <div style={{ display:'flex', alignItems:'baseline', gap:8, marginTop:4 }}>
-                    <span style={{ fontSize:13, fontWeight:700, fontFamily:'monospace', color }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:6, flexWrap:'wrap' }}>
+                    <span style={{ fontSize:14, fontWeight:700, fontFamily:'monospace', color }}>
                       {reviewDate.toLocaleDateString('es', { day:'numeric', month:'short', year:'numeric' })}
                     </span>
                     <span style={{ fontSize:10, color }}>
                       {isOverdue ? `vencida hace ${Math.abs(daysLeft)}d` : daysLeft === 0 ? 'hoy' : `en ${daysLeft}d`}
                     </span>
+                    <button onClick={() => setEditingDate(true)}
+                      style={{ marginLeft:'auto', background:'none', border:`1px solid ${C.border}`,
+                        borderRadius:6, color:C.muted, cursor:'pointer', fontSize:10, padding:'3px 8px' }}>
+                      ✏ Cambiar
+                    </button>
                     {savedDate && (
                       <button onClick={() => saveDate(null)} title="Restaurar fecha automática"
-                        style={{ marginLeft:'auto', background:'none', border:'none', color:C.muted, cursor:'pointer', fontSize:9 }}>
-                        ↺ auto
+                        style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:6,
+                          color:C.muted, cursor:'pointer', fontSize:10, padding:'3px 8px' }}>
+                        ↺ Auto
                       </button>
                     )}
                   </div>
