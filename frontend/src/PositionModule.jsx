@@ -2233,16 +2233,16 @@ export default function PositionModule({ session, onBack }) {
                 <div style={{ width:1, height:16, background:C.border }} />
                 {/* RSI range */}
                 <span style={{ fontSize:10, color:C.muted }}>RSI</span>
-                <input type="number" placeholder="min" value={wlFilters.rsiMin}
-                  onChange={e => setWlFilters(f => ({ ...f, rsiMin: e.target.value }))}
+                <input type="text" inputMode="numeric" placeholder="min" value={wlFilters.rsiMin}
+                  onChange={e => setWlFilters(f => ({ ...f, rsiMin: e.target.value.replace(/[^0-9.]/g,'') }))}
                   style={{ width:44, background:'#0f1929', border:`1px solid ${wlFilters.rsiMin!=='' ? C.accent : C.border}`,
                     borderRadius:6, color:C.text, fontSize:10, padding:'3px 6px', outline:'none', textAlign:'center' }}
                   onFocus={e => e.target.style.borderColor=C.accent}
                   onBlur={e  => e.target.style.borderColor=wlFilters.rsiMin!=='' ? C.accent : C.border}
                 />
                 <span style={{ fontSize:10, color:C.muted }}>–</span>
-                <input type="number" placeholder="max" value={wlFilters.rsiMax}
-                  onChange={e => setWlFilters(f => ({ ...f, rsiMax: e.target.value }))}
+                <input type="text" inputMode="numeric" placeholder="max" value={wlFilters.rsiMax}
+                  onChange={e => setWlFilters(f => ({ ...f, rsiMax: e.target.value.replace(/[^0-9.]/g,'') }))}
                   style={{ width:44, background:'#0f1929', border:`1px solid ${wlFilters.rsiMax!=='' ? C.accent : C.border}`,
                     borderRadius:6, color:C.text, fontSize:10, padding:'3px 6px', outline:'none', textAlign:'center' }}
                   onFocus={e => e.target.style.borderColor=C.accent}
