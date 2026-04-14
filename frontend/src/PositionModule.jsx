@@ -65,8 +65,11 @@ function calcDecision(scoreTotal, d) {
     try { return Math.ceil((new Date(d.next_earnings) - new Date()) / (1000*60*60*24)) } catch { return null }
   })() : null
   const earningsNearby = daysToEarn != null && daysToEarn >= 0 && daysToEarn <= 7
+  // 7. Precio extendido: más de 5% sobre entrada sugerida → R/R real ya no es el calculado
+  const priceExtended = d?.price != null && d?.entry_suggested != null
+    && ((d.price - d.entry_suggested) / d.entry_suggested) > 0.05
 
-  if (bearMarket || lowConfidence || earningsNearby) {
+  if (bearMarket || lowConfidence || earningsNearby || priceExtended) {
     return scoreTotal >= 22 ? 'OPERAR_CAUTELA' : 'NO_OPERAR'
   }
 
@@ -1022,8 +1025,10 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove, scoreHistory, 
   const hasRRVeto     = data?.rr_suggested != null && data.rr_suggested < 2
   const hasStageVeto  = data?.stage?.stage === 3 || data?.stage?.stage === 4
   const hasAnyVeto    = hasVeto || hasRRVeto || hasStageVeto
-  const bearMarket    = data?.macro_context?.spy_above_sma200 === false
-  const lowConfidence = data?.scorecard?._confidence != null && data.scorecard._confidence.real < 4
+  const bearMarket     = data?.macro_context?.spy_above_sma200 === false
+  const lowConfidence  = data?.scorecard?._confidence != null && data.scorecard._confidence.real < 4
+  const priceExtended  = data?.price != null && data?.entry_suggested != null
+    && ((data.price - data.entry_suggested) / data.entry_suggested) > 0.05
 
   const nextEarnings   = data?.next_earnings
   const daysToEarnings = nextEarnings ? (() => {
@@ -1097,8 +1102,9 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove, scoreHistory, 
             if (hasStageVeto)  reasons.push(`Stage ${data.stage.stage} — ${data.stage.stage === 3 ? 'distribución' : 'declive'}`)
             if (hasVeto)       reasons.push('precio bajo SMA200')
             if (hasRRVeto)     reasons.push(`R/R ${data.rr_suggested?.toFixed(1)}x insuficiente`)
-            if (bearMarket)    reasons.push('mercado bajista (SPY < SMA200)')
-            if (lowConfidence) reasons.push(`datos incompletos (${data.scorecard._confidence.real}/7)`)
+            if (bearMarket)     reasons.push('mercado bajista (SPY < SMA200)')
+            if (lowConfidence)  reasons.push(`datos incompletos (${data.scorecard._confidence.real}/7)`)
+            if (priceExtended)  reasons.push(`precio extendido ${(((data.price - data.entry_suggested) / data.entry_suggested) * 100).toFixed(1)}% sobre entrada`)
             if (reasons.length === 0) return null
             return (
               <div style={{ fontSize:9, color: hasAnyVeto ? C.red : C.amber, marginTop:2 }}>
