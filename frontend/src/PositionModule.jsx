@@ -948,12 +948,13 @@ function PositionScreener({ watchlist, onAdd, onRemove, onAddAll, posCache }) {
 
 // ── Position Card ────────────────────────────────────────────────────────────
 function PositionCard({ ticker, cachedData, onAnalysed, onRemove, scoreHistory, inSwingModule }) {
-  const [data,       setData]       = useState(cachedData || null)
-  const [loading,    setLoading]    = useState(false)
-  const [error,      setError]      = useState(null)
-  const [expanded,   setExpanded]   = useState(false)
-  const [capital,    setCapital]    = useState('')
-  const [riskPct,    setRiskPct]    = useState('1')
+  const [data,         setData]       = useState(cachedData || null)
+  const [loading,      setLoading]    = useState(false)
+  const [error,        setError]      = useState(null)
+  const [expanded,     setExpanded]   = useState(false)
+  const [capital,      setCapital]    = useState('')
+  const [riskPct,      setRiskPct]    = useState('1')
+  const [editingDate,  setEditingDate] = useState(false)
   // Overrides manuales: { criterio: scoreManual (0-3) }
   const [overrides,  setOverrides]  = useState(cachedData?._overrides || {})
 
@@ -1454,6 +1455,81 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove, scoreHistory, 
               </span>
             </div>
           )}
+
+          {/* Próxima revisión */}
+          {(() => {
+            const stage = data?.stage?.stage
+            // Calcular fecha sugerida según Stage (Weinstein)
+            const suggestedWeeks = stage === 2 ? 4 : stage === 3 ? 2 : stage === 1 ? 8 : 4
+            const savedDate = data?._reviewDate
+            const reviewDate = savedDate
+              ? new Date(savedDate)
+              : (() => { const d = new Date(); d.setDate(d.getDate() + suggestedWeeks * 7); return d })()
+            const reviewDateStr = reviewDate.toISOString().slice(0, 10)
+            const daysLeft = Math.ceil((reviewDate - new Date()) / (1000*60*60*24))
+            const isOverdue = daysLeft < 0
+            const isSoon    = daysLeft >= 0 && daysLeft <= 7
+            const color = isOverdue ? C.red : isSoon ? C.amber : C.muted
+
+            const saveDate = (val) => {
+              const updated = { ...data }
+              if (val) updated._reviewDate = val
+              else delete updated._reviewDate
+              onAnalysed(ticker, updated)
+              setEditingDate(false)
+            }
+
+            return (
+              <div style={{ background:C.bg, borderRadius:8, padding:'9px 12px',
+                border:`1px solid ${isOverdue ? C.red+'44' : isSoon ? C.amber+'44' : C.border}` }}>
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:8 }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:7 }}>
+                    <span style={{ fontSize:9, color:C.muted, textTransform:'uppercase', letterSpacing:'0.07em' }}>
+                      Próxima revisión
+                    </span>
+                    <span style={{ fontSize:9, color:C.muted, background:C.card,
+                      border:`1px solid ${C.border}`, borderRadius:99, padding:'1px 6px' }}>
+                      {stage ? `Stage ${stage} · ${suggestedWeeks}s` : `${suggestedWeeks}s`}
+                    </span>
+                  </div>
+                  {!editingDate && (
+                    <button onClick={() => setEditingDate(true)}
+                      style={{ background:'none', border:'none', color:C.muted, cursor:'pointer', fontSize:10, padding:'0 2px' }}>
+                      ✏
+                    </button>
+                  )}
+                </div>
+                {editingDate ? (
+                  <div style={{ display:'flex', gap:6, marginTop:6, alignItems:'center' }}>
+                    <input type="date" defaultValue={reviewDateStr}
+                      style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:6,
+                        color:C.text, fontSize:11, padding:'4px 8px', outline:'none', flex:1 }}
+                      onBlur={e => saveDate(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') saveDate(e.target.value) }}
+                      autoFocus
+                    />
+                    <button onClick={() => setEditingDate(false)}
+                      style={{ background:'none', border:'none', color:C.muted, cursor:'pointer', fontSize:11 }}>✕</button>
+                  </div>
+                ) : (
+                  <div style={{ display:'flex', alignItems:'baseline', gap:8, marginTop:4 }}>
+                    <span style={{ fontSize:13, fontWeight:700, fontFamily:'monospace', color }}>
+                      {reviewDate.toLocaleDateString('es', { day:'numeric', month:'short', year:'numeric' })}
+                    </span>
+                    <span style={{ fontSize:10, color }}>
+                      {isOverdue ? `vencida hace ${Math.abs(daysLeft)}d` : daysLeft === 0 ? 'hoy' : `en ${daysLeft}d`}
+                    </span>
+                    {savedDate && (
+                      <button onClick={() => saveDate(null)} title="Restaurar fecha automática"
+                        style={{ marginLeft:'auto', background:'none', border:'none', color:C.muted, cursor:'pointer', fontSize:9 }}>
+                        ↺ auto
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })()}
 
           {/* Scorecard detalle — expandible */}
           {data.scorecard && (
