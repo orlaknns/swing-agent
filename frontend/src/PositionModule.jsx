@@ -2158,9 +2158,6 @@ export default function PositionModule({ session, onBack }) {
             </div>
           </div>
 
-          {/* Panel macro global — solo en watchlist */}
-          {tab === 'watchlist' && <MacroPanel />}
-
           {/* Tabs */}
           <div style={{ display:'flex', borderTop:`1px solid ${C.border}` }}>
             {tabs.map(([key, label]) => (
@@ -2183,6 +2180,7 @@ export default function PositionModule({ session, onBack }) {
         {/* Watchlist */}
         <div style={{ display: tab==='watchlist' ? 'block' : 'none' }}>
           <div style={{ maxWidth:960, margin:'0 auto', padding:'0 20px' }}>
+            <MacroPanel />
             <div style={{ display:'flex', gap:7, marginBottom:14 }}>
               <input value={search} onChange={e => setSearch(e.target.value.toUpperCase())}
                 onKeyDown={e => e.key==='Enter' && add()}
