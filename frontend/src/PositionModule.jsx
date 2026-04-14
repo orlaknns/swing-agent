@@ -43,14 +43,20 @@ const DECISION_COLOR = { OPERAR_CONVICCION: C.green, OPERAR_CAUTELA: C.amber, NO
 
 function calcDecision(scoreTotal, d) {
   if (scoreTotal == null) return null
-  const hasVeto    = d?.scorecard?.precio_sma200?.score_sugerido === 0
-  const hasRRVeto  = d?.rr_suggested != null && d.rr_suggested < 2
+  const hasVeto   = d?.scorecard?.precio_sma200?.score_sugerido === 0
+  const hasRRVeto = d?.rr_suggested != null && d.rr_suggested < 2
   const daysToEarn = d?.next_earnings ? (() => {
     try { return Math.ceil((new Date(d.next_earnings) - new Date()) / (1000*60*60*24)) } catch { return null }
   })() : null
   const earningsNearby = daysToEarn != null && daysToEarn >= 0 && daysToEarn <= 7
+  const exDivDate = d?.fundamentals?.exDividendDate
+  const divYield  = d?.fundamentals?.dividendYield || 0
+  const daysToExDiv = exDivDate ? (() => {
+    try { return Math.ceil((new Date(exDivDate) - new Date()) / (1000*60*60*24)) } catch { return null }
+  })() : null
+  const exDivNearby = daysToExDiv != null && daysToExDiv >= 0 && daysToExDiv <= 7 && divYield > 0.3
   if (hasVeto || hasRRVeto) return 'NO_OPERAR'
-  if (earningsNearby && scoreTotal >= 32) return 'OPERAR_CAUTELA'
+  if ((earningsNearby || exDivNearby) && scoreTotal >= 32) return 'OPERAR_CAUTELA'
   return scoreTotal >= 32 ? 'OPERAR_CONVICCION' : scoreTotal >= 22 ? 'OPERAR_CAUTELA' : 'NO_OPERAR'
 }
 const DECISION_LABEL = {
