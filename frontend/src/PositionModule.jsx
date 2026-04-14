@@ -2265,15 +2265,17 @@ export default function PositionModule({ session, onBack }) {
                 />
                 <div style={{ width:1, height:16, background:C.border }} />
                 {/* Stage */}
-                {[['1','S1',C.muted],['2','S2',C.green],['3','S3',C.amber],['4','S4',C.red]].map(([val,label,color]) => (
-                  <button key={val} onClick={() => toggleWlFilter('stage', val)}
-                    style={{ background: wlFilters.stage===val ? color+'22' : 'none',
-                      border:`1px solid ${wlFilters.stage===val ? color : C.border}`,
-                      borderRadius:6, color: wlFilters.stage===val ? color : C.muted,
-                      padding:'3px 10px', cursor:'pointer', fontSize:10, fontWeight: wlFilters.stage===val ? 700 : 400 }}>
-                    {label}
-                  </button>
-                ))}
+                <select value={wlFilters.stage}
+                  onChange={e => setWlFilters(f => ({ ...f, stage: e.target.value }))}
+                  style={{ background:'#0f1929', border:`1px solid ${wlFilters.stage!=='all' ? C.accent : C.border}`,
+                    borderRadius:6, color: wlFilters.stage!=='all' ? C.accent : C.muted,
+                    fontSize:10, padding:'3px 8px', cursor:'pointer', outline:'none' }}>
+                  <option value="all">Stage: todos</option>
+                  <option value="1">Stage 1 — Base</option>
+                  <option value="2">Stage 2 — Alcista</option>
+                  <option value="3">Stage 3 — Techo</option>
+                  <option value="4">Stage 4 — Bajista</option>
+                </select>
                 <div style={{ width:1, height:16, background:C.border }} />
                 {/* HH/HL */}
                 {[['strong','HH/HL ✓',C.green],['weak','HH/HL ✗',C.red]].map(([val,label,color]) => (
