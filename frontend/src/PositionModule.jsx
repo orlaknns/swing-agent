@@ -1517,25 +1517,27 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove, scoreHistory, 
                   </div>
                 ) : (
                   <>
-                  <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:6, flexWrap:'wrap' }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:6 }}>
                     <span style={{ fontSize:14, fontWeight:700, fontFamily:'monospace', color }}>
                       {reviewDate.toLocaleDateString('es', { day:'numeric', month:'short', year:'numeric' })}
                     </span>
                     <span style={{ fontSize:10, color }}>
                       {isOverdue ? `vencida hace ${Math.abs(daysLeft)}d` : daysLeft === 0 ? 'hoy' : `en ${daysLeft}d`}
                     </span>
-                    <button onClick={() => setEditingDate(true)}
-                      style={{ marginLeft:'auto', background:'none', border:`1px solid ${C.border}`,
-                        borderRadius:6, color:C.muted, cursor:'pointer', fontSize:10, padding:'3px 8px' }}>
-                      ✏ Cambiar
-                    </button>
-                    {savedDate && (
-                      <button onClick={() => saveDate(null)} title="Restaurar fecha automática"
-                        style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:6,
-                          color:C.muted, cursor:'pointer', fontSize:10, padding:'3px 8px' }}>
-                        ↺ Auto
+                    <div style={{ marginLeft:'auto', display:'flex', gap:6 }}>
+                      {savedDate && (
+                        <button onClick={() => saveDate(null)} title="Restaurar fecha automática"
+                          style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:6,
+                            color:C.muted, cursor:'pointer', fontSize:10, padding:'3px 8px' }}>
+                          ↺ Auto
+                        </button>
+                      )}
+                      <button onClick={() => setEditingDate(true)}
+                        style={{ background:'none', border:`1px solid ${C.border}`,
+                          borderRadius:6, color:C.muted, cursor:'pointer', fontSize:10, padding:'3px 8px' }}>
+                        ✏ Cambiar
                       </button>
-                    )}
+                    </div>
                   </div>
                   <div style={{ fontSize:10, color: isOverdue || stage === 3 ? color : C.muted, marginTop:3 }}>
                     {actionText}
