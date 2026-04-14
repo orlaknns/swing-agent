@@ -1988,7 +1988,7 @@ function SectorRotation() {
 
 // ── Position Module (contenedor principal) ──────────────────────────────────
 export default function PositionModule({ session, onBack }) {
-  const [tab,        setTab]        = useState('watchlist')
+  const [tab,        setTab]        = useState('dashboard')
   const [viewMode,   setViewMode]   = useState('cards')   // 'cards' | 'table'
   const [search,     setSearch]     = useState('')
   const [tableModal, setTableModal] = useState(null)
@@ -2118,11 +2118,11 @@ export default function PositionModule({ session, onBack }) {
   const isLoaded = watchlist !== null
 
   const tabs = [
-    ['watchlist', `Watchlist · ${wl.length}`],
-    ['screener',  'Screener'],
-    ['mercado',   'Mercado'],
-    ['journal',   'Journal'],
     ['dashboard', 'Dashboard'],
+    ['watchlist', `Watchlist · ${wl.length}`],
+    ['mercado',   'Mercado'],
+    ['screener',  'Screener'],
+    ['journal',   'Journal'],
   ]
 
   return (
