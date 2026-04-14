@@ -2263,15 +2263,15 @@ export default function PositionModule({ session, onBack }) {
                 </select>
                 <div style={{ width:1, height:16, background:C.border }} />
                 {/* HH/HL */}
-                {[['strong','HH/HL ✓',C.green],['weak','HH/HL ✗',C.red]].map(([val,label,color]) => (
-                  <button key={val} onClick={() => toggleWlFilter('hhhl', val)}
-                    style={{ background: wlFilters.hhhl===val ? color+'22' : 'none',
-                      border:`1px solid ${wlFilters.hhhl===val ? color : C.border}`,
-                      borderRadius:6, color: wlFilters.hhhl===val ? color : C.muted,
-                      padding:'3px 10px', cursor:'pointer', fontSize:10, fontWeight: wlFilters.hhhl===val ? 700 : 400 }}>
-                    {label}
-                  </button>
-                ))}
+                <select value={wlFilters.hhhl}
+                  onChange={e => setWlFilters(f => ({ ...f, hhhl: e.target.value }))}
+                  style={{ background:'#0f1929', border:`1px solid ${wlFilters.hhhl!=='all' ? C.accent : C.border}`,
+                    borderRadius:6, color: wlFilters.hhhl!=='all' ? C.accent : C.muted,
+                    fontSize:10, padding:'3px 8px', cursor:'pointer', outline:'none' }}>
+                  <option value="all">Estructura: todas</option>
+                  <option value="strong">Alcista confirmada (≥2 HH/HL)</option>
+                  <option value="weak">Sin estructura clara</option>
+                </select>
                 {hasWlFilters && (
                   <button onClick={resetWlFilters}
                     style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:6,
