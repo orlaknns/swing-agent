@@ -984,11 +984,20 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove, scoreHistory }
       }, 0)
     : null
   const hasOverrides = Object.keys(overrides).length > 0
-  const decision = scoreTotal == null ? null :
-    scoreTotal >= 32 ? 'OPERAR_CONVICCION' :
-    scoreTotal >= 22 ? 'OPERAR_CAUTELA' : 'NO_OPERAR'
   const hasVeto = (overrides['precio_sma200'] ?? data?.scorecard?.precio_sma200?.score_sugerido) === 0
   const hasRRVeto = data?.rr_suggested != null && data.rr_suggested < 2
+
+  // Earnings ≤7d actúa como veto — no operar independiente del score
+  const nextEarnings = data?.next_earnings
+  const daysToEarnings = nextEarnings ? (() => {
+    try { return Math.ceil((new Date(nextEarnings) - new Date()) / (1000*60*60*24)) } catch { return null }
+  })() : null
+  const hasEarningsVeto = daysToEarnings != null && daysToEarnings >= 0 && daysToEarnings <= 7
+
+  const decision = scoreTotal == null ? null :
+    (hasVeto || hasRRVeto || hasEarningsVeto) ? 'NO_OPERAR' :
+    scoreTotal >= 32 ? 'OPERAR_CONVICCION' :
+    scoreTotal >= 22 ? 'OPERAR_CAUTELA' : 'NO_OPERAR'
 
   const savedAt = data?._savedAt
   const cacheAgeHours = savedAt ? (new Date() - new Date(savedAt)) / (1000*60*60) : null
@@ -1009,12 +1018,6 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove, scoreHistory }
     return `hace ${Math.floor((now-d)/(1000*60*60*24))}d`
   })() : null
 
-  // Earnings warning
-  const nextEarnings = data?.next_earnings
-  const daysToEarnings = nextEarnings ? (() => {
-    try { return Math.ceil((new Date(nextEarnings) - new Date()) / (1000*60*60*24)) } catch { return null }
-  })() : null
-
   // Ex-dividend warning
   const exDivDate = data?.fundamentals?.exDividendDate
   const divYield  = data?.fundamentals?.dividendYield || 0
@@ -1032,9 +1035,9 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove, scoreHistory }
 
   return (
     <div style={{ background:C.card,
-      border:`1px solid ${hasVeto||hasRRVeto ? C.red+'55' : decision==='OPERAR_CONVICCION' ? C.green+'44' : C.border}`,
+      border:`1px solid ${hasVeto||hasRRVeto||hasEarningsVeto ? C.red+'55' : decision==='OPERAR_CONVICCION' ? C.green+'44' : C.border}`,
       borderRadius:12, padding:'16px', display:'flex', flexDirection:'column', gap:11,
-      borderLeft:`3px solid ${hasVeto||hasRRVeto ? C.red : decisionColor}` }}>
+      borderLeft:`3px solid ${hasVeto||hasRRVeto||hasEarningsVeto ? C.red : decisionColor}` }}>
 
       {/* Header */}
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
