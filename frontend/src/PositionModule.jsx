@@ -2112,8 +2112,51 @@ export default function PositionModule({ session, onBack }) {
     setRefreshingTickers(prev => { const n={...prev}; delete n[ticker]; return n })
   }
 
+  const [wlFilters, setWlFilters] = useState({ decision:'all', score:'all', rsi:'all', stage:'all', hhhl:'all' })
+  const toggleWlFilter = (key, val) => setWlFilters(f => ({ ...f, [key]: f[key]===val ? 'all' : val }))
+  const resetWlFilters = () => setWlFilters({ decision:'all', score:'all', rsi:'all', stage:'all', hhhl:'all' })
+  const hasWlFilters = Object.values(wlFilters).some(v => v !== 'all')
+
   const wl = watchlist || []
   const isLoaded = watchlist !== null
+
+  const calcScore = (cache) => {
+    if (!cache?.scorecard) return null
+    return Object.entries(cache.scorecard).reduce((s,[k,v]) =>
+      k==='_confidence' ? s : s+(v.score_sugerido??0)*(WEIGHTS[k]||1), 0)
+  }
+
+  const filteredWl = wl.filter(t => {
+    const d = posCache[t]
+    if (!d) return wlFilters.decision==='all' && wlFilters.score==='all' && wlFilters.rsi==='all' && wlFilters.stage==='all' && wlFilters.hhhl==='all'
+    const score = calcScore(d)
+    const dec = score == null ? null : score >= 32 ? 'OPERAR_CONVICCION' : score >= 22 ? 'OPERAR_CAUTELA' : 'NO_OPERAR'
+    if (wlFilters.decision !== 'all' && dec !== wlFilters.decision) return false
+    if (wlFilters.score !== 'all') {
+      if (wlFilters.score === 'high'   && !(score >= 32)) return false
+      if (wlFilters.score === 'medium' && !(score >= 22 && score < 32)) return false
+      if (wlFilters.score === 'low'    && !(score < 22)) return false
+    }
+    if (wlFilters.rsi !== 'all') {
+      const rsi = d.rsi
+      if (wlFilters.rsi === 'oversold'  && !(rsi != null && rsi < 40)) return false
+      if (wlFilters.rsi === 'normal'    && !(rsi != null && rsi >= 40 && rsi <= 65)) return false
+      if (wlFilters.rsi === 'overbought'&& !(rsi != null && rsi > 65)) return false
+    }
+    if (wlFilters.stage !== 'all') {
+      const st = d.stage?.stage
+      if (wlFilters.stage === '1' && st !== 1) return false
+      if (wlFilters.stage === '2' && st !== 2) return false
+      if (wlFilters.stage === '3' && st !== 3) return false
+      if (wlFilters.stage === '4' && st !== 4) return false
+    }
+    if (wlFilters.hhhl !== 'all') {
+      const score_hh = d.hh_hl?.score
+      if (wlFilters.hhhl === 'strong' && !(score_hh >= 2)) return false
+      if (wlFilters.hhhl === 'weak'   && !(score_hh < 2)) return false
+    }
+    return true
+  })
 
   const tabs = [
     ['dashboard', 'Dashboard'],
@@ -2178,6 +2221,72 @@ export default function PositionModule({ session, onBack }) {
         <div style={{ display: tab==='watchlist' ? 'block' : 'none' }}>
           <div style={{ maxWidth:960, margin:'0 auto', padding:'0 20px' }}>
             <MacroPanel />
+            {/* Filtros watchlist */}
+            {isLoaded && wl.length > 0 && (
+              <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:10, alignItems:'center' }}>
+                {/* Decisión */}
+                {[['OPERAR_CONVICCION','Convicción',C.green],['OPERAR_CAUTELA','Cautela',C.amber],['NO_OPERAR','No operar',C.red]].map(([val,label,color]) => (
+                  <button key={val} onClick={() => toggleWlFilter('decision', val)}
+                    style={{ background: wlFilters.decision===val ? color+'22' : 'none',
+                      border:`1px solid ${wlFilters.decision===val ? color : C.border}`,
+                      borderRadius:6, color: wlFilters.decision===val ? color : C.muted,
+                      padding:'3px 10px', cursor:'pointer', fontSize:10, fontWeight: wlFilters.decision===val ? 700 : 400 }}>
+                    {label}
+                  </button>
+                ))}
+                <div style={{ width:1, height:16, background:C.border }} />
+                {/* Score */}
+                {[['high','≥32',C.green],['medium','22-31',C.amber],['low','<22',C.red]].map(([val,label,color]) => (
+                  <button key={val} onClick={() => toggleWlFilter('score', val)}
+                    style={{ background: wlFilters.score===val ? color+'22' : 'none',
+                      border:`1px solid ${wlFilters.score===val ? color : C.border}`,
+                      borderRadius:6, color: wlFilters.score===val ? color : C.muted,
+                      padding:'3px 10px', cursor:'pointer', fontSize:10, fontWeight: wlFilters.score===val ? 700 : 400 }}>
+                    {label}
+                  </button>
+                ))}
+                <div style={{ width:1, height:16, background:C.border }} />
+                {/* RSI */}
+                {[['oversold','RSI<40',C.green],['normal','RSI 40-65',C.accent],['overbought','RSI>65',C.red]].map(([val,label,color]) => (
+                  <button key={val} onClick={() => toggleWlFilter('rsi', val)}
+                    style={{ background: wlFilters.rsi===val ? color+'22' : 'none',
+                      border:`1px solid ${wlFilters.rsi===val ? color : C.border}`,
+                      borderRadius:6, color: wlFilters.rsi===val ? color : C.muted,
+                      padding:'3px 10px', cursor:'pointer', fontSize:10, fontWeight: wlFilters.rsi===val ? 700 : 400 }}>
+                    {label}
+                  </button>
+                ))}
+                <div style={{ width:1, height:16, background:C.border }} />
+                {/* Stage */}
+                {[['1','S1',C.muted],['2','S2',C.green],['3','S3',C.amber],['4','S4',C.red]].map(([val,label,color]) => (
+                  <button key={val} onClick={() => toggleWlFilter('stage', val)}
+                    style={{ background: wlFilters.stage===val ? color+'22' : 'none',
+                      border:`1px solid ${wlFilters.stage===val ? color : C.border}`,
+                      borderRadius:6, color: wlFilters.stage===val ? color : C.muted,
+                      padding:'3px 10px', cursor:'pointer', fontSize:10, fontWeight: wlFilters.stage===val ? 700 : 400 }}>
+                    {label}
+                  </button>
+                ))}
+                <div style={{ width:1, height:16, background:C.border }} />
+                {/* HH/HL */}
+                {[['strong','HH/HL ✓',C.green],['weak','HH/HL ✗',C.red]].map(([val,label,color]) => (
+                  <button key={val} onClick={() => toggleWlFilter('hhhl', val)}
+                    style={{ background: wlFilters.hhhl===val ? color+'22' : 'none',
+                      border:`1px solid ${wlFilters.hhhl===val ? color : C.border}`,
+                      borderRadius:6, color: wlFilters.hhhl===val ? color : C.muted,
+                      padding:'3px 10px', cursor:'pointer', fontSize:10, fontWeight: wlFilters.hhhl===val ? 700 : 400 }}>
+                    {label}
+                  </button>
+                ))}
+                {hasWlFilters && (
+                  <button onClick={resetWlFilters}
+                    style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:6,
+                      color:C.muted, padding:'3px 8px', cursor:'pointer', fontSize:10 }}>
+                    × limpiar
+                  </button>
+                )}
+              </div>
+            )}
             <div style={{ display:'flex', gap:7, marginBottom:14 }}>
               <input value={search} onChange={e => setSearch(e.target.value.toUpperCase())}
                 onKeyDown={e => e.key==='Enter' && add()}
@@ -2212,7 +2321,7 @@ export default function PositionModule({ session, onBack }) {
             ) : viewMode === 'table' ? (
               <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:12 }}>
                 <PositionWatchlistTable
-                  tickers={wl} cache={posCache}
+                  tickers={filteredWl} cache={posCache}
                   onRemove={remove} onRefresh={refreshFromTable}
                   refreshingTickers={refreshingTickers}
                   onRowClick={setTableModal}
@@ -2220,7 +2329,12 @@ export default function PositionModule({ session, onBack }) {
               </div>
             ) : (
               <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(260px, 1fr))', gap:11 }}>
-                {wl.map(t => (
+                {filteredWl.length === 0 && (
+                  <div style={{ gridColumn:'1/-1', textAlign:'center', padding:'40px', color:C.muted, fontSize:12 }}>
+                    Sin resultados para este filtro
+                  </div>
+                )}
+                {filteredWl.map(t => (
                   <PositionCard key={t} ticker={t}
                     cachedData={posCache[t] || null}
                     onAnalysed={cacheAnalysis}
