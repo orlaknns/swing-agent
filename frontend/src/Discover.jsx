@@ -373,10 +373,10 @@ export default function Discover({ watchlist, monitorList = [], openTrades = {},
                       ['RSI', d.rsi != null ? d.rsi?.toFixed(1) : '—',
                         d.rsi > 65 ? C.red : d.rsi < 40 ? C.amber : C.green],
                       ['SMA21', d.sma21 != null ? `$${d.sma21?.toFixed(2)}` : '—', C.accent],
-                      ['Score', d.score != null ? `${d.score}` : '—',
-                        d.score >= 75 ? C.green : d.score >= 45 ? C.amber : C.red],
-                      ['R:B', d.risk_reward != null ? `${d.risk_reward?.toFixed(1)}x` : '—',
-                        d.risk_reward >= 2.5 ? C.green : C.red],
+                      ['Score', d.successRate != null ? `${d.successRate}%` : '—',
+                        d.successRate >= 65 ? C.green : d.successRate >= 45 ? C.amber : C.red],
+                      ['R:B', d.rr != null ? `${d.rr?.toFixed(1)}x` : '—',
+                        d.rr >= 2.5 ? C.green : C.red],
                     ].map(([label, val, color]) => (
                       <div key={label} style={{ background:C.bg, borderRadius:6, padding:'7px 10px' }}>
                         <div style={{ fontSize:8, color:C.muted, textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:2 }}>{label}</div>
@@ -386,12 +386,12 @@ export default function Discover({ watchlist, monitorList = [], openTrades = {},
                   </div>
 
                   {/* Entrada / Stop / Target */}
-                  {(d.entry_low || d.stop_loss || d.target) && (
+                  {(d.entryLow || d.stopLoss || d.target) && (
                     <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:6 }}>
                       {[
-                        ['Entrada', d.entry_mid ? `$${d.entry_mid?.toFixed(2)}` : d.entry_low ? `$${d.entry_low?.toFixed(2)}` : '—', C.amber],
-                        ['Stop',    d.stop_loss  ? `$${d.stop_loss?.toFixed(2)}`  : '—', C.red],
-                        ['Target',  d.target     ? `$${d.target?.toFixed(2)}`     : '—', C.green],
+                        ['Entrada', d.entryLow ? `$${((d.entryLow+d.entryHigh)/2)?.toFixed(2)}` : '—', C.amber],
+                        ['Stop',    d.stopLoss  ? `$${d.stopLoss?.toFixed(2)}`  : '—', C.red],
+                        ['Target',  d.target    ? `$${d.target?.toFixed(2)}`    : '—', C.green],
                       ].map(([label, val, color]) => (
                         <div key={label} style={{ background:C.bg, borderRadius:6, padding:'6px 8px', textAlign:'center' }}>
                           <div style={{ fontSize:8, color:C.muted, textTransform:'uppercase', marginBottom:2 }}>{label}</div>
