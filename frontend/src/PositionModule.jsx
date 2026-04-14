@@ -1109,9 +1109,9 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove, scoreHistory }
         <div style={{ textAlign:'center', padding:'20px 0' }}>
           <div style={{ fontSize:11, color:C.muted, marginBottom:10 }}>Sin análisis guardado</div>
           <button onClick={runAnalysis}
-            style={{ background:C.green, border:'none', borderRadius:7, color:'#000',
-              fontWeight:700, padding:'7px 16px', cursor:'pointer', fontSize:12 }}>
-            ↻ Analizar
+            style={{ background:`${M}15`, border:`1px solid ${M}55`, borderRadius:8,
+              color:M, cursor:'pointer', padding:9, fontSize:12, fontWeight:700, letterSpacing:'0.06em' }}>
+            ANALIZAR ↗
           </button>
         </div>
       )}
