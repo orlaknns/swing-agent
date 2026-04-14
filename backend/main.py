@@ -1456,12 +1456,11 @@ def calc_position_scorecard(data: dict) -> dict:
     if rr_suggested is not None:
         if rr_suggested >= 3:     rr_score = 3
         elif rr_suggested >= 2:   rr_score = 2
-        elif rr_suggested >= 1.5: rr_score = 1
-        else:                     rr_score = 1  # mínimo 1: es estimado automático, el usuario ajusta
+        else:                     rr_score = 0  # R/R < 2 no compensa el riesgo → score 0 + veto
         rr_veto = rr_suggested < 2
         rr_desc = f"R/R preliminar {rr_suggested:.1f}x (estimado automático — ajustar con niveles reales)"
     else:
-        rr_score, rr_veto = 1, False
+        rr_score, rr_veto = 0, False
         rr_desc = "R/R pendiente — definir entrada, stop y objetivo manualmente"
     criteria["ratio_rr"] = {
         "peso": 2, "score_sugerido": rr_score, "es_automatico": True,

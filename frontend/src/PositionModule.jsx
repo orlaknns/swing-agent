@@ -43,14 +43,34 @@ const DECISION_COLOR = { OPERAR_CONVICCION: C.green, OPERAR_CAUTELA: C.amber, NO
 
 function calcDecision(scoreTotal, d) {
   if (scoreTotal == null) return null
+
+  // ── VETOS (NO_OPERAR inmediato) ───────────────────────────────────────
+  // 1. Precio bajo SMA200 (Weinstein: nunca operar fuera de tendencia alcista estructural)
   const hasVeto   = d?.scorecard?.precio_sma200?.score_sugerido === 0
+  // 2. R/R < 2 (no compensa el riesgo)
   const hasRRVeto = d?.rr_suggested != null && d.rr_suggested < 2
+  // 3. Stage 3 o 4 (Weinstein: distribución o declive — smart money saliendo)
+  const stage = d?.stage?.stage
+  const hasStageVeto = stage === 3 || stage === 4
+  if (hasVeto || hasRRVeto || hasStageVeto) return 'NO_OPERAR'
+
+  // ── CAUTELA FORZADA (máximo CAUTELA, nunca CONVICCIÓN) ────────────────
+  // 4. Mercado bajista: SPY bajo SMA200 (Weinstein: evitar compras en Stage 4 macro)
+  const bearMarket = d?.macro_context?.spy_above_sma200 === false
+  // 5. Confidence baja: menos de 4/7 criterios con datos reales
+  const confidence = d?.scorecard?._confidence
+  const lowConfidence = confidence != null && confidence.real < 4
+  // 6. Earnings próximos ≤7d
   const daysToEarn = d?.next_earnings ? (() => {
     try { return Math.ceil((new Date(d.next_earnings) - new Date()) / (1000*60*60*24)) } catch { return null }
   })() : null
   const earningsNearby = daysToEarn != null && daysToEarn >= 0 && daysToEarn <= 7
-  if (hasVeto || hasRRVeto) return 'NO_OPERAR'
-  if (earningsNearby && scoreTotal >= 32) return 'OPERAR_CAUTELA'
+
+  if (bearMarket || lowConfidence || earningsNearby) {
+    return scoreTotal >= 22 ? 'OPERAR_CAUTELA' : 'NO_OPERAR'
+  }
+
+  // ── DECISIÓN NORMAL ───────────────────────────────────────────────────
   return scoreTotal >= 32 ? 'OPERAR_CONVICCION' : scoreTotal >= 22 ? 'OPERAR_CAUTELA' : 'NO_OPERAR'
 }
 const DECISION_LABEL = {
@@ -997,9 +1017,13 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove, scoreHistory, 
         return s + score * (WEIGHTS[k] || 1)
       }, 0)
     : null
-  const hasOverrides = Object.keys(overrides).length > 0
-  const hasVeto   = (overrides['precio_sma200'] ?? data?.scorecard?.precio_sma200?.score_sugerido) === 0
-  const hasRRVeto = data?.rr_suggested != null && data.rr_suggested < 2
+  const hasOverrides  = Object.keys(overrides).length > 0
+  const hasVeto       = (overrides['precio_sma200'] ?? data?.scorecard?.precio_sma200?.score_sugerido) === 0
+  const hasRRVeto     = data?.rr_suggested != null && data.rr_suggested < 2
+  const hasStageVeto  = data?.stage?.stage === 3 || data?.stage?.stage === 4
+  const hasAnyVeto    = hasVeto || hasRRVeto || hasStageVeto
+  const bearMarket    = data?.macro_context?.spy_above_sma200 === false
+  const lowConfidence = data?.scorecard?._confidence != null && data.scorecard._confidence.real < 4
 
   const nextEarnings   = data?.next_earnings
   const daysToEarnings = nextEarnings ? (() => {
@@ -1045,9 +1069,9 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove, scoreHistory, 
 
   return (
     <div style={{ background:C.card,
-      border:`1px solid ${hasVeto||hasRRVeto ? C.red+'55' : decision==='OPERAR_CONVICCION' ? C.green+'44' : C.border}`,
+      border:`1px solid ${hasAnyVeto ? C.red+'55' : decision==='OPERAR_CONVICCION' ? C.green+'44' : C.border}`,
       borderRadius:12, padding:'16px', display:'flex', flexDirection:'column', gap:11,
-      borderLeft:`3px solid ${hasVeto||hasRRVeto ? C.red : decisionColor}` }}>
+      borderLeft:`3px solid ${hasAnyVeto ? C.red : decisionColor}` }}>
 
       {/* Header */}
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
@@ -1067,6 +1091,22 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove, scoreHistory, 
               </span>
             )}
           </div>
+          {/* Razón del veto o cautela forzada */}
+          {!loading && decision && (() => {
+            const reasons = []
+            if (hasStageVeto)  reasons.push(`Stage ${data.stage.stage} — ${data.stage.stage === 3 ? 'distribución' : 'declive'}`)
+            if (hasVeto)       reasons.push('precio bajo SMA200')
+            if (hasRRVeto)     reasons.push(`R/R ${data.rr_suggested?.toFixed(1)}x insuficiente`)
+            if (bearMarket)    reasons.push('mercado bajista (SPY < SMA200)')
+            if (lowConfidence) reasons.push(`datos incompletos (${data.scorecard._confidence.real}/7)`)
+            if (reasons.length === 0) return null
+            return (
+              <div style={{ fontSize:9, color: hasAnyVeto ? C.red : C.amber, marginTop:2 }}>
+                {hasAnyVeto ? '⛔ ' : '⚠ '}{reasons.join(' · ')}
+              </div>
+            )
+          })()}
+
           {data?.company_name && (
             <div style={{ fontSize:11, color:C.muted, marginTop:2,
               overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
@@ -2175,7 +2215,8 @@ export default function PositionModule({ session, onBack, swingExposedTickers = 
           k === '_confidence' ? s : s + (v.score_sugerido ?? 0) * (WEIGHTS[k] || 1), 0)
       : null
     if (scoreTotal != null) {
-      const decision = scoreTotal >= 32 ? 'CONVICCIÓN' : scoreTotal >= 22 ? 'CAUTELA' : 'NO OPERAR'
+      const dec = calcDecision(scoreTotal, data)
+      const decision = dec === 'OPERAR_CONVICCION' ? 'CONVICCIÓN' : dec === 'OPERAR_CAUTELA' ? 'CAUTELA' : 'NO OPERAR'
       const snapshot = { date: new Date().toISOString().slice(0,10), score: scoreTotal, decision }
       const prev = posHistoryRef.current[ticker] || []
       // Evitar duplicado del mismo día
