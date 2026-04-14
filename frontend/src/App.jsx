@@ -292,7 +292,7 @@ function ModuleSelector({ onSelect }) {
           style={{ flex:'1 1 280px', maxWidth:320, background:'#0f1929', border:'1px solid #1a2d45',
             borderRadius:16, padding:'32px 28px', cursor:'pointer', transition:'border-color 0.2s, transform 0.15s',
             display:'flex', flexDirection:'column' }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor='#00e096'; e.currentTarget.style.transform='translateY(-3px)' }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor='#a78bfa'; e.currentTarget.style.transform='translateY(-3px)' }}
           onMouseLeave={e => { e.currentTarget.style.borderColor='#1a2d45'; e.currentTarget.style.transform='translateY(0)' }}>
           <div style={{ fontSize:28, marginBottom:14 }}>📈</div>
           <h2 style={{ fontSize:17, fontWeight:700, color:'#dde6f0', marginBottom:8 }}>Position Trading</h2>
@@ -301,10 +301,10 @@ function ModuleSelector({ onSelect }) {
           </p>
           <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:20 }}>
             {['Watchlist','Screener','Mercado','Journal','Dashboard'].map(t => (
-              <span key={t} style={{ fontSize:10, color:'#00e096', background:'#00e09611', border:'1px solid #00e09633', borderRadius:99, padding:'3px 9px' }}>{t}</span>
+              <span key={t} style={{ fontSize:10, color:'#a78bfa', background:'#a78bfa11', border:'1px solid #a78bfa33', borderRadius:99, padding:'3px 9px' }}>{t}</span>
             ))}
           </div>
-          <div style={{ marginTop:'auto', background:'#00e096', borderRadius:8, padding:'9px 16px', textAlign:'center', fontWeight:700, fontSize:13, color:'#000' }}>
+          <div style={{ marginTop:'auto', background:'#a78bfa', borderRadius:8, padding:'9px 16px', textAlign:'center', fontWeight:700, fontSize:13, color:'#000' }}>
             Entrar →
           </div>
         </div>

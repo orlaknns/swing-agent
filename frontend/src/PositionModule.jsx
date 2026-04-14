@@ -10,6 +10,7 @@ const C = {
   accent:'#00d4ff', green:'#00e096', red:'#ff4060',
   amber:'#ffb800', text:'#dde6f0', muted:'#4a6080',
 }
+const M = '#a78bfa'  // color de identidad del módulo Position Trading
 
 const WEIGHTS = {
   narrativa: 3, precio_sma200: 3, estructura_tecnica: 3,
@@ -1092,7 +1093,7 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove, scoreHistory }
         <div style={{ display:'flex', gap:5, alignItems:'center', flexShrink:0 }}>
           <button onClick={runAnalysis} disabled={loading} title="Re-analizar"
             style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:5,
-              color: loading ? C.accent : C.muted, cursor: loading ? 'not-allowed' : 'pointer',
+              color: loading ? M : C.muted, cursor: loading ? 'not-allowed' : 'pointer',
               padding:'4px 8px', fontSize:12 }}>↻</button>
           <button onClick={() => onRemove(ticker)} title="Eliminar"
             style={{ background:'none', border:`1px solid ${C.red}44`, borderRadius:5,
@@ -1123,7 +1124,7 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove, scoreHistory }
       )}
       {loading && data && (
         <div style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 0' }}>
-          <div style={{ width:13, height:13, border:`2px solid ${C.border}`, borderTop:`2px solid ${C.green}`, borderRadius:'50%', animation:'spin 0.7s linear infinite', flexShrink:0 }}/>
+          <div style={{ width:13, height:13, border:`2px solid ${C.border}`, borderTop:`2px solid ${M}`, borderRadius:'50%', animation:'spin 0.7s linear infinite', flexShrink:0 }}/>
           <span style={{ fontSize:12, color:C.muted }}>Obteniendo datos actualizados…</span>
         </div>
       )}
@@ -2153,7 +2154,7 @@ export default function PositionModule({ session, onBack }) {
             </button>
             <div>
               <span style={{ fontSize:11, color:C.muted, letterSpacing:'0.04em', textTransform:'uppercase' }}>KNNS TradeAgent</span>
-              <h1 style={{ fontSize:22, fontWeight:700, letterSpacing:'-0.02em', color:'#00e096', margin:0 }}>Position Trading</h1>
+              <h1 style={{ fontSize:22, fontWeight:700, letterSpacing:'-0.02em', color:M, margin:0 }}>Position Trading</h1>
             </div>
           </div>
 
@@ -2168,11 +2169,11 @@ export default function PositionModule({ session, onBack }) {
                 placeholder="Agregar ticker… ej: NVDA, MSFT, AAPL"
                 style={{ flex:1, background:'#0f1929', border:`1px solid ${C.border}`, borderRadius:9,
                   padding:'10px 14px', color:C.text, fontSize:13, outline:'none' }}
-                onFocus={e => e.target.style.borderColor=C.green}
+                onFocus={e => e.target.style.borderColor=M}
                 onBlur={e  => e.target.style.borderColor=C.border}
               />
               <button onClick={add}
-                style={{ background:C.green, border:'none', borderRadius:9, color:'#000',
+                style={{ background:M, border:'none', borderRadius:9, color:'#000',
                   fontWeight:700, padding:'10px 16px', cursor:'pointer', fontSize:13 }}>
                 + Agregar
               </button>
@@ -2182,9 +2183,9 @@ export default function PositionModule({ session, onBack }) {
                 title="Limpiar cache y re-analizar todo">↻</button>
               <button onClick={() => setViewMode(v => v==='cards'?'table':'cards')}
                 title={viewMode==='cards'?'Ver tabla':'Ver tarjetas'}
-                style={{ background: viewMode==='table' ? C.green+'22' : 'none',
-                  border:`1px solid ${viewMode==='table' ? C.green : C.border}`,
-                  borderRadius:9, color: viewMode==='table' ? C.green : C.muted,
+                style={{ background: viewMode==='table' ? M+'22' : 'none',
+                  border:`1px solid ${viewMode==='table' ? M : C.border}`,
+                  borderRadius:9, color: viewMode==='table' ? M : C.muted,
                   padding:'10px 13px', cursor:'pointer', fontSize:13 }}>
                 {viewMode==='cards' ? '☰' : '⊞'}
               </button>
@@ -2196,8 +2197,8 @@ export default function PositionModule({ session, onBack }) {
             {tabs.map(([key, label]) => (
               <button key={key} onClick={() => setTab(key)}
                 style={{ background:'none', border:'none',
-                  borderBottom: tab===key ? `2px solid ${C.green}` : '2px solid transparent',
-                  color: tab===key ? C.green : C.muted,
+                  borderBottom: tab===key ? `2px solid ${M}` : '2px solid transparent',
+                  color: tab===key ? M : C.muted,
                   padding:'10px 18px', cursor:'pointer', fontSize:12,
                   fontWeight: tab===key ? 700 : 400 }}>
                 {label}
