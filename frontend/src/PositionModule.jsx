@@ -1459,7 +1459,6 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove, scoreHistory, 
           {/* Próxima revisión */}
           {(() => {
             const stage = data?.stage?.stage
-            // Calcular fecha sugerida según Stage (Weinstein)
             const suggestedWeeks = stage === 2 ? 4 : stage === 3 ? 2 : stage === 1 ? 8 : 4
             const savedDate = data?._reviewDate
             const reviewDate = savedDate
@@ -1471,6 +1470,19 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove, scoreHistory, 
             const isSoon    = daysLeft >= 0 && daysLeft <= 7
             const color = isOverdue ? C.red : isSoon ? C.amber : C.muted
 
+            // Texto de acción según estado y stage
+            const actionText = stage === 3
+              ? 'Posible techo — evaluar reducir o salir'
+              : isOverdue
+                ? '¿Sigue en Stage 2? Confirmar tesis antes de continuar'
+                : isSoon
+                  ? 'Revisar pronto — confirmar Stage y señales'
+                  : stage === 2
+                    ? 'Mantener mientras precio > SMA30 semanal'
+                    : stage === 1
+                      ? 'Esperar ruptura de resistencia para entrada'
+                      : 'Revisar tesis y Stage'
+
             const saveDate = (val) => {
               const updated = { ...data }
               if (val) updated._reviewDate = val
@@ -1481,7 +1493,7 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove, scoreHistory, 
 
             return (
               <div style={{ background:C.bg, borderRadius:8, padding:'9px 12px',
-                border:`1px solid ${isOverdue ? C.red+'44' : isSoon ? C.amber+'44' : C.border}` }}>
+                border:`1px solid ${isOverdue ? C.red+'44' : isSoon ? C.amber+'44' : stage === 3 ? C.amber+'44' : C.border}` }}>
                 <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:8 }}>
                   <div style={{ display:'flex', alignItems:'center', gap:7 }}>
                     <span style={{ fontSize:9, color:C.muted, textTransform:'uppercase', letterSpacing:'0.07em' }}>
@@ -1512,6 +1524,7 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove, scoreHistory, 
                       style={{ background:'none', border:'none', color:C.muted, cursor:'pointer', fontSize:11 }}>✕</button>
                   </div>
                 ) : (
+                  <>
                   <div style={{ display:'flex', alignItems:'baseline', gap:8, marginTop:4 }}>
                     <span style={{ fontSize:13, fontWeight:700, fontFamily:'monospace', color }}>
                       {reviewDate.toLocaleDateString('es', { day:'numeric', month:'short', year:'numeric' })}
@@ -1526,6 +1539,10 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove, scoreHistory, 
                       </button>
                     )}
                   </div>
+                  <div style={{ fontSize:10, color: isOverdue || stage === 3 ? color : C.muted, marginTop:3 }}>
+                    {actionText}
+                  </div>
+                  </>
                 )}
               </div>
             )
