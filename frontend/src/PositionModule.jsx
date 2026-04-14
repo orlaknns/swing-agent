@@ -2112,10 +2112,10 @@ export default function PositionModule({ session, onBack }) {
     setRefreshingTickers(prev => { const n={...prev}; delete n[ticker]; return n })
   }
 
-  const [wlFilters, setWlFilters] = useState({ decision:'all', score:'all', rsiMin:'', rsiMax:'', stage:'all', hhhl:'all' })
+  const [wlFilters, setWlFilters] = useState({ decision:'all', rsiMin:'', rsiMax:'', stage:'all', hhhl:'all' })
   const toggleWlFilter = (key, val) => setWlFilters(f => ({ ...f, [key]: f[key]===val ? 'all' : val }))
-  const resetWlFilters = () => setWlFilters({ decision:'all', score:'all', rsiMin:'', rsiMax:'', stage:'all', hhhl:'all' })
-  const hasWlFilters = wlFilters.decision!=='all' || wlFilters.score!=='all' || wlFilters.rsiMin!=='' || wlFilters.rsiMax!=='' || wlFilters.stage!=='all' || wlFilters.hhhl!=='all'
+  const resetWlFilters = () => setWlFilters({ decision:'all', rsiMin:'', rsiMax:'', stage:'all', hhhl:'all' })
+  const hasWlFilters = wlFilters.decision!=='all' || wlFilters.rsiMin!=='' || wlFilters.rsiMax!=='' || wlFilters.stage!=='all' || wlFilters.hhhl!=='all'
 
   const wl = watchlist || []
   const isLoaded = watchlist !== null
@@ -2128,15 +2128,10 @@ export default function PositionModule({ session, onBack }) {
 
   const filteredWl = wl.filter(t => {
     const d = posCache[t]
-    if (!d) return wlFilters.decision==='all' && wlFilters.score==='all' && wlFilters.rsi==='all' && wlFilters.stage==='all' && wlFilters.hhhl==='all'
+    if (!d) return wlFilters.decision==='all' && wlFilters.rsiMin==='' && wlFilters.rsiMax==='' && wlFilters.stage==='all' && wlFilters.hhhl==='all'
     const score = calcScore(d)
     const dec = score == null ? null : score >= 32 ? 'OPERAR_CONVICCION' : score >= 22 ? 'OPERAR_CAUTELA' : 'NO_OPERAR'
     if (wlFilters.decision !== 'all' && dec !== wlFilters.decision) return false
-    if (wlFilters.score !== 'all') {
-      if (wlFilters.score === 'high'   && !(score >= 32)) return false
-      if (wlFilters.score === 'medium' && !(score >= 22 && score < 32)) return false
-      if (wlFilters.score === 'low'    && !(score < 22)) return false
-    }
     if (wlFilters.rsiMin !== '' || wlFilters.rsiMax !== '') {
       const rsi = d.rsi
       if (rsi == null) return false
@@ -2235,17 +2230,6 @@ export default function PositionModule({ session, onBack }) {
                   <option value="OPERAR_CAUTELA">Cautela (22–31)</option>
                   <option value="NO_OPERAR">No operar (&lt;22)</option>
                 </select>
-                <div style={{ width:1, height:16, background:C.border }} />
-                {/* Score */}
-                {[['high','≥32',C.green],['medium','22-31',C.amber],['low','<22',C.red]].map(([val,label,color]) => (
-                  <button key={val} onClick={() => toggleWlFilter('score', val)}
-                    style={{ background: wlFilters.score===val ? color+'22' : 'none',
-                      border:`1px solid ${wlFilters.score===val ? color : C.border}`,
-                      borderRadius:6, color: wlFilters.score===val ? color : C.muted,
-                      padding:'3px 10px', cursor:'pointer', fontSize:10, fontWeight: wlFilters.score===val ? 700 : 400 }}>
-                    {label}
-                  </button>
-                ))}
                 <div style={{ width:1, height:16, background:C.border }} />
                 {/* RSI range */}
                 <span style={{ fontSize:10, color:C.muted }}>RSI</span>
