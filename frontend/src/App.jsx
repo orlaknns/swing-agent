@@ -6,6 +6,7 @@ import Journal from './Journal.jsx'
 import Discover from './Discover.jsx'
 import Dashboard from './Dashboard.jsx'
 import PositionModule from './PositionModule.jsx'
+import UnifiedDashboard from './UnifiedDashboard.jsx'
 
 class ErrorBoundary extends Component {
   constructor(props) { super(props); this.state = { error: null } }
@@ -258,9 +259,25 @@ function WatchlistTable({ tickers, analysisCache, openTrades, lastClosedTrades, 
   )
 }
 
-function ModuleSelector({ onSelect }) {
+function ModuleSelector({ onSelect, session }) {
+  const [showDashboard, setShowDashboard] = useState(false)
+
+  if (showDashboard) return (
+    <div style={{ minHeight:'100vh', background:'#070d1a' }}>
+      <div style={{ padding:'14px 20px', borderBottom:'1px solid #1a2d45', display:'flex', alignItems:'center', gap:10 }}>
+        <button onClick={() => setShowDashboard(false)}
+          style={{ background:'none', border:'1px solid #1a2d45', borderRadius:6, color:'#4a6080',
+            padding:'4px 10px', cursor:'pointer', fontSize:11 }}>
+          ← Módulos
+        </button>
+        <span style={{ fontSize:13, fontWeight:700, color:'#dde6f0' }}>Dashboard General</span>
+      </div>
+      <UnifiedDashboard session={session} />
+    </div>
+  )
+
   return (
-    <div style={{ minHeight:'100vh', background:'#070d1a', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'24px' }}>
+    <div style={{ minHeight:'100vh', background:'#070d1a', display:'flex', flexDirection:'column', alignItems:'center', padding:'60px 24px 48px' }}>
       <div style={{ marginBottom:40, textAlign:'center' }}>
         <h1 style={{ fontSize:28, fontWeight:700, color:'#dde6f0', letterSpacing:'-0.02em', marginBottom:6 }}>KNNS TradeAgent</h1>
         <p style={{ fontSize:13, color:'#4a6080' }}>Selecciona el módulo de análisis</p>
@@ -307,6 +324,25 @@ function ModuleSelector({ onSelect }) {
           <div style={{ marginTop:'auto', background:'#a78bfa', borderRadius:8, padding:'9px 16px', textAlign:'center', fontWeight:700, fontSize:13, color:'#000' }}>
             Entrar →
           </div>
+        </div>
+      </div>
+
+      {/* Dashboard General */}
+      <div style={{ marginTop:20, maxWidth:700, width:'100%' }}>
+        <div onClick={() => setShowDashboard(true)}
+          style={{ background:'#0f1929', border:'1px solid #1a2d45', borderRadius:16, padding:'20px 28px',
+            cursor:'pointer', transition:'border-color 0.2s, transform 0.15s',
+            display:'flex', alignItems:'center', justifyContent:'space-between' }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor='#ffb800'; e.currentTarget.style.transform='translateY(-2px)' }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor='#1a2d45'; e.currentTarget.style.transform='translateY(0)' }}>
+          <div style={{ display:'flex', alignItems:'center', gap:14 }}>
+            <span style={{ fontSize:22 }}>📊</span>
+            <div>
+              <h3 style={{ fontSize:14, fontWeight:700, color:'#dde6f0', margin:0, marginBottom:3 }}>Dashboard General</h3>
+              <p style={{ fontSize:11, color:'#4a6080', margin:0 }}>Resumen combinado de Swing + Position: P&amp;L, win rate y últimas operaciones</p>
+            </div>
+          </div>
+          <span style={{ fontSize:13, color:'#ffb800', fontWeight:700, flexShrink:0, marginLeft:16 }}>Ver →</span>
         </div>
       </div>
     </div>
@@ -518,7 +554,7 @@ export default function App() {
     </div>
   )
   if (!session) return <Auth />
-  if (module === 'selector') return <ModuleSelector onSelect={setModule} />
+  if (module === 'selector') return <ModuleSelector onSelect={setModule} session={session} />
   if (module === 'position') return <PositionModule session={session} onBack={() => setModule('selector')} />
 
   const tabs = [
