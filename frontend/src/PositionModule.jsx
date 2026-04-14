@@ -2223,7 +2223,7 @@ export default function PositionModule({ session, onBack }) {
                 <select value={wlFilters.decision}
                   onChange={e => setWlFilters(f => ({ ...f, decision: e.target.value }))}
                   style={{ background:'#0f1929', border:`1px solid ${wlFilters.decision!=='all' ? C.accent : C.border}`,
-                    borderRadius:6, color: wlFilters.decision!=='all' ? C.accent : C.muted,
+                    borderRadius:6, color: wlFilters.decision!=='all' ? C.accent : C.text,
                     fontSize:10, padding:'3px 8px', cursor:'pointer', outline:'none' }}>
                   <option value="all">Decisión: todas</option>
                   <option value="OPERAR_CONVICCION">Convicción (≥32)</option>
@@ -2253,7 +2253,7 @@ export default function PositionModule({ session, onBack }) {
                 <select value={wlFilters.stage}
                   onChange={e => setWlFilters(f => ({ ...f, stage: e.target.value }))}
                   style={{ background:'#0f1929', border:`1px solid ${wlFilters.stage!=='all' ? C.accent : C.border}`,
-                    borderRadius:6, color: wlFilters.stage!=='all' ? C.accent : C.muted,
+                    borderRadius:6, color: wlFilters.stage!=='all' ? C.accent : C.text,
                     fontSize:10, padding:'3px 8px', cursor:'pointer', outline:'none' }}>
                   <option value="all">Stage: todos</option>
                   <option value="1">Stage 1 — Base</option>
@@ -2266,7 +2266,7 @@ export default function PositionModule({ session, onBack }) {
                 <select value={wlFilters.hhhl}
                   onChange={e => setWlFilters(f => ({ ...f, hhhl: e.target.value }))}
                   style={{ background:'#0f1929', border:`1px solid ${wlFilters.hhhl!=='all' ? C.accent : C.border}`,
-                    borderRadius:6, color: wlFilters.hhhl!=='all' ? C.accent : C.muted,
+                    borderRadius:6, color: wlFilters.hhhl!=='all' ? C.accent : C.text,
                     fontSize:10, padding:'3px 8px', cursor:'pointer', outline:'none' }}>
                   <option value="all">Estructura: todas</option>
                   <option value="strong">Alcista confirmada (≥2 HH/HL)</option>
