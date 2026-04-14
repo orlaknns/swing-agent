@@ -58,7 +58,7 @@ function savedAtLabel(savedAt) {
   return `hace ${days}d`
 }
 
-function WatchlistTable({ tickers, analysisCache, openTrades, lastClosedTrades, onRowClick, onRemove, onRefresh, refreshingTickers }) {
+function WatchlistTable({ tickers, analysisCache, openTrades, lastClosedTrades, onRowClick, onRemove, onRefresh, refreshingTickers, positionOpenTickers = [] }) {
   const [sortCol, setSortCol] = useState(null)   // 'ticker'|'score'|'signal'|'rsi'|'dist'|'rr'
   const [sortDir, setSortDir] = useState('desc')
   const [filterSignal, setFilterSignal] = useState('all')
@@ -192,6 +192,14 @@ function WatchlistTable({ tickers, analysisCache, openTrades, lastClosedTrades, 
                   <td style={{ padding:'10px 10px', whiteSpace:'nowrap' }}>
                     <span style={{ fontFamily:'monospace', fontWeight:700, color:C.text }}>{ticker}</span>
                     {hasActiveTrade && <span style={{ marginLeft:5, fontSize:9, color:C.green }}>📈</span>}
+                    {positionOpenTickers.includes(ticker) && (
+                      <span title="Tiene posición activa en Position Trading"
+                        style={{ marginLeft:5, fontSize:9, fontWeight:700, color:'#a78bfa',
+                          background:'#a78bfa18', border:'1px solid #a78bfa44',
+                          borderRadius:99, padding:'1px 5px' }}>
+                        POS
+                      </span>
+                    )}
                     {d?._savedAt && <div style={{ fontSize:9, color:C.muted, marginTop:1 }}>{savedAtLabel(d._savedAt)}</div>}
                   </td>
                   <td style={{ padding:'10px 10px', fontFamily:'monospace', color:C.text }}>
@@ -456,6 +464,25 @@ export default function App() {
     saveToSupabase(watchlist, monitorTickers)
   }, [watchlist, monitorTickers, session]) // eslint-disable-line
 
+  // ── Position open tickers (para advertencia cross-módulo) ─────────────
+  const [positionOpenTickers, setPositionOpenTickers] = useState([]) // tickers con trade activo en Position
+
+  useEffect(() => {
+    if (!session) return
+    const fetch = () => {
+      supabase.from('position_trades')
+        .select('ticker, status')
+        .eq('user_id', session.user.id)
+        .in('status', ['open', 'planning'])
+        .then(({ data }) => {
+          setPositionOpenTickers((data || []).map(t => t.ticker))
+        })
+    }
+    fetch()
+    const iv = setInterval(fetch, 10000)
+    return () => clearInterval(iv)
+  }, [session])
+
   // ── Journal count + open trades + last closed trade ───────────────────
   const [openTrades,       setOpenTrades]       = useState({}) // { AAPL: { entryPrice, id } }
   const [lastClosedTrades, setLastClosedTrades] = useState({}) // { AAPL: { date, exitPrice } }
@@ -555,7 +582,7 @@ export default function App() {
   )
   if (!session) return <Auth />
   if (module === 'selector') return <ModuleSelector onSelect={setModule} session={session} />
-  if (module === 'position') return <PositionModule session={session} onBack={() => setModule('selector')} />
+  if (module === 'position') return <PositionModule session={session} onBack={() => setModule('selector')} swingExposedTickers={[...wl, ...monitor, ...Object.keys(openTrades)]} />
 
   const tabs = [
     ['dashboard', 'Dashboard'],
@@ -666,6 +693,7 @@ export default function App() {
                       onRemove={removeFromAll}
                       onRefresh={refreshFromTable}
                       refreshingTickers={refreshingTickers}
+                      positionOpenTickers={positionOpenTickers}
                     />
                   </div>
                 ) : (
@@ -681,6 +709,7 @@ export default function App() {
                           onMonitor={moveToMonitor}
                           activeTrade={openTrades[t] || null}
                           lastClosedTrade={!openTrades[t] ? (lastClosedTrades[t] || null) : null}
+                          inPositionModule={positionOpenTickers.includes(t)}
                         />
                       </ErrorBoundary>
                     ))}
@@ -736,6 +765,7 @@ export default function App() {
                       onRemove={removeFromAll}
                       onRefresh={refreshFromTable}
                       refreshingTickers={refreshingTickers}
+                      positionOpenTickers={positionOpenTickers}
                     />
                   </div>
                 ) : (
@@ -752,6 +782,7 @@ export default function App() {
                           isInMonitorTab={true}
                           activeTrade={openTrades[t] || null}
                           lastClosedTrade={!openTrades[t] ? (lastClosedTrades[t] || null) : null}
+                          inPositionModule={positionOpenTickers.includes(t)}
                         />
                       </ErrorBoundary>
                     ))}
@@ -813,6 +844,7 @@ export default function App() {
                 isInMonitorTab={tab === 'monitor'}
                 activeTrade={openTrades[tableModal] || null}
                 lastClosedTrade={!openTrades[tableModal] ? (lastClosedTrades[tableModal] || null) : null}
+                inPositionModule={positionOpenTickers.includes(tableModal)}
                 hideRemove
               />
             </ErrorBoundary>

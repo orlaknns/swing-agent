@@ -290,7 +290,7 @@ function FundamentalsBlock({ f, nextEarnings }) {
 
 const round2 = (n) => Math.round(n * 100) / 100
 
-export default function StockCard({ ticker, onRemove, session, onMonitor, onAnalysed, cachedData, isInMonitorTab, activeTrade, lastClosedTrade, hideRemove }) {
+export default function StockCard({ ticker, onRemove, session, onMonitor, onAnalysed, cachedData, isInMonitorTab, activeTrade, lastClosedTrade, hideRemove, inPositionModule }) {
   const [data,         setData]         = useState(cachedData || null)
   const [loading,      setLoading]      = useState(false)
   const [expanded,     setExpanded]     = useState(false)
@@ -425,6 +425,13 @@ export default function StockCard({ ticker, onRemove, session, onMonitor, onAnal
           </div>
         )
       })()}
+
+      {/* Cross-module warning */}
+      {inPositionModule && (
+        <div style={{ background:'#1a0f2e', border:'1px solid #a78bfa44', borderRadius:7, padding:'6px 10px', display:'flex', alignItems:'center', gap:6 }}>
+          <span style={{ fontSize:10, color:'#a78bfa', fontWeight:700 }}>⚠ Tienes una posición activa en Position Trading</span>
+        </div>
+      )}
 
       {/* Active trade badge */}
       {activeTrade && (() => {

@@ -947,7 +947,7 @@ function PositionScreener({ watchlist, onAdd, onRemove, onAddAll, posCache }) {
 }
 
 // ── Position Card ────────────────────────────────────────────────────────────
-function PositionCard({ ticker, cachedData, onAnalysed, onRemove, scoreHistory }) {
+function PositionCard({ ticker, cachedData, onAnalysed, onRemove, scoreHistory, inSwingModule }) {
   const [data,       setData]       = useState(cachedData || null)
   const [loading,    setLoading]    = useState(false)
   const [error,      setError]      = useState(null)
@@ -1406,6 +1406,15 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove, scoreHistory }
             )
           })()}
 
+          {/* Cross-module warning */}
+          {inSwingModule && (
+            <div style={{ fontSize:10, borderRadius:6, padding:'7px 10px',
+              background:'#00d4ff11', border:'1px solid #00d4ff44',
+              display:'flex', alignItems:'center', gap:6 }}>
+              <span style={{ color:'#00d4ff', fontWeight:700 }}>⚠ Este ticker está en tu watchlist de Swing Trading</span>
+            </div>
+          )}
+
           {/* Earnings warning */}
           {daysToEarnings != null && daysToEarnings >= 0 && daysToEarnings <= 21 && (
             <div style={{ fontSize:10, borderRadius:6, padding:'7px 10px',
@@ -1555,7 +1564,7 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove, scoreHistory }
 }
 
 // ── Position Watchlist Table ─────────────────────────────────────────────────
-function PositionWatchlistTable({ tickers, cache, onRemove, onRefresh, refreshingTickers, onRowClick }) {
+function PositionWatchlistTable({ tickers, cache, onRemove, onRefresh, refreshingTickers, onRowClick, swingExposedTickers = [] }) {
   const [sortCol, setSortCol] = useState(null)
   const [sortDir, setSortDir] = useState('desc')
   const [filterText, setFilterText] = useState('')
@@ -1630,6 +1639,14 @@ function PositionWatchlistTable({ tickers, cache, onRemove, onRefresh, refreshin
                   onMouseLeave={e => e.currentTarget.style.background='transparent'}>
                   <td style={{ padding:'10px' }}>
                     <span style={{ fontFamily:'monospace', fontWeight:700, color:C.text }}>{ticker}</span>
+                    {swingExposedTickers.includes(ticker) && (
+                      <span title="Ticker en watchlist de Swing Trading"
+                        style={{ marginLeft:5, fontSize:9, fontWeight:700, color:'#00d4ff',
+                          background:'#00d4ff18', border:'1px solid #00d4ff44',
+                          borderRadius:99, padding:'1px 5px' }}>
+                        SW
+                      </span>
+                    )}
                     {d?._savedAt && (() => {
                       const dt = new Date(d._savedAt), now = new Date()
                       const ageH = (now - dt) / (1000*60*60)
@@ -1995,7 +2012,7 @@ function SectorRotation() {
 
 
 // ── Position Module (contenedor principal) ──────────────────────────────────
-export default function PositionModule({ session, onBack }) {
+export default function PositionModule({ session, onBack, swingExposedTickers = [] }) {
   const [tab,        setTab]        = useState('dashboard')
   const [viewMode,   setViewMode]   = useState('cards')   // 'cards' | 'table'
   const [search,     setSearch]     = useState('')
@@ -2329,6 +2346,7 @@ export default function PositionModule({ session, onBack }) {
                   onRemove={remove} onRefresh={refreshFromTable}
                   refreshingTickers={refreshingTickers}
                   onRowClick={setTableModal}
+                  swingExposedTickers={swingExposedTickers}
                 />
               </div>
             ) : (
@@ -2344,6 +2362,7 @@ export default function PositionModule({ session, onBack }) {
                     onAnalysed={cacheAnalysis}
                     onRemove={remove}
                     scoreHistory={posHistory[t] || []}
+                    inSwingModule={swingExposedTickers.includes(t)}
                   />
                 ))}
               </div>
@@ -2384,6 +2403,7 @@ export default function PositionModule({ session, onBack }) {
               onAnalysed={cacheAnalysis}
               onRemove={t => { remove(t); setTableModal(null) }}
               scoreHistory={posHistory[tableModal] || []}
+              inSwingModule={swingExposedTickers.includes(tableModal)}
             />
             <button onClick={() => setTableModal(null)}
               style={{ marginTop:10, width:'100%', background:'none', border:`1px solid ${C.border}`,
