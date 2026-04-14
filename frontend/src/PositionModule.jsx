@@ -2112,10 +2112,10 @@ export default function PositionModule({ session, onBack }) {
     setRefreshingTickers(prev => { const n={...prev}; delete n[ticker]; return n })
   }
 
-  const [wlFilters, setWlFilters] = useState({ decision:'all', score:'all', rsi:'all', stage:'all', hhhl:'all' })
+  const [wlFilters, setWlFilters] = useState({ decision:'all', score:'all', rsiMin:'', rsiMax:'', stage:'all', hhhl:'all' })
   const toggleWlFilter = (key, val) => setWlFilters(f => ({ ...f, [key]: f[key]===val ? 'all' : val }))
-  const resetWlFilters = () => setWlFilters({ decision:'all', score:'all', rsi:'all', stage:'all', hhhl:'all' })
-  const hasWlFilters = Object.values(wlFilters).some(v => v !== 'all')
+  const resetWlFilters = () => setWlFilters({ decision:'all', score:'all', rsiMin:'', rsiMax:'', stage:'all', hhhl:'all' })
+  const hasWlFilters = wlFilters.decision!=='all' || wlFilters.score!=='all' || wlFilters.rsiMin!=='' || wlFilters.rsiMax!=='' || wlFilters.stage!=='all' || wlFilters.hhhl!=='all'
 
   const wl = watchlist || []
   const isLoaded = watchlist !== null
@@ -2137,11 +2137,11 @@ export default function PositionModule({ session, onBack }) {
       if (wlFilters.score === 'medium' && !(score >= 22 && score < 32)) return false
       if (wlFilters.score === 'low'    && !(score < 22)) return false
     }
-    if (wlFilters.rsi !== 'all') {
+    if (wlFilters.rsiMin !== '' || wlFilters.rsiMax !== '') {
       const rsi = d.rsi
-      if (wlFilters.rsi === 'oversold'  && !(rsi != null && rsi < 40)) return false
-      if (wlFilters.rsi === 'normal'    && !(rsi != null && rsi >= 40 && rsi <= 65)) return false
-      if (wlFilters.rsi === 'overbought'&& !(rsi != null && rsi > 65)) return false
+      if (rsi == null) return false
+      if (wlFilters.rsiMin !== '' && rsi < parseFloat(wlFilters.rsiMin)) return false
+      if (wlFilters.rsiMax !== '' && rsi > parseFloat(wlFilters.rsiMax)) return false
     }
     if (wlFilters.stage !== 'all') {
       const st = d.stage?.stage
@@ -2246,16 +2246,23 @@ export default function PositionModule({ session, onBack }) {
                   </button>
                 ))}
                 <div style={{ width:1, height:16, background:C.border }} />
-                {/* RSI */}
-                {[['oversold','RSI<40',C.green],['normal','RSI 40-65',C.accent],['overbought','RSI>65',C.red]].map(([val,label,color]) => (
-                  <button key={val} onClick={() => toggleWlFilter('rsi', val)}
-                    style={{ background: wlFilters.rsi===val ? color+'22' : 'none',
-                      border:`1px solid ${wlFilters.rsi===val ? color : C.border}`,
-                      borderRadius:6, color: wlFilters.rsi===val ? color : C.muted,
-                      padding:'3px 10px', cursor:'pointer', fontSize:10, fontWeight: wlFilters.rsi===val ? 700 : 400 }}>
-                    {label}
-                  </button>
-                ))}
+                {/* RSI range */}
+                <span style={{ fontSize:10, color:C.muted }}>RSI</span>
+                <input type="number" placeholder="min" value={wlFilters.rsiMin}
+                  onChange={e => setWlFilters(f => ({ ...f, rsiMin: e.target.value }))}
+                  style={{ width:44, background:'#0f1929', border:`1px solid ${wlFilters.rsiMin!=='' ? C.accent : C.border}`,
+                    borderRadius:6, color:C.text, fontSize:10, padding:'3px 6px', outline:'none', textAlign:'center' }}
+                  onFocus={e => e.target.style.borderColor=C.accent}
+                  onBlur={e  => e.target.style.borderColor=wlFilters.rsiMin!=='' ? C.accent : C.border}
+                />
+                <span style={{ fontSize:10, color:C.muted }}>–</span>
+                <input type="number" placeholder="max" value={wlFilters.rsiMax}
+                  onChange={e => setWlFilters(f => ({ ...f, rsiMax: e.target.value }))}
+                  style={{ width:44, background:'#0f1929', border:`1px solid ${wlFilters.rsiMax!=='' ? C.accent : C.border}`,
+                    borderRadius:6, color:C.text, fontSize:10, padding:'3px 6px', outline:'none', textAlign:'center' }}
+                  onFocus={e => e.target.style.borderColor=C.accent}
+                  onBlur={e  => e.target.style.borderColor=wlFilters.rsiMax!=='' ? C.accent : C.border}
+                />
                 <div style={{ width:1, height:16, background:C.border }} />
                 {/* Stage */}
                 {[['1','S1',C.muted],['2','S2',C.green],['3','S3',C.amber],['4','S4',C.red]].map(([val,label,color]) => (
