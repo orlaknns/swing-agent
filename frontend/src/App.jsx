@@ -464,19 +464,27 @@ export default function App() {
     saveToSupabase(watchlist, monitorTickers)
   }, [watchlist, monitorTickers, session]) // eslint-disable-line
 
-  // ── Position open tickers (para advertencia cross-módulo) ─────────────
-  const [positionOpenTickers, setPositionOpenTickers] = useState([]) // tickers con trade activo en Position
+  // ── Position exposed tickers (watchlist + trades activos) ────────────
+  const [positionOpenTickers, setPositionOpenTickers] = useState([])
 
   useEffect(() => {
     if (!session) return
     const fetch = () => {
-      supabase.from('position_trades')
-        .select('ticker, status')
-        .eq('user_id', session.user.id)
-        .in('status', ['open', 'planning'])
-        .then(({ data }) => {
-          setPositionOpenTickers((data || []).map(t => t.ticker))
-        })
+      Promise.all([
+        supabase.from('watchlist')
+          .select('position_watchlist')
+          .eq('user_id', session.user.id)
+          .single(),
+        supabase.from('position_trades')
+          .select('ticker, status')
+          .eq('user_id', session.user.id)
+          .in('status', ['open', 'planning']),
+      ]).then(([wlRes, tradesRes]) => {
+        const wl     = wlRes.data?.position_watchlist || []
+        const trades = (tradesRes.data || []).map(t => t.ticker)
+        const all    = [...new Set([...wl, ...trades])]
+        setPositionOpenTickers(all)
+      })
     }
     fetch()
     const iv = setInterval(fetch, 10000)
