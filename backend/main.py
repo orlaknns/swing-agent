@@ -922,7 +922,7 @@ SECTOR_ETF_MAP = {
 _sector_etf_cache: dict = {}
 
 
-async def fetch_prices_weekly(ticker: str, client_: httpx.AsyncClient, weeks: int = 20) -> list:
+async def fetch_prices_weekly(ticker: str, client_: httpx.AsyncClient, weeks: int = 52) -> list:
     """Obtiene velas semanales de Alpha Vantage para detección de HH/HL."""
     symbol = TICKER_MAP.get(ticker, ticker)
     url = (
