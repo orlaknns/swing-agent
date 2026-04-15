@@ -58,7 +58,7 @@ function savedAtLabel(savedAt) {
   return `hace ${days}d`
 }
 
-function WatchlistTable({ tickers, analysisCache, openTrades, lastClosedTrades, onRowClick, onRemove, onRefresh, refreshingTickers, positionOpenTickers = [] }) {
+function WatchlistTable({ tickers, analysisCache, openTrades, lastClosedTrades, onRowClick, onRemove, onRefresh, refreshingTickers, positionOpenTickers = [], selected = new Set(), onToggleSelect, onToggleSelectAll }) {
   const [sortCol, setSortCol] = useState(null)   // 'ticker'|'score'|'signal'|'rsi'|'dist'|'rr'
   const [sortDir, setSortDir] = useState('desc')
   const [filterSignal, setFilterSignal] = useState('all')
@@ -158,6 +158,14 @@ function WatchlistTable({ tickers, analysisCache, openTrades, lastClosedTrades, 
         <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
           <thead>
             <tr style={{ borderBottom:`1px solid ${C.border}` }}>
+              {onToggleSelectAll && (
+                <th style={{ padding:'8px 10px', width:32 }} onClick={e => e.stopPropagation()}>
+                  <input type="checkbox"
+                    checked={rows.length > 0 && rows.every(r => selected.has(r.ticker))}
+                    onChange={() => onToggleSelectAll(rows.map(r => r.ticker))}
+                    style={{ cursor:'pointer', accentColor:C.accent }} />
+                </th>
+              )}
               <th style={thStyle('ticker')} onClick={() => handleSort('ticker')}>Ticker <SortIcon col="ticker"/></th>
               <th style={thStyle(null)}>Precio</th>
               <th style={thStyle('score')} onClick={() => handleSort('score')}>Score <SortIcon col="score"/></th>
@@ -186,9 +194,16 @@ function WatchlistTable({ tickers, analysisCache, openTrades, lastClosedTrades, 
               return (
                 <tr key={ticker}
                   onClick={() => onRowClick(ticker)}
-                  style={{ borderBottom:`1px solid ${C.border}`, cursor:'pointer', transition:'background 0.15s' }}
-                  onMouseEnter={e => e.currentTarget.style.background = '#1a2d4533'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                  style={{ borderBottom:`1px solid ${C.border}`, cursor:'pointer', transition:'background 0.15s',
+                    background: selected.has(ticker) ? C.accent+'0d' : 'transparent' }}
+                  onMouseEnter={e => { if (!selected.has(ticker)) e.currentTarget.style.background = '#1a2d4533' }}
+                  onMouseLeave={e => { e.currentTarget.style.background = selected.has(ticker) ? C.accent+'0d' : 'transparent' }}>
+                  {onToggleSelect && (
+                    <td style={{ padding:'10px 10px', width:32 }} onClick={e => e.stopPropagation()}>
+                      <input type="checkbox" checked={selected.has(ticker)} onChange={() => onToggleSelect(ticker)}
+                        style={{ cursor:'pointer', accentColor:C.accent }} />
+                    </td>
+                  )}
                   <td style={{ padding:'10px 10px', whiteSpace:'nowrap' }}>
                     <span style={{ fontFamily:'monospace', fontWeight:700, color:C.text }}>{ticker}</span>
                     {hasActiveTrade && <span style={{ marginLeft:5, fontSize:9, color:C.green }}>📈</span>}
@@ -567,6 +582,43 @@ export default function App() {
   }
 
   const [refreshingTickers, setRefreshingTickers] = useState({})  // { AAPL: true }
+  const [selected,          setSelected]          = useState(new Set())
+  const [queue,             setQueue]             = useState([])
+  const [queueTotal,        setQueueTotal]        = useState(0)
+  const [queueDone,         setQueueDone]         = useState(0)
+  const queueRef       = useRef([])
+  const queueCancelled = useRef(false)
+
+  const processNextSwing = async (tickers, idx) => {
+    if (queueCancelled.current || idx >= tickers.length) {
+      setQueue([]); queueRef.current = []; return
+    }
+    const ticker = tickers[idx]
+    setRefreshingTickers(prev => ({ ...prev, [ticker]: true }))
+    try {
+      const res = await fetch(`/api/analyze/${ticker}`)
+      if (res.ok) cacheAnalysis(ticker, await res.json())
+    } catch {}
+    setRefreshingTickers(prev => { const n = {...prev}; delete n[ticker]; return n })
+    setQueueDone(idx + 1)
+    setQueue(queueRef.current.slice(idx + 1))
+    setTimeout(() => processNextSwing(tickers, idx + 1), 3000)
+  }
+
+  const runQueueSwing = (tickers) => {
+    queueCancelled.current = false
+    queueRef.current = [...tickers]
+    setQueue([...tickers])
+    setQueueTotal(tickers.length)
+    setQueueDone(0)
+    processNextSwing(tickers, 0)
+  }
+
+  const cancelQueueSwing = () => {
+    queueCancelled.current = true
+    setQueue([])
+    setRefreshingTickers({})
+  }
 
   // Refresh desde tabla: llama la API directamente y actualiza el cache
   const refreshFromTable = async (ticker) => {
@@ -579,6 +631,30 @@ export default function App() {
       }
     } catch {}
     setRefreshingTickers(prev => { const n = {...prev}; delete n[ticker]; return n })
+  }
+
+  const toggleSelect = (ticker) => {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(ticker)) next.delete(ticker)
+      else next.add(ticker)
+      return next
+    })
+  }
+
+  const toggleSelectAll = (tickers) => {
+    setSelected(prev => {
+      const allSelected = tickers.every(t => prev.has(t))
+      if (allSelected) {
+        const next = new Set(prev)
+        tickers.forEach(t => next.delete(t))
+        return next
+      } else {
+        const next = new Set(prev)
+        tickers.forEach(t => next.add(t))
+        return next
+      }
+    })
   }
 
   const signOut = async () => { await supabase.auth.signOut() }
@@ -677,6 +753,27 @@ export default function App() {
                 style={{ background:C.accent, border:'none', borderRadius:9, color:'#000', fontWeight:700, padding:'10px 16px', cursor:'pointer', fontSize:13 }}>
                 + Agregar
               </button>
+              {queue.length === 0 && selected.size > 0 && (
+                <button onClick={() => runQueueSwing([...selected].filter(t => activeWatchlist.includes(t)))}
+                  style={{ background:C.accent+'22', border:`1px solid ${C.accent}`, borderRadius:9,
+                    color:C.accent, fontWeight:700, padding:'10px 13px', cursor:'pointer', fontSize:12, whiteSpace:'nowrap' }}>
+                  ↻ Actualizar selección ({[...selected].filter(t => activeWatchlist.includes(t)).length})
+                </button>
+              )}
+              {queue.length === 0 && (
+                <button onClick={() => runQueueSwing(activeWatchlist)}
+                  style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:9,
+                    color:C.muted, padding:'10px 13px', cursor:'pointer', fontSize:12, whiteSpace:'nowrap' }}>
+                  ↻ Actualizar todo
+                </button>
+              )}
+              {queue.length > 0 && (
+                <button onClick={cancelQueueSwing}
+                  style={{ background:'none', border:`1px solid ${C.red}44`, borderRadius:9,
+                    color:C.red, padding:'10px 13px', cursor:'pointer', fontSize:12, whiteSpace:'nowrap' }}>
+                  ✕ Cancelar
+                </button>
+              )}
               <button onClick={() => setViewModeWatchlist(v => v === 'cards' ? 'table' : 'cards')}
                 title={viewModeWatchlist === 'cards' ? 'Ver tabla' : 'Ver tarjetas'}
                 style={{ background: viewModeWatchlist === 'table' ? C.accent+'22' : 'none',
@@ -686,6 +783,20 @@ export default function App() {
                 {viewModeWatchlist === 'cards' ? '☰' : '⊞'}
               </button>
             </div>
+            {queue.length > 0 && (
+              <div style={{ marginBottom:12, background:C.card, border:`1px solid ${C.accent}33`, borderRadius:9, padding:'10px 14px' }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6, fontSize:11 }}>
+                  <span style={{ color:C.accent, fontWeight:700 }}>
+                    Actualizando {queueDone} / {queueTotal}…
+                  </span>
+                  <span style={{ color:C.muted }}>~{(queue.length * 3)}s restantes</span>
+                </div>
+                <div style={{ background:'#1a2d45', borderRadius:99, height:4, overflow:'hidden' }}>
+                  <div style={{ height:4, background:C.accent, borderRadius:99, width:`${(queueDone/queueTotal)*100}%`, transition:'width 0.4s' }}/>
+                </div>
+                {queue[0] && <div style={{ fontSize:10, color:C.muted, marginTop:5 }}>Siguiente: {queue[0]}</div>}
+              </div>
+            )}
             {!isLoaded ? (
               <div style={{ textAlign:'center', padding:'60px', color:C.muted, fontSize:13 }}>Cargando watchlist...</div>
             ) : (
@@ -702,26 +813,53 @@ export default function App() {
                       onRefresh={refreshFromTable}
                       refreshingTickers={refreshingTickers}
                       positionOpenTickers={positionOpenTickers}
+                      selected={selected}
+                      onToggleSelect={toggleSelect}
+                      onToggleSelectAll={toggleSelectAll}
                     />
                   </div>
                 ) : (
-                  <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(268px, 1fr))', gap:11 }}>
-                    {activeWatchlist.map(t => (
-                      <ErrorBoundary key={`${t}-${refreshKey}`}>
-                        <StockCard
-                          ticker={t}
-                          session={session}
-                          cachedData={analysisCache[t] || null}
-                          onAnalysed={cacheAnalysis}
-                          onRemove={removeFromAll}
-                          onMonitor={moveToMonitor}
-                          activeTrade={openTrades[t] || null}
-                          lastClosedTrade={!openTrades[t] ? (lastClosedTrades[t] || null) : null}
-                          inPositionModule={positionOpenTickers.includes(t)}
-                        />
-                      </ErrorBoundary>
-                    ))}
-                  </div>
+                  <>
+                    {activeWatchlist.length > 0 && (
+                      <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10 }}>
+                        <button onClick={() => toggleSelectAll(activeWatchlist)}
+                          style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:7,
+                            color:C.muted, padding:'4px 12px', cursor:'pointer', fontSize:11 }}>
+                          {activeWatchlist.every(t => selected.has(t)) ? '✕ Limpiar selección' : 'Seleccionar todo'}
+                        </button>
+                        {selected.size > 0 && (
+                          <span style={{ fontSize:11, color:C.muted }}>{[...selected].filter(t => activeWatchlist.includes(t)).length} seleccionados</span>
+                        )}
+                      </div>
+                    )}
+                    <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(268px, 1fr))', gap:11 }}>
+                      {activeWatchlist.map(t => (
+                        <ErrorBoundary key={`${t}-${refreshKey}`}>
+                          <div style={{ position:'relative' }}>
+                            <div onClick={e => { e.stopPropagation(); toggleSelect(t) }}
+                              style={{ position:'absolute', top:10, right:10, zIndex:10,
+                                background: selected.has(t) ? C.accent : '#1a2d45',
+                                border:`2px solid ${selected.has(t) ? C.accent : C.border}`,
+                                borderRadius:5, width:18, height:18, display:'flex', alignItems:'center', justifyContent:'center',
+                                cursor:'pointer', transition:'background 0.15s' }}>
+                              {selected.has(t) && <span style={{ color:'#000', fontSize:11, fontWeight:900, lineHeight:1 }}>✓</span>}
+                            </div>
+                            <StockCard
+                              ticker={t}
+                              session={session}
+                              cachedData={analysisCache[t] || null}
+                              onAnalysed={cacheAnalysis}
+                              onRemove={removeFromAll}
+                              onMonitor={moveToMonitor}
+                              activeTrade={openTrades[t] || null}
+                              lastClosedTrade={!openTrades[t] ? (lastClosedTrades[t] || null) : null}
+                              inPositionModule={positionOpenTickers.includes(t)}
+                            />
+                          </div>
+                        </ErrorBoundary>
+                      ))}
+                    </div>
+                  </>
                 )}
                 {activeWatchlist.length === 0 && wl.length === 0 && (
                   <div style={{ textAlign:'center', padding:'60px', color:C.muted, fontSize:14 }}>
@@ -749,19 +887,54 @@ export default function App() {
               </div>
             ) : (
               <>
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14, gap:8, flexWrap:'wrap' }}>
                   <div style={{ padding:'10px 14px', background:'#001a2a', border:'1px solid #00aaff33', borderRadius:9, fontSize:11, color:'#4a8080', flex:1 }}>
                     Acciones con buenas condiciones técnicas esperando el momento de entrada. Re-analiza después del evento.
                   </div>
-                  <button onClick={() => setViewModeMonitor(v => v === 'cards' ? 'table' : 'cards')}
-                    title={viewModeMonitor === 'cards' ? 'Ver tabla' : 'Ver tarjetas'}
-                    style={{ marginLeft:10, background: viewModeMonitor === 'table' ? C.accent+'22' : 'none',
-                      border:`1px solid ${viewModeMonitor === 'table' ? C.accent : C.border}`,
-                      borderRadius:9, color: viewModeMonitor === 'table' ? C.accent : C.muted,
-                      padding:'10px 13px', cursor:'pointer', fontSize:13, flexShrink:0 }}>
-                    {viewModeMonitor === 'cards' ? '☰' : '⊞'}
-                  </button>
+                  <div style={{ display:'flex', gap:8, flexShrink:0 }}>
+                    {queue.length === 0 && selected.size > 0 && (
+                      <button onClick={() => runQueueSwing([...selected].filter(t => monitorWatchlist.includes(t)))}
+                        style={{ background:C.accent+'22', border:`1px solid ${C.accent}`, borderRadius:9,
+                          color:C.accent, fontWeight:700, padding:'10px 13px', cursor:'pointer', fontSize:12, whiteSpace:'nowrap' }}>
+                        ↻ Actualizar selección ({[...selected].filter(t => monitorWatchlist.includes(t)).length})
+                      </button>
+                    )}
+                    {queue.length === 0 && (
+                      <button onClick={() => runQueueSwing(monitorWatchlist)}
+                        style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:9,
+                          color:C.muted, padding:'10px 13px', cursor:'pointer', fontSize:12, whiteSpace:'nowrap' }}>
+                        ↻ Actualizar todo
+                      </button>
+                    )}
+                    {queue.length > 0 && (
+                      <button onClick={cancelQueueSwing}
+                        style={{ background:'none', border:`1px solid ${C.red}44`, borderRadius:9,
+                          color:C.red, padding:'10px 13px', cursor:'pointer', fontSize:12, whiteSpace:'nowrap' }}>
+                        ✕ Cancelar
+                      </button>
+                    )}
+                    <button onClick={() => setViewModeMonitor(v => v === 'cards' ? 'table' : 'cards')}
+                      title={viewModeMonitor === 'cards' ? 'Ver tabla' : 'Ver tarjetas'}
+                      style={{ background: viewModeMonitor === 'table' ? C.accent+'22' : 'none',
+                        border:`1px solid ${viewModeMonitor === 'table' ? C.accent : C.border}`,
+                        borderRadius:9, color: viewModeMonitor === 'table' ? C.accent : C.muted,
+                        padding:'10px 13px', cursor:'pointer', fontSize:13 }}>
+                      {viewModeMonitor === 'cards' ? '☰' : '⊞'}
+                    </button>
+                  </div>
                 </div>
+                {queue.length > 0 && (
+                  <div style={{ marginBottom:12, background:C.card, border:`1px solid ${C.accent}33`, borderRadius:9, padding:'10px 14px' }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6, fontSize:11 }}>
+                      <span style={{ color:C.accent, fontWeight:700 }}>Actualizando {queueDone} / {queueTotal}…</span>
+                      <span style={{ color:C.muted }}>~{queue.length * 3}s restantes</span>
+                    </div>
+                    <div style={{ background:'#1a2d45', borderRadius:99, height:4, overflow:'hidden' }}>
+                      <div style={{ height:4, background:C.accent, borderRadius:99, width:`${(queueDone/queueTotal)*100}%`, transition:'width 0.4s' }}/>
+                    </div>
+                    {queue[0] && <div style={{ fontSize:10, color:C.muted, marginTop:5 }}>Siguiente: {queue[0]}</div>}
+                  </div>
+                )}
                 {viewModeMonitor === 'table' ? (
                   <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:12 }}>
                     <WatchlistTable
@@ -774,27 +947,54 @@ export default function App() {
                       onRefresh={refreshFromTable}
                       refreshingTickers={refreshingTickers}
                       positionOpenTickers={positionOpenTickers}
+                      selected={selected}
+                      onToggleSelect={toggleSelect}
+                      onToggleSelectAll={toggleSelectAll}
                     />
                   </div>
                 ) : (
-                  <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(268px, 1fr))', gap:11 }}>
-                    {monitorWatchlist.map(t => (
-                      <ErrorBoundary key={`${t}-${refreshKey}`}>
-                        <StockCard
-                          ticker={t}
-                          session={session}
-                          cachedData={analysisCache[t] || null}
-                          onAnalysed={cacheAnalysis}
-                          onRemove={removeFromAll}
-                          onMonitor={removeFromMonitor}
-                          isInMonitorTab={true}
-                          activeTrade={openTrades[t] || null}
-                          lastClosedTrade={!openTrades[t] ? (lastClosedTrades[t] || null) : null}
-                          inPositionModule={positionOpenTickers.includes(t)}
-                        />
-                      </ErrorBoundary>
-                    ))}
-                  </div>
+                  <>
+                    {monitorWatchlist.length > 0 && (
+                      <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10 }}>
+                        <button onClick={() => toggleSelectAll(monitorWatchlist)}
+                          style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:7,
+                            color:C.muted, padding:'4px 12px', cursor:'pointer', fontSize:11 }}>
+                          {monitorWatchlist.every(t => selected.has(t)) ? '✕ Limpiar selección' : 'Seleccionar todo'}
+                        </button>
+                        {selected.size > 0 && (
+                          <span style={{ fontSize:11, color:C.muted }}>{[...selected].filter(t => monitorWatchlist.includes(t)).length} seleccionados</span>
+                        )}
+                      </div>
+                    )}
+                    <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(268px, 1fr))', gap:11 }}>
+                      {monitorWatchlist.map(t => (
+                        <ErrorBoundary key={`${t}-${refreshKey}`}>
+                          <div style={{ position:'relative' }}>
+                            <div onClick={e => { e.stopPropagation(); toggleSelect(t) }}
+                              style={{ position:'absolute', top:10, right:10, zIndex:10,
+                                background: selected.has(t) ? C.accent : '#1a2d45',
+                                border:`2px solid ${selected.has(t) ? C.accent : C.border}`,
+                                borderRadius:5, width:18, height:18, display:'flex', alignItems:'center', justifyContent:'center',
+                                cursor:'pointer', transition:'background 0.15s' }}>
+                              {selected.has(t) && <span style={{ color:'#000', fontSize:11, fontWeight:900, lineHeight:1 }}>✓</span>}
+                            </div>
+                            <StockCard
+                              ticker={t}
+                              session={session}
+                              cachedData={analysisCache[t] || null}
+                              onAnalysed={cacheAnalysis}
+                              onRemove={removeFromAll}
+                              onMonitor={removeFromMonitor}
+                              isInMonitorTab={true}
+                              activeTrade={openTrades[t] || null}
+                              lastClosedTrade={!openTrades[t] ? (lastClosedTrades[t] || null) : null}
+                              inPositionModule={positionOpenTickers.includes(t)}
+                            />
+                          </div>
+                        </ErrorBoundary>
+                      ))}
+                    </div>
+                  </>
                 )}
               </>
             )}
