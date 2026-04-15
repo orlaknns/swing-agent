@@ -1,7 +1,7 @@
 {
   "candidates": [
     {
-      "ticker": "IONQ",
+      "ticker": "TSLA",
       "company": "",
       "sector": ""
     },
@@ -11,27 +11,12 @@
       "sector": ""
     },
     {
+      "ticker": "NKE",
+      "company": "",
+      "sector": ""
+    },
+    {
       "ticker": "BMNR",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "TSLA",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "HOOD",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "APLD",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "ASTS",
       "company": "",
       "sector": ""
     },
@@ -41,47 +26,7 @@
       "sector": ""
     },
     {
-      "ticker": "WFC",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "MSFT",
-      "company": "",
-      "sector": ""
-    },
-    {
       "ticker": "AAPL",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "RKLB",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "CRCL",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "OKLO",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "FSLY",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "PL",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "MSTR",
       "company": "",
       "sector": ""
     },
@@ -91,17 +36,12 @@
       "sector": ""
     },
     {
-      "ticker": "USB",
+      "ticker": "APLD",
       "company": "",
       "sector": ""
     },
     {
-      "ticker": "NVO",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "STRC",
+      "ticker": "RKLB",
       "company": "",
       "sector": ""
     },
@@ -111,17 +51,22 @@
       "sector": ""
     },
     {
-      "ticker": "CCL",
+      "ticker": "WFC",
       "company": "",
       "sector": ""
     },
     {
-      "ticker": "OXY",
+      "ticker": "FSLY",
       "company": "",
       "sector": ""
     },
     {
-      "ticker": "XOM",
+      "ticker": "ASTS",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "NVO",
       "company": "",
       "sector": ""
     },
@@ -131,17 +76,17 @@
       "sector": ""
     },
     {
+      "ticker": "CCL",
+      "company": "",
+      "sector": ""
+    },
+    {
       "ticker": "CDE",
       "company": "",
       "sector": ""
     },
     {
-      "ticker": "AG",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "KMX",
+      "ticker": "CRCL",
       "company": "",
       "sector": ""
     },
@@ -151,147 +96,12 @@
       "sector": ""
     },
     {
-      "ticker": "BABA",
-      "company": "",
-      "sector": ""
-    },
-    {
       "ticker": "TTD",
       "company": "",
       "sector": ""
     },
     {
-      "ticker": "DOW",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "KHC",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "JNJ",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "MRK",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "WMT",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "UAL",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "UBER",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "CSCO",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "MOS",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "RF",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "CMCSA",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "SHOP",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "CRM",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "DVN",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "HPE",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "SNOW",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "BP",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "GME",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "BSX",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "FAST",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "NCLH",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "TEM",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "PDD",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "KDP",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "CVE",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "B",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "ABT",
+      "ticker": "MSTR",
       "company": "",
       "sector": ""
     },
@@ -301,77 +111,42 @@
       "sector": ""
     },
     {
+      "ticker": "WMT",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "XOM",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "PBR",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "PL",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "CRM",
+      "company": "",
+      "sector": ""
+    },
+    {
       "ticker": "SLB",
       "company": "",
       "sector": ""
     },
     {
-      "ticker": "EQNR",
+      "ticker": "OXY",
       "company": "",
       "sector": ""
     },
     {
-      "ticker": "MO",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "LUV",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "NEE",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "AKAM",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "DKNG",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "APA",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "COP",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "SHEL",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "DIS",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "PANW",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "HAL",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "WBD",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "RBLX",
+      "ticker": "CARR",
       "company": "",
       "sector": ""
     },
@@ -381,12 +156,127 @@
       "sector": ""
     },
     {
+      "ticker": "AG",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "CSCO",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "BABA",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "CMCSA",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "TEAM",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "BSX",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "SHOP",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "RF",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "BP",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "GTLB",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "B",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "WBD",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "KHC",
+      "company": "",
+      "sector": ""
+    },
+    {
       "ticker": "KMI",
       "company": "",
       "sector": ""
     },
     {
-      "ticker": "CMG",
+      "ticker": "SNOW",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "NCLH",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "CVX",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "VIAV",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "DELL",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "PII",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "SEDG",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "NET",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "IOT",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "MO",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "MDLZ",
       "company": "",
       "sector": ""
     },
@@ -396,96 +286,206 @@
       "sector": ""
     },
     {
-      "ticker": "HDB",
+      "ticker": "FAST",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "PANW",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "KDP",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "RBLX",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "STRC",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "ABT",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "DKNG",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "LITE",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "MOS",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "JHX",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "CVS",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "ASML",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "PDD",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "SYY",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "TSCO",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "DVN",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "UL",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "MRNA",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "DOW",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "IBN",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "APA",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "DDOG",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "HAL",
       "company": "",
       "sector": ""
     }
   ],
   "tickers": [
-    "IONQ",
-    "PLTR",
-    "BMNR",
     "TSLA",
-    "HOOD",
-    "APLD",
-    "ASTS",
+    "PLTR",
+    "NKE",
+    "BMNR",
     "SMCI",
-    "WFC",
-    "MSFT",
     "AAPL",
-    "RKLB",
-    "CRCL",
-    "OKLO",
-    "FSLY",
-    "PL",
-    "MSTR",
     "NOW",
-    "USB",
-    "NVO",
-    "STRC",
+    "APLD",
+    "RKLB",
     "HIMS",
-    "CCL",
-    "OXY",
-    "XOM",
+    "WFC",
+    "FSLY",
+    "ASTS",
+    "NVO",
     "PFE",
+    "CCL",
     "CDE",
-    "AG",
-    "KMX",
+    "CRCL",
     "COIN",
-    "BABA",
     "TTD",
-    "DOW",
-    "KHC",
-    "JNJ",
-    "MRK",
-    "WMT",
-    "UAL",
-    "UBER",
-    "CSCO",
-    "MOS",
-    "RF",
-    "CMCSA",
-    "SHOP",
-    "CRM",
-    "DVN",
-    "HPE",
-    "SNOW",
-    "BP",
-    "GME",
-    "BSX",
-    "FAST",
-    "NCLH",
-    "TEM",
-    "PDD",
-    "KDP",
-    "CVE",
-    "B",
-    "ABT",
+    "MSTR",
     "KO",
+    "WMT",
+    "XOM",
+    "PBR",
+    "PL",
+    "CRM",
     "SLB",
-    "EQNR",
-    "MO",
-    "LUV",
-    "NEE",
-    "AKAM",
-    "DKNG",
-    "APA",
-    "COP",
-    "SHEL",
-    "DIS",
-    "PANW",
-    "HAL",
-    "WBD",
-    "RBLX",
+    "OXY",
+    "CARR",
     "NEM",
+    "AG",
+    "CSCO",
+    "BABA",
+    "CMCSA",
+    "TEAM",
+    "BSX",
+    "SHOP",
+    "RF",
+    "BP",
+    "GTLB",
+    "B",
+    "WBD",
+    "KHC",
     "KMI",
-    "CMG",
+    "SNOW",
+    "NCLH",
+    "CVX",
+    "VIAV",
+    "DELL",
+    "PII",
+    "SEDG",
+    "NET",
+    "IOT",
+    "MO",
+    "MDLZ",
     "EPD",
-    "HDB"
+    "FAST",
+    "PANW",
+    "KDP",
+    "RBLX",
+    "STRC",
+    "ABT",
+    "DKNG",
+    "LITE",
+    "MOS",
+    "JHX",
+    "CVS",
+    "ASML",
+    "PDD",
+    "SYY",
+    "TSCO",
+    "DVN",
+    "UL",
+    "MRNA",
+    "DOW",
+    "IBN",
+    "APA",
+    "DDOG",
+    "HAL"
   ],
   "count": 80,
-  "date": "2026-04-14",
-  "updatedAt": "2026-04-14 14:59 UTC",
+  "date": "2026-04-15",
+  "updatedAt": "2026-04-15 14:52 UTC",
   "source": "finviz",
   "criteria": {
     "exchange": "NYSE, NASDAQ",
