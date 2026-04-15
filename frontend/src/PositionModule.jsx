@@ -1708,7 +1708,7 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove, scoreHistory, 
 }
 
 // ── Position Watchlist Table ─────────────────────────────────────────────────
-function PositionWatchlistTable({ tickers, cache, onRemove, onRefresh, refreshingTickers, onRowClick, swingExposedTickers = [] }) {
+function PositionWatchlistTable({ tickers, cache, onRemove, onRefresh, refreshingTickers, onRowClick, swingExposedTickers = [], selected = new Set(), onToggleSelect, onToggleSelectAll }) {
   const [sortCol, setSortCol] = useState(null)
   const [sortDir, setSortDir] = useState('desc')
   const [filterText, setFilterText] = useState('')
@@ -1758,6 +1758,14 @@ function PositionWatchlistTable({ tickers, cache, onRemove, onRefresh, refreshin
         <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
           <thead>
             <tr style={{ borderBottom:`1px solid ${C.border}` }}>
+              <th style={{ padding:'8px 10px', cursor:'pointer' }} onClick={onToggleSelectAll}>
+                <div style={{ width:16, height:16, borderRadius:3, border:`2px solid ${C.border}`,
+                  background: tickers.length > 0 && tickers.every(t => selected.has(t)) ? M : 'transparent',
+                  display:'flex', alignItems:'center', justifyContent:'center' }}>
+                  {tickers.length > 0 && tickers.every(t => selected.has(t)) &&
+                    <span style={{ color:'#000', fontSize:10, fontWeight:700 }}>✓</span>}
+                </div>
+              </th>
               <th style={thStyle('ticker')} onClick={() => handleSort('ticker')}>Ticker <SortIcon col="ticker"/></th>
               <th style={thStyle(null)}>Precio</th>
               <th style={thStyle('score')} onClick={() => handleSort('score')}>Score <SortIcon col="score"/></th>
@@ -1778,9 +1786,18 @@ function PositionWatchlistTable({ tickers, cache, onRemove, onRefresh, refreshin
               const hasVeto = d?.scorecard?.precio_sma200?.score_sugerido === 0
               return (
                 <tr key={ticker} onClick={() => onRowClick(ticker)}
-                  style={{ borderBottom:`1px solid ${C.border}`, cursor:'pointer', transition:'background 0.15s' }}
-                  onMouseEnter={e => e.currentTarget.style.background='#1a2d4533'}
-                  onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                  style={{ borderBottom:`1px solid ${C.border}`, cursor:'pointer', transition:'background 0.15s',
+                    background: selected.has(ticker) ? M+'11' : 'transparent' }}
+                  onMouseEnter={e => { if (!selected.has(ticker)) e.currentTarget.style.background='#1a2d4533' }}
+                  onMouseLeave={e => { e.currentTarget.style.background = selected.has(ticker) ? M+'11' : 'transparent' }}>
+                  <td style={{ padding:'10px 10px' }} onClick={e => { e.stopPropagation(); onToggleSelect(ticker) }}>
+                    <div style={{ width:16, height:16, borderRadius:3, cursor:'pointer',
+                      background: selected.has(ticker) ? M : 'transparent',
+                      border:`2px solid ${selected.has(ticker) ? M : C.border}`,
+                      display:'flex', alignItems:'center', justifyContent:'center' }}>
+                      {selected.has(ticker) && <span style={{ color:'#000', fontSize:10, fontWeight:700 }}>✓</span>}
+                    </div>
+                  </td>
                   <td style={{ padding:'10px' }}>
                     <span style={{ fontFamily:'monospace', fontWeight:700, color:C.text }}>{ticker}</span>
                     {swingExposedTickers.includes(ticker) && (
@@ -2163,6 +2180,58 @@ export default function PositionModule({ session, onBack, swingExposedTickers = 
   const [tableModal, setTableModal] = useState(null)
   const [refreshingTickers, setRefreshingTickers] = useState({})
 
+  // ── Selección y cola de actualización ────────────────────────────────────
+  const [selected,     setSelected]     = useState(new Set())  // tickers seleccionados
+  const [queue,        setQueue]        = useState([])         // cola pendiente
+  const [queueTotal,   setQueueTotal]   = useState(0)
+  const [queueDone,    setQueueDone]    = useState(0)
+  const queueRef       = useRef([])
+  const queueCancelled = useRef(false)
+
+  const toggleSelect = (ticker) => setSelected(s => {
+    const next = new Set(s)
+    next.has(ticker) ? next.delete(ticker) : next.add(ticker)
+    return next
+  })
+  const toggleSelectAll = (tickers) => setSelected(s => {
+    if (tickers.every(t => s.has(t))) return new Set()
+    return new Set(tickers)
+  })
+
+  const runQueue = (tickers) => {
+    if (!tickers.length) return
+    queueCancelled.current = false
+    queueRef.current = [...tickers]
+    setQueue([...tickers])
+    setQueueTotal(tickers.length)
+    setQueueDone(0)
+    processNext(tickers, 0)
+  }
+
+  const processNext = async (tickers, idx) => {
+    if (queueCancelled.current || idx >= tickers.length) {
+      setQueue([])
+      queueRef.current = []
+      return
+    }
+    const ticker = tickers[idx]
+    setRefreshingTickers(prev => ({ ...prev, [ticker]: true }))
+    try {
+      const res = await fetch(`/api/analyze-position/${ticker}`)
+      if (res.ok) cacheAnalysis(ticker, await res.json())
+    } catch {}
+    setRefreshingTickers(prev => { const n={...prev}; delete n[ticker]; return n })
+    setQueueDone(idx + 1)
+    setQueue(queueRef.current.slice(idx + 1))
+    setTimeout(() => processNext(tickers, idx + 1), 3000)
+  }
+
+  const cancelQueue = () => {
+    queueCancelled.current = true
+    setQueue([])
+    setRefreshingTickers({})
+  }
+
   // Watchlist
   const [watchlist,  setWatchlist]  = useState(null)   // null = no cargado aún
   const watchlistRef = useRef([])
@@ -2467,11 +2536,42 @@ export default function PositionModule({ session, onBack, swingExposedTickers = 
                 )}
               </div>
             )}
-            <div style={{ display:'flex', gap:7, marginBottom:14 }}>
+            {/* Barra de progreso de cola */}
+            {queue.length > 0 && (
+              <div style={{ background:C.card, border:`1px solid ${M}44`, borderRadius:9,
+                padding:'10px 14px', marginBottom:10, display:'flex', alignItems:'center', gap:12 }}>
+                <div style={{ flex:1 }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', marginBottom:5 }}>
+                    <span style={{ fontSize:11, color:M, fontWeight:700 }}>
+                      Actualizando {queueDone} / {queueTotal}...
+                    </span>
+                    <span style={{ fontSize:10, color:C.muted }}>
+                      ~{Math.ceil(queue.length * 3)}s restantes
+                    </span>
+                  </div>
+                  <div style={{ background:C.border, borderRadius:99, height:4 }}>
+                    <div style={{ background:M, borderRadius:99, height:4,
+                      width:`${(queueDone/queueTotal)*100}%`, transition:'width 0.3s' }} />
+                  </div>
+                  {queue.length > 0 && (
+                    <div style={{ fontSize:9, color:C.muted, marginTop:4 }}>
+                      Siguiente: {queue[0]}
+                    </div>
+                  )}
+                </div>
+                <button onClick={cancelQueue}
+                  style={{ background:'none', border:`1px solid ${C.red}44`, borderRadius:6,
+                    color:C.red, cursor:'pointer', fontSize:10, padding:'4px 10px', flexShrink:0 }}>
+                  ✕ Cancelar
+                </button>
+              </div>
+            )}
+
+            <div style={{ display:'flex', gap:7, marginBottom:14, flexWrap:'wrap' }}>
               <input value={search} onChange={e => setSearch(e.target.value.toUpperCase())}
                 onKeyDown={e => e.key==='Enter' && add()}
                 placeholder="Agregar ticker… ej: NVDA, MSFT, AAPL"
-                style={{ flex:1, background:'#0f1929', border:`1px solid ${C.border}`, borderRadius:9,
+                style={{ flex:1, minWidth:180, background:'#0f1929', border:`1px solid ${C.border}`, borderRadius:9,
                   padding:'10px 14px', color:C.text, fontSize:13, outline:'none' }}
                 onFocus={e => e.target.style.borderColor=M}
                 onBlur={e  => e.target.style.borderColor=C.border}
@@ -2481,6 +2581,21 @@ export default function PositionModule({ session, onBack, swingExposedTickers = 
                   fontWeight:700, padding:'10px 16px', cursor:'pointer', fontSize:13 }}>
                 + Agregar
               </button>
+              {selected.size > 0 && queue.length === 0 && (
+                <button onClick={() => runQueue([...selected])}
+                  style={{ background:M+'22', border:`1px solid ${M}`, borderRadius:9,
+                    color:M, fontWeight:700, padding:'10px 14px', cursor:'pointer', fontSize:12 }}>
+                  ↻ Actualizar selección ({selected.size})
+                </button>
+              )}
+              {queue.length === 0 && (
+                <button onClick={() => runQueue([...wl])}
+                  title="Actualizar todos los tickers (3s entre cada uno)"
+                  style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:9,
+                    color:C.muted, padding:'10px 14px', cursor:'pointer', fontSize:12 }}>
+                  ↻ Actualizar todo
+                </button>
+              )}
               <button onClick={() => setViewMode(v => v==='cards'?'table':'cards')}
                 title={viewMode==='cards'?'Ver tabla':'Ver tarjetas'}
                 style={{ background: viewMode==='table' ? M+'22' : 'none',
@@ -2506,25 +2621,59 @@ export default function PositionModule({ session, onBack, swingExposedTickers = 
                   refreshingTickers={refreshingTickers}
                   onRowClick={setTableModal}
                   swingExposedTickers={swingExposedTickers}
+                  selected={selected}
+                  onToggleSelect={toggleSelect}
+                  onToggleSelectAll={() => toggleSelectAll(filteredWl)}
                 />
               </div>
             ) : (
-              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(260px, 1fr))', gap:11 }}>
-                {filteredWl.length === 0 && (
-                  <div style={{ gridColumn:'1/-1', textAlign:'center', padding:'40px', color:C.muted, fontSize:12 }}>
-                    Sin resultados para este filtro
-                  </div>
-                )}
-                {filteredWl.map(t => (
-                  <PositionCard key={t} ticker={t}
-                    cachedData={posCache[t] || null}
-                    onAnalysed={cacheAnalysis}
-                    onRemove={remove}
-                    scoreHistory={posHistory[t] || []}
-                    inSwingModule={swingExposedTickers.includes(t)}
-                  />
-                ))}
-              </div>
+              <>
+                {/* Header selección */}
+                <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8 }}>
+                  <label style={{ display:'flex', alignItems:'center', gap:6, cursor:'pointer', fontSize:11, color:C.muted }}>
+                    <input type="checkbox"
+                      checked={filteredWl.length > 0 && filteredWl.every(t => selected.has(t))}
+                      onChange={() => toggleSelectAll(filteredWl)}
+                      style={{ cursor:'pointer', accentColor:M }}
+                    />
+                    {selected.size > 0 ? `${selected.size} seleccionados` : 'Seleccionar todo'}
+                  </label>
+                  {selected.size > 0 && (
+                    <button onClick={() => setSelected(new Set())}
+                      style={{ background:'none', border:'none', color:C.muted, cursor:'pointer', fontSize:10 }}>
+                      ✕ Limpiar selección
+                    </button>
+                  )}
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(260px, 1fr))', gap:11 }}>
+                  {filteredWl.length === 0 && (
+                    <div style={{ gridColumn:'1/-1', textAlign:'center', padding:'40px', color:C.muted, fontSize:12 }}>
+                      Sin resultados para este filtro
+                    </div>
+                  )}
+                  {filteredWl.map(t => (
+                    <div key={t} style={{ position:'relative' }}>
+                      {/* Checkbox sobre la tarjeta */}
+                      <div onClick={e => { e.stopPropagation(); toggleSelect(t) }}
+                        style={{ position:'absolute', top:10, right:10, zIndex:10, cursor:'pointer' }}>
+                        <div style={{ width:18, height:18, borderRadius:4,
+                          background: selected.has(t) ? M : C.card,
+                          border:`2px solid ${selected.has(t) ? M : C.border}`,
+                          display:'flex', alignItems:'center', justifyContent:'center' }}>
+                          {selected.has(t) && <span style={{ color:'#000', fontSize:11, fontWeight:700 }}>✓</span>}
+                        </div>
+                      </div>
+                      <PositionCard ticker={t}
+                        cachedData={posCache[t] || null}
+                        onAnalysed={cacheAnalysis}
+                        onRemove={remove}
+                        scoreHistory={posHistory[t] || []}
+                        inSwingModule={swingExposedTickers.includes(t)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
             {isLoaded && wl.length > 0 && (
               <div style={{ marginTop:18, padding:'12px 14px', background:C.card, borderRadius:9,
