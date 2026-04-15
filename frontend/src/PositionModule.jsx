@@ -970,7 +970,7 @@ function PositionScreener({ watchlist, onAdd, onRemove, onAddAll, posCache }) {
 }
 
 // ── Position Card ────────────────────────────────────────────────────────────
-function PositionCard({ ticker, cachedData, onAnalysed, onRemove, scoreHistory, inSwingModule }) {
+function PositionCard({ ticker, cachedData, onAnalysed, onRemove, scoreHistory, inSwingModule, session }) {
   const [data,         setData]       = useState(cachedData || null)
   const [loading,      setLoading]    = useState(false)
   const [error,        setError]      = useState(null)
@@ -978,6 +978,8 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove, scoreHistory, 
   const [capital,      setCapital]    = useState('')
   const [riskPct,      setRiskPct]    = useState('1')
   const [editingDate,  setEditingDate] = useState(false)
+  const [journalSaved, setJournalSaved] = useState(false)
+  const [journalExists, setJournalExists] = useState(false)
   // Overrides manuales: { criterio: scoreManual (0-3) }
   const [overrides,  setOverrides]  = useState(cachedData?._overrides || {})
 
@@ -988,6 +990,45 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove, scoreHistory, 
       setOverrides(cachedData._overrides || {})
     }
   }, [cachedData])
+
+  // Verificar si ya existe en position_trades (planning/open)
+  useEffect(() => {
+    if (!session || !ticker) return
+    supabase.from('position_trades')
+      .select('id')
+      .eq('user_id', session.user.id)
+      .eq('ticker', ticker)
+      .in('status', ['planning', 'open'])
+      .limit(1)
+      .then(({ data: rows }) => setJournalExists(!!(rows && rows.length > 0)))
+  }, [session, ticker, journalSaved])
+
+  const saveToPositionJournal = async () => {
+    if (!session || !data) return
+    const scoreTotal = data.scorecard
+      ? Object.entries(data.scorecard).reduce((s, [k, v]) => {
+          if (k === '_confidence') return s
+          const sc = overrides[k] != null ? overrides[k] : (v.score_sugerido ?? 0)
+          return s + sc * (WEIGHTS[k] || 1)
+        }, 0)
+      : null
+    const decision = calcDecision(scoreTotal, data)
+    await supabase.from('position_trades').insert({
+      user_id:      session.user.id,
+      ticker,
+      company_name: data.company_name || null,
+      score_total:  scoreTotal != null ? Math.round(scoreTotal) : null,
+      decision,
+      entry_price:  data.entry_suggested || null,
+      stop_loss:    data.stop_suggested || null,
+      target1:      data.target_suggested || null,
+      status:       'planning',
+      created_at:   new Date().toISOString(),
+    })
+    setJournalSaved(true)
+    setJournalExists(true)
+    setTimeout(() => setJournalSaved(false), 2500)
+  }
 
   const setOverride = (key, val) => {
     const next = { ...overrides, [key]: val }
@@ -1702,6 +1743,23 @@ function PositionCard({ ticker, cachedData, onAnalysed, onRemove, scoreHistory, 
             </>
           )}
         </>
+      )}
+
+      {/* Botón agregar al Journal */}
+      {data && !data.error && !loading && (
+        <button
+          onClick={journalExists ? undefined : saveToPositionJournal}
+          disabled={journalExists}
+          style={{ width:'100%', marginTop:8,
+            background: journalExists ? '#a78bfa11' : journalSaved ? '#a78bfa22' : 'none',
+            border:`1px solid ${journalExists ? '#a78bfa44' : journalSaved ? '#a78bfa' : C.border}`,
+            borderRadius:7,
+            color: journalExists ? '#a78bfa99' : journalSaved ? '#a78bfa' : C.muted,
+            cursor: journalExists ? 'default' : 'pointer',
+            padding:'7px 10px', fontSize:11, transition:'all 0.2s',
+            display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
+          {journalExists ? '📋 Ya está en el Journal (planning/activo)' : journalSaved ? '✓ Guardado en Journal' : '📋 Agregar al Journal'}
+        </button>
       )}
     </div>
   )
@@ -2669,6 +2727,7 @@ export default function PositionModule({ session, onBack, swingExposedTickers = 
                         onRemove={remove}
                         scoreHistory={posHistory[t] || []}
                         inSwingModule={swingExposedTickers.includes(t)}
+                        session={session}
                       />
                     </div>
                   ))}
@@ -2712,6 +2771,7 @@ export default function PositionModule({ session, onBack, swingExposedTickers = 
               onRemove={t => { remove(t); setTableModal(null) }}
               scoreHistory={posHistory[tableModal] || []}
               inSwingModule={swingExposedTickers.includes(tableModal)}
+              session={session}
             />
             <button onClick={() => setTableModal(null)}
               style={{ marginTop:10, width:'100%', background:'none', border:`1px solid ${C.border}`,
