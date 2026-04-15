@@ -170,6 +170,10 @@ function PositionJournal({ session }) {
     const { error } = await supabase.from('position_trades')
       .update({
         status:       form.status,
+        entry_price:  form.entry_price  || null,
+        stop_loss:    form.stop_loss    || null,
+        target1:      form.target1      || null,
+        shares:       form.shares       || null,
         exit_price:   form.exit_price   || null,
         exit_date:    form.exit_date    || null,
         notes:        form.notes        || null,
@@ -213,49 +217,94 @@ function PositionJournal({ session }) {
           No hay operaciones de position trading registradas.
         </div>
       ) : (
-        <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:12, overflow:'hidden' }}>
-          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
-            <thead>
-              <tr style={{ borderBottom:`1px solid ${C.border}` }}>
-                {['Ticker','Empresa','Score','Decisión','Entrada','Stop','Obj.1','Estado',''].map(h => (
-                  <th key={h} style={{ padding:'9px 10px', textAlign:'left', fontSize:10,
-                    color:C.muted, letterSpacing:'0.07em', textTransform:'uppercase', fontWeight:600 }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map(t => (
-                <tr key={t.id} onClick={() => openModal(t)}
-                  style={{ borderBottom:`1px solid ${C.border}`, cursor:'pointer' }}
-                  onMouseEnter={e => e.currentTarget.style.background='#1a2d4533'}
-                  onMouseLeave={e => e.currentTarget.style.background='transparent'}>
-                  <td style={{ padding:'10px', fontWeight:700, color:C.text }}>{t.ticker}</td>
-                  <td style={{ padding:'10px', color:C.muted, fontSize:11 }}>{t.company_name || '—'}</td>
-                  <td style={{ padding:'10px', fontFamily:'monospace', fontWeight:700,
+        <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+          {filtered.map(t => {
+            const pnl = t.exit_price && t.entry_price && t.shares
+              ? ((parseFloat(t.exit_price) - parseFloat(t.entry_price)) * parseFloat(t.shares)).toFixed(2)
+              : null
+            const pnlPct = t.exit_price && t.entry_price
+              ? (((parseFloat(t.exit_price) - parseFloat(t.entry_price)) / parseFloat(t.entry_price)) * 100).toFixed(2)
+              : null
+            const rrReal = t.entry_price && t.stop_loss && t.target1
+              ? Math.abs((parseFloat(t.target1) - parseFloat(t.entry_price)) / (parseFloat(t.entry_price) - parseFloat(t.stop_loss))).toFixed(1)
+              : null
+            const slPct = t.entry_price && t.stop_loss
+              ? (((parseFloat(t.stop_loss) - parseFloat(t.entry_price)) / parseFloat(t.entry_price)) * 100).toFixed(1)
+              : null
+            const tpPct = t.entry_price && t.target1
+              ? (((parseFloat(t.target1) - parseFloat(t.entry_price)) / parseFloat(t.entry_price)) * 100).toFixed(1)
+              : null
+            const statusColor = STATUS_COLORS[t.status] || C.muted
+            return (
+              <div key={t.id}
+                style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:12,
+                  padding:'14px 16px', cursor:'pointer', transition:'border-color 0.15s' }}
+                onMouseEnter={e => e.currentTarget.style.borderColor = '#2a4060'}
+                onMouseLeave={e => e.currentTarget.style.borderColor = C.border}
+                onClick={() => openModal(t)}>
+                {/* Header row */}
+                <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8, flexWrap:'wrap' }}>
+                  <span style={{ fontSize:16, fontWeight:800, color:C.text, fontFamily:'monospace' }}>{t.ticker}</span>
+                  <span style={{ fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:99,
+                    color:DECISION_COLOR[t.decision], background:DECISION_COLOR[t.decision]+'18',
+                    border:`1px solid ${DECISION_COLOR[t.decision]}33` }}>
+                    {DECISION_SHORT[t.decision] || t.decision || '—'}
+                  </span>
+                  <span style={{ fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:99,
+                    color:statusColor, background:statusColor+'18', border:`1px solid ${statusColor}33` }}>
+                    {STATUS_LABELS[t.status] || t.status}
+                  </span>
+                  {t.created_at && (
+                    <span style={{ fontSize:10, color:C.muted }}>{t.created_at?.slice(0,10)}</span>
+                  )}
+                  <span style={{ marginLeft:'auto', fontSize:10, fontWeight:700,
                     color: t.score_total >= 32 ? C.green : t.score_total >= 22 ? C.amber : C.red }}>
-                    {t.score_total}/{MAX_SCORE}
-                  </td>
-                  <td style={{ padding:'10px' }}>
-                    <span style={{ fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:99,
-                      color: DECISION_COLOR[t.decision], background: DECISION_COLOR[t.decision]+'18' }}>
-                      {DECISION_SHORT[t.decision] || t.decision || '—'}
-                    </span>
-                  </td>
-                  <td style={{ padding:'10px', fontFamily:'monospace', color:C.text }}>{t.entry_price ? `$${t.entry_price}` : '—'}</td>
-                  <td style={{ padding:'10px', fontFamily:'monospace', color:C.red }}>{t.stop_loss ? `$${t.stop_loss}` : '—'}</td>
-                  <td style={{ padding:'10px', fontFamily:'monospace', color:C.green }}>{t.target1 ? `$${t.target1}` : '—'}</td>
-                  <td style={{ padding:'10px' }}>
-                    <span style={{ fontSize:10, fontWeight:700, color: STATUS_COLORS[t.status] }}>
-                      {STATUS_LABELS[t.status] || t.status}
-                    </span>
-                  </td>
-                  <td style={{ padding:'10px' }} onClick={e => { e.stopPropagation(); setConfirmDelete(t.id) }}>
-                    <span style={{ color:C.red, opacity:0.6, cursor:'pointer', fontSize:14 }}>×</span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    Score {t.score_total ?? '—'}/{MAX_SCORE}
+                  </span>
+                  <div onClick={e => { e.stopPropagation(); setConfirmDelete(t.id) }}
+                    style={{ color:C.red, opacity:0.5, cursor:'pointer', fontSize:16, padding:'0 4px', marginLeft:4 }}>×</div>
+                </div>
+                {t.company_name && (
+                  <div style={{ fontSize:11, color:C.muted, marginBottom:8 }}>{t.company_name}</div>
+                )}
+                {/* Datos de operación */}
+                <div style={{ display:'flex', flexWrap:'wrap', gap:'4px 16px', fontSize:11 }}>
+                  {t.entry_price && (
+                    <span style={{ color:C.muted }}>Entrada: <b style={{ color:C.text, fontFamily:'monospace' }}>${t.entry_price}</b></span>
+                  )}
+                  {t.shares && (
+                    <span style={{ color:C.muted }}>Acciones: <b style={{ color:C.text, fontFamily:'monospace' }}>{t.shares}</b></span>
+                  )}
+                  {t.stop_loss && (
+                    <span style={{ color:C.muted }}>Stop: <b style={{ color:C.red, fontFamily:'monospace' }}>${t.stop_loss}{slPct ? ` (${slPct}%)` : ''}</b></span>
+                  )}
+                  {t.target1 && (
+                    <span style={{ color:C.muted }}>Target: <b style={{ color:C.green, fontFamily:'monospace' }}>${t.target1}{tpPct ? ` (+${tpPct}%)` : ''}</b></span>
+                  )}
+                  {rrReal && (
+                    <span style={{ color:C.muted }}>R/R: <b style={{ color: parseFloat(rrReal) >= 2 ? C.green : C.amber, fontFamily:'monospace' }}>{rrReal}x</b></span>
+                  )}
+                  {t.exit_price && (
+                    <span style={{ color:C.muted }}>Cierre: <b style={{ color:C.accent, fontFamily:'monospace' }}>${t.exit_price}</b></span>
+                  )}
+                  {pnl != null && (
+                    <span style={{ color:C.muted }}>P&L: <b style={{ color: parseFloat(pnl) >= 0 ? C.green : C.red, fontFamily:'monospace' }}>
+                      {parseFloat(pnl) >= 0 ? '+' : ''}${pnl} ({parseFloat(pnl) >= 0 ? '+' : ''}{pnlPct}%)
+                    </b></span>
+                  )}
+                </div>
+                {t.notes && (
+                  <div style={{ marginTop:7, fontSize:11, color:C.muted, fontStyle:'italic',
+                    borderTop:`1px solid ${C.border}`, paddingTop:6 }}>
+                    {t.notes}
+                  </div>
+                )}
+                <div style={{ marginTop:8, textAlign:'right' }}>
+                  <span style={{ fontSize:10, color:C.accent, fontWeight:600 }}>Editar →</span>
+                </div>
+              </div>
+            )
+          })}
         </div>
       )}
 
@@ -288,54 +337,116 @@ function PositionJournal({ session }) {
             padding:'40px 16px', overflowY:'auto' }}>
           <div onClick={e => e.stopPropagation()}
             style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:14,
-              padding:'24px', width:'100%', maxWidth:480 }}>
-            <div style={{ fontSize:16, fontWeight:700, color:C.text, marginBottom:4 }}>
-              {selected.ticker} — {selected.company_name}
+              padding:'24px', width:'100%', maxWidth:520 }}>
+
+            {/* Título */}
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:4 }}>
+              <div>
+                <span style={{ fontSize:18, fontWeight:800, color:C.text, fontFamily:'monospace' }}>{selected.ticker}</span>
+                {selected.company_name && <span style={{ fontSize:12, color:C.muted, marginLeft:8 }}>{selected.company_name}</span>}
+              </div>
+              <button onClick={closeModal}
+                style={{ background:'none', border:'none', color:C.muted, cursor:'pointer', fontSize:20, padding:'0 4px' }}>×</button>
             </div>
-            <div style={{ fontSize:11, color:C.muted, marginBottom:18 }}>
-              Score {selected.score_total}/{MAX_SCORE} · {DECISION_LABEL[selected.decision] || selected.decision}
+            <div style={{ fontSize:11, color:C.muted, marginBottom:16 }}>
+              Score {selected.score_total ?? '—'}/{MAX_SCORE} · {DECISION_LABEL[selected.decision] || selected.decision || '—'}
             </div>
 
-            {selected.narrative && (
-              <div style={{ marginBottom:14, padding:'10px 12px', background:C.bg,
-                borderRadius:8, fontSize:11, color:C.text, fontStyle:'italic' }}>
-                "{selected.narrative}"
+            {/* Referencia app */}
+            {(selected.entry_price || selected.stop_loss || selected.target1) && (
+              <div style={{ marginBottom:16, padding:'10px 14px', background:C.bg,
+                border:`1px solid ${C.border}`, borderRadius:9 }}>
+                <div style={{ fontSize:9, color:'#a78bfa', letterSpacing:'0.1em', fontWeight:700,
+                  textTransform:'uppercase', marginBottom:8 }}>Valores sugeridos · Solo referencia</div>
+                <div style={{ display:'flex', flexWrap:'wrap', gap:'4px 20px', fontSize:11 }}>
+                  {selected.entry_price && <span style={{ color:C.muted }}>Entrada app: <b style={{ color:C.text, fontFamily:'monospace' }}>${selected.entry_price}</b></span>}
+                  {selected.stop_loss   && <span style={{ color:C.muted }}>Stop app: <b style={{ color:C.red, fontFamily:'monospace' }}>${selected.stop_loss}</b></span>}
+                  {selected.target1     && <span style={{ color:C.muted }}>Target app: <b style={{ color:C.green, fontFamily:'monospace' }}>${selected.target1}</b></span>}
+                </div>
               </div>
             )}
 
-            {selected.invalidation && (
-              <div style={{ marginBottom:14 }}>
-                <div style={{ fontSize:10, color:C.muted, marginBottom:3 }}>Invalidación de tesis:</div>
-                <div style={{ fontSize:11, color:C.amber }}>{selected.invalidation}</div>
-              </div>
-            )}
+            {/* Sección Mi operación real */}
+            <div style={{ marginBottom:14, padding:'12px 14px', background:'#0a1628',
+              border:'1px solid #a78bfa44', borderRadius:9 }}>
+              <div style={{ fontSize:9, color:'#a78bfa', letterSpacing:'0.1em', fontWeight:700,
+                textTransform:'uppercase', marginBottom:12 }}>Mi operación real · Editable</div>
 
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:14 }}>
-              <div>
-                <div style={{ fontSize:10, color:C.muted, marginBottom:4 }}>Estado</div>
-                <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
-                  style={{ width:'100%', background:C.bg, border:`1px solid ${C.border}`, borderRadius:7,
-                    padding:'8px 10px', color:C.text, fontSize:12, outline:'none', boxSizing:'border-box' }}>
-                  <option value="planning">Planificando</option>
-                  <option value="open">Activo</option>
-                  <option value="closed">Cerrado</option>
-                </select>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+                <div>
+                  <div style={{ fontSize:10, color:C.muted, marginBottom:4 }}>Precio entrada real</div>
+                  <input type="number" step="0.01" value={form.entry_price || ''}
+                    onChange={e => setForm(f => ({ ...f, entry_price: e.target.value }))}
+                    style={{ width:'100%', background:C.bg, border:`1px solid ${C.border}`, borderRadius:7,
+                      padding:'8px 10px', color:C.text, fontSize:12, outline:'none', boxSizing:'border-box' }} />
+                </div>
+                <div>
+                  <div style={{ fontSize:10, color:C.muted, marginBottom:4 }}>N° acciones</div>
+                  <input type="number" step="1" value={form.shares || ''}
+                    onChange={e => setForm(f => ({ ...f, shares: e.target.value }))}
+                    style={{ width:'100%', background:C.bg, border:`1px solid ${C.border}`, borderRadius:7,
+                      padding:'8px 10px', color:C.text, fontSize:12, outline:'none', boxSizing:'border-box' }} />
+                </div>
+                <div>
+                  <div style={{ fontSize:10, marginBottom:4, display:'flex', justifyContent:'space-between' }}>
+                    <span style={{ color:C.muted }}>Stop-loss real (broker)</span>
+                    {form.entry_price && form.stop_loss && (
+                      <span style={{ color:C.red, fontFamily:'monospace', fontSize:10 }}>
+                        {(((parseFloat(form.stop_loss) - parseFloat(form.entry_price)) / parseFloat(form.entry_price)) * 100).toFixed(1)}%
+                      </span>
+                    )}
+                  </div>
+                  <input type="number" step="0.01" value={form.stop_loss || ''}
+                    onChange={e => setForm(f => ({ ...f, stop_loss: e.target.value }))}
+                    style={{ width:'100%', background:C.bg, border:`1px solid ${C.border}`, borderRadius:7,
+                      padding:'8px 10px', color:C.text, fontSize:12, outline:'none', boxSizing:'border-box' }} />
+                </div>
+                <div>
+                  <div style={{ fontSize:10, marginBottom:4, display:'flex', justifyContent:'space-between' }}>
+                    <span style={{ color:C.muted }}>Take profit real (broker)</span>
+                    {form.entry_price && form.target1 && (
+                      <span style={{ color:C.green, fontFamily:'monospace', fontSize:10 }}>
+                        +{(((parseFloat(form.target1) - parseFloat(form.entry_price)) / parseFloat(form.entry_price)) * 100).toFixed(1)}%
+                      </span>
+                    )}
+                  </div>
+                  <input type="number" step="0.01" value={form.target1 || ''}
+                    onChange={e => setForm(f => ({ ...f, target1: e.target.value }))}
+                    style={{ width:'100%', background:C.bg, border:`1px solid ${C.border}`, borderRadius:7,
+                      padding:'8px 10px', color:C.text, fontSize:12, outline:'none', boxSizing:'border-box' }} />
+                </div>
+                <div>
+                  <div style={{ fontSize:10, color:C.muted, marginBottom:4 }}>Precio cierre real</div>
+                  <input type="number" step="0.01" value={form.exit_price || ''}
+                    onChange={e => setForm(f => ({ ...f, exit_price: e.target.value }))}
+                    style={{ width:'100%', background:C.bg, border:`1px solid ${C.border}`, borderRadius:7,
+                      padding:'8px 10px', color:C.text, fontSize:12, outline:'none', boxSizing:'border-box' }} />
+                </div>
+                <div>
+                  <div style={{ fontSize:10, color:C.muted, marginBottom:4 }}>Estado</div>
+                  <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
+                    style={{ width:'100%', background:C.bg, border:`1px solid ${C.border}`, borderRadius:7,
+                      padding:'8px 10px', color:C.text, fontSize:12, outline:'none', boxSizing:'border-box' }}>
+                    <option value="planning">Planificando</option>
+                    <option value="open">Activo</option>
+                    <option value="closed">Cerrado</option>
+                  </select>
+                </div>
               </div>
-              <div>
-                <div style={{ fontSize:10, color:C.muted, marginBottom:4 }}>Precio de salida</div>
-                <input type="number" value={form.exit_price || ''} onChange={e => setForm(f => ({ ...f, exit_price: e.target.value }))}
-                  style={{ width:'100%', background:C.bg, border:`1px solid ${C.border}`, borderRadius:7,
-                    padding:'8px 10px', color:C.text, fontSize:12, outline:'none', boxSizing:'border-box' }} />
-              </div>
-              <div>
-                <div style={{ fontSize:10, color:C.muted, marginBottom:4 }}>Fecha de salida</div>
-                <input type="date" value={form.exit_date || ''} onChange={e => setForm(f => ({ ...f, exit_date: e.target.value }))}
-                  style={{ width:'100%', background:C.bg, border:`1px solid ${C.border}`, borderRadius:7,
-                    padding:'8px 10px', color:C.text, fontSize:12, outline:'none', boxSizing:'border-box' }} />
-              </div>
+
+              {/* Fecha de salida */}
+              {(form.status === 'closed' || form.exit_date) && (
+                <div style={{ marginTop:10 }}>
+                  <div style={{ fontSize:10, color:C.muted, marginBottom:4 }}>Fecha de salida</div>
+                  <input type="date" value={form.exit_date || ''} onChange={e => setForm(f => ({ ...f, exit_date: e.target.value }))}
+                    style={{ width:'100%', background:C.bg, border:`1px solid ${C.border}`, borderRadius:7,
+                      padding:'8px 10px', color:C.text, fontSize:12, outline:'none', boxSizing:'border-box' }} />
+                </div>
+              )}
             </div>
 
-            <div style={{ marginBottom:16 }}>
+            {/* Notas */}
+            <div style={{ marginBottom:12 }}>
               <div style={{ fontSize:10, color:C.muted, marginBottom:4 }}>Notas</div>
               <textarea value={form.notes || ''} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
                 rows={3} style={{ width:'100%', background:C.bg, border:`1px solid ${C.border}`, borderRadius:7,
@@ -343,7 +454,7 @@ function PositionJournal({ session }) {
                   boxSizing:'border-box', fontFamily:'inherit' }} />
             </div>
 
-            <div style={{ marginBottom:16 }}>
+            <div style={{ marginBottom:12 }}>
               <div style={{ fontSize:10, color:C.muted, marginBottom:4 }}>Catalizador</div>
               <input value={form.catalyst || ''} onChange={e => setForm(f => ({ ...f, catalyst: e.target.value }))}
                 style={{ width:'100%', background:C.bg, border:`1px solid ${C.border}`, borderRadius:7,
@@ -353,7 +464,7 @@ function PositionJournal({ session }) {
             <div style={{ marginBottom:16 }}>
               <div style={{ fontSize:10, color:C.muted, marginBottom:4 }}>Invalidación de tesis</div>
               <textarea value={form.invalidation || ''} onChange={e => setForm(f => ({ ...f, invalidation: e.target.value }))}
-                rows={3} style={{ width:'100%', background:C.bg, border:`1px solid ${C.border}`, borderRadius:7,
+                rows={2} style={{ width:'100%', background:C.bg, border:`1px solid ${C.border}`, borderRadius:7,
                   padding:'9px 12px', color:C.text, fontSize:12, outline:'none', resize:'vertical',
                   boxSizing:'border-box', fontFamily:'inherit' }} />
             </div>
