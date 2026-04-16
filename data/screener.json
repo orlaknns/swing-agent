@@ -76,17 +76,17 @@
       "sector": ""
     },
     {
+      "ticker": "CCL",
+      "company": "",
+      "sector": ""
+    },
+    {
       "ticker": "USB",
       "company": "",
       "sector": ""
     },
     {
       "ticker": "VZ",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "CCL",
       "company": "",
       "sector": ""
     },
@@ -101,12 +101,12 @@
       "sector": ""
     },
     {
-      "ticker": "WBD",
+      "ticker": "WFC",
       "company": "",
       "sector": ""
     },
     {
-      "ticker": "WFC",
+      "ticker": "WBD",
       "company": "",
       "sector": ""
     },
@@ -131,17 +131,17 @@
       "sector": ""
     },
     {
-      "ticker": "FSLY",
-      "company": "",
-      "sector": ""
-    },
-    {
       "ticker": "UBER",
       "company": "",
       "sector": ""
     },
     {
       "ticker": "TEM",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "FSLY",
       "company": "",
       "sector": ""
     },
@@ -161,12 +161,12 @@
       "sector": ""
     },
     {
-      "ticker": "BSX",
+      "ticker": "XOM",
       "company": "",
       "sector": ""
     },
     {
-      "ticker": "XOM",
+      "ticker": "BSX",
       "company": "",
       "sector": ""
     },
@@ -176,12 +176,12 @@
       "sector": ""
     },
     {
-      "ticker": "KHC",
+      "ticker": "SNOW",
       "company": "",
       "sector": ""
     },
     {
-      "ticker": "SNOW",
+      "ticker": "KHC",
       "company": "",
       "sector": ""
     },
@@ -231,22 +231,17 @@
       "sector": ""
     },
     {
-      "ticker": "JPM",
-      "company": "",
-      "sector": ""
-    },
-    {
       "ticker": "DDOG",
       "company": "",
       "sector": ""
     },
     {
-      "ticker": "OKTA",
+      "ticker": "ENPH",
       "company": "",
       "sector": ""
     },
     {
-      "ticker": "ENPH",
+      "ticker": "OKTA",
       "company": "",
       "sector": ""
     },
@@ -257,6 +252,11 @@
     },
     {
       "ticker": "SHOP",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "DOW",
       "company": "",
       "sector": ""
     },
@@ -276,12 +276,12 @@
       "sector": ""
     },
     {
-      "ticker": "DOW",
+      "ticker": "DXCM",
       "company": "",
       "sector": ""
     },
     {
-      "ticker": "DXCM",
+      "ticker": "UAL",
       "company": "",
       "sector": ""
     },
@@ -301,7 +301,7 @@
       "sector": ""
     },
     {
-      "ticker": "UAL",
+      "ticker": "SHEL",
       "company": "",
       "sector": ""
     },
@@ -316,17 +316,22 @@
       "sector": ""
     },
     {
-      "ticker": "APP",
-      "company": "",
-      "sector": ""
-    },
-    {
       "ticker": "QCOM",
       "company": "",
       "sector": ""
     },
     {
       "ticker": "WDAY",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "RBLX",
+      "company": "",
+      "sector": ""
+    },
+    {
+      "ticker": "APP",
       "company": "",
       "sector": ""
     },
@@ -341,12 +346,12 @@
       "sector": ""
     },
     {
-      "ticker": "RBLX",
+      "ticker": "GTLB",
       "company": "",
       "sector": ""
     },
     {
-      "ticker": "GTLB",
+      "ticker": "BKR",
       "company": "",
       "sector": ""
     },
@@ -366,7 +371,7 @@
       "sector": ""
     },
     {
-      "ticker": "BNAI",
+      "ticker": "EQNR",
       "company": "",
       "sector": ""
     },
@@ -376,22 +381,17 @@
       "sector": ""
     },
     {
-      "ticker": "BKR",
+      "ticker": "BNAI",
       "company": "",
       "sector": ""
     },
     {
-      "ticker": "SHEL",
+      "ticker": "AMAT",
       "company": "",
       "sector": ""
     },
     {
-      "ticker": "EQNR",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "TOST",
+      "ticker": "DVN",
       "company": "",
       "sector": ""
     },
@@ -417,28 +417,28 @@
     "ASTS",
     "APLD",
     "SCHW",
+    "CCL",
     "USB",
     "VZ",
-    "CCL",
     "PFE",
     "MSTR",
-    "WBD",
     "WFC",
+    "WBD",
     "TEAM",
     "CRM",
     "CRCL",
     "WMT",
-    "FSLY",
     "UBER",
     "TEM",
+    "FSLY",
     "PEP",
     "COIN",
     "CMCSA",
-    "BSX",
     "XOM",
+    "BSX",
     "OXY",
-    "KHC",
     "SNOW",
+    "KHC",
     "NCLH",
     "HDB",
     "AG",
@@ -448,44 +448,44 @@
     "PDD",
     "SAP",
     "ADBE",
-    "JPM",
     "DDOG",
-    "OKTA",
     "ENPH",
+    "OKTA",
     "CMG",
     "SHOP",
+    "DOW",
     "KMI",
     "IOT",
     "LYV",
-    "DOW",
     "DXCM",
+    "UAL",
     "B",
     "PANW",
     "COP",
-    "UAL",
+    "SHEL",
     "NEM",
     "GIS",
-    "APP",
     "QCOM",
     "WDAY",
+    "RBLX",
+    "APP",
     "UL",
     "MDLZ",
-    "RBLX",
     "GTLB",
+    "BKR",
     "NNE",
     "CELH",
     "KGC",
-    "BNAI",
-    "DKNG",
-    "BKR",
-    "SHEL",
     "EQNR",
-    "TOST",
+    "DKNG",
+    "BNAI",
+    "AMAT",
+    "DVN",
     "CVX"
   ],
   "count": 80,
   "date": "2026-04-16",
-  "updatedAt": "2026-04-16 14:16 UTC",
+  "updatedAt": "2026-04-16 14:19 UTC",
   "source": "finviz",
   "criteria": {
     "exchange": "NYSE, NASDAQ",
