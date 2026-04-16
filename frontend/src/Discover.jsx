@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 const C = {
   bg:'#070d1a', card:'#0f1929', border:'#1a2d45',
@@ -36,6 +36,9 @@ export default function Discover({ watchlist, monitorList = [], openTrades = {},
   const [preview, setPreview]       = useState(null)
   const [previewData, setPreviewData] = useState(null)
   const [previewLoad, setPreviewLoad] = useState(false)
+  const [polling, setPolling]       = useState(false)   // esperando actualización del cron
+  const preRefreshDate = useRef(null)   // fecha antes de disparar el refresh
+  const pollInterval   = useRef(null)
 
   const openPreview = async (ticker) => {
     setPreview(ticker)
@@ -58,28 +61,55 @@ export default function Discover({ watchlist, monitorList = [], openTrades = {},
       const res = await fetch('/api/screener')
       if (!res.ok) throw new Error(`Error ${res.status}`)
       const data = await res.json()
+      const newDate = data.updatedAt || data.date || null
       setCandidates(data.candidates || [])
       setScreenerDate(data.date || null)
       setSource(data.source || null)
-      setUpdatedAt(data.updatedAt || null)
+      setUpdatedAt(newDate)
+      // Si estábamos en polling y la fecha cambió, detener
+      if (polling && preRefreshDate.current && newDate !== preRefreshDate.current) {
+        stopPolling()
+        setRefreshMsg({ ok: true, text: '✓ Screener actualizado' })
+        setTimeout(() => setRefreshMsg(null), 4000)
+      }
     } catch (e) {
       setError('No se pudo conectar con el screener.')
     }
     setLoading(false)
   }
 
-  useEffect(() => { load() }, [])
+  const stopPolling = () => {
+    if (pollInterval.current) { clearInterval(pollInterval.current); pollInterval.current = null }
+    setPolling(false)
+  }
+
+  // Al montar, cargar datos frescos (aunque el componente nunca se desmonte)
+  useEffect(() => {
+    load()
+    return () => stopPolling()
+  }, [])
+
+  // Polling cada 15s cuando hay un refresh pendiente
+  useEffect(() => {
+    if (polling) {
+      pollInterval.current = setInterval(() => load(), 15000)
+    } else {
+      if (pollInterval.current) { clearInterval(pollInterval.current); pollInterval.current = null }
+    }
+    return () => { if (pollInterval.current) clearInterval(pollInterval.current) }
+  }, [polling])
 
   const triggerRefresh = async () => {
     setRefreshing(true)
     setRefreshMsg(null)
+    // Guardar fecha actual antes de disparar
+    preRefreshDate.current = updatedAt || screenerDate
     try {
       const res = await fetch('/api/screener/refresh', { method: 'POST' })
       const data = await res.json()
       if (res.ok) {
-        setRefreshMsg({ ok: true, text: 'Actualizando... listo en ~90 segundos' })
-        // Recarga automática después de 90 segundos (GitHub Actions tarda ~60-90s)
-        setTimeout(() => { load(); setRefreshMsg(null) }, 90000)
+        setRefreshMsg({ ok: true, text: 'Actualizando… verificando cada 15s' })
+        setPolling(true)
       } else {
         setRefreshMsg({ ok: false, text: data.error || 'Error al actualizar' })
       }
@@ -102,14 +132,24 @@ export default function Discover({ watchlist, monitorList = [], openTrades = {},
       <div style={{ marginBottom:16 }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
           <h2 style={{ fontSize:18, fontWeight:700, color:C.text, margin:0 }}>Descubrir acciones</h2>
-          <button
-            onClick={triggerRefresh}
-            disabled={refreshing}
-            style={{ background: refreshing ? C.border : C.accent+'22', border:`1px solid ${refreshing ? C.border : C.accent}`,
-              borderRadius:7, color: refreshing ? C.muted : C.accent,
-              fontWeight:700, padding:'6px 14px', cursor: refreshing ? 'default' : 'pointer', fontSize:11 }}>
-            {refreshing ? 'Actualizando...' : '↻ Actualizar screener'}
-          </button>
+          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+            {polling && (
+              <span style={{ fontSize:10, color:C.amber, display:'flex', alignItems:'center', gap:5 }}>
+                <span style={{ display:'inline-block', width:7, height:7, borderRadius:'50%',
+                  background:C.amber, animation:'pulse 1.2s infinite' }}/>
+                Verificando actualización…
+              </span>
+            )}
+            <button
+              onClick={polling ? stopPolling : triggerRefresh}
+              disabled={refreshing}
+              style={{ background: refreshing ? C.border : polling ? C.amber+'22' : C.accent+'22',
+                border:`1px solid ${refreshing ? C.border : polling ? C.amber : C.accent}`,
+                borderRadius:7, color: refreshing ? C.muted : polling ? C.amber : C.accent,
+                fontWeight:700, padding:'6px 14px', cursor: refreshing ? 'default' : 'pointer', fontSize:11 }}>
+              {refreshing ? 'Iniciando...' : polling ? '✕ Cancelar' : '↻ Actualizar screener'}
+            </button>
+          </div>
         </div>
         <p style={{ fontSize:11, color:C.muted, margin:'4px 0 0' }}>
           Candidatas para swing trading set-and-forget · Filtradas por EMA, RSI y volumen
