@@ -927,7 +927,7 @@ async def _run_batch(job_id: str, tickers: list[str], module: str):
             await asyncio.sleep(3)
     job["status"] = "done"
 
-@app.post("/api/batch-analyze")
+@app.post("/batch-analyze")
 async def batch_analyze(req: BatchRequest, background_tasks: BackgroundTasks):
     import uuid, time as _time
     job_id = str(uuid.uuid4())[:8]
@@ -943,7 +943,7 @@ async def batch_analyze(req: BatchRequest, background_tasks: BackgroundTasks):
     background_tasks.add_task(_run_batch, job_id, req.tickers, req.module)
     return {"job_id": job_id, "total": len(req.tickers)}
 
-@app.get("/api/batch-status/{job_id}")
+@app.get("/batch-status/{job_id}")
 async def batch_status(job_id: str):
     job = _batch_jobs.get(job_id)
     if not job:
@@ -956,7 +956,7 @@ async def batch_status(job_id: str):
         "results": job["results"] if job["status"] == "done" else {},
     }
 
-@app.post("/api/batch-cancel/{job_id}")
+@app.post("/batch-cancel/{job_id}")
 async def batch_cancel(job_id: str):
     job = _batch_jobs.get(job_id)
     if job:

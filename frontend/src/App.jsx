@@ -593,7 +593,7 @@ export default function App() {
     if (batchPollRef.current) { clearInterval(batchPollRef.current); batchPollRef.current = null }
   }
 
-  const pollBatchStatus = (jobId, total) => {
+  const pollBatchStatus = (jobId, tickersList) => {
     stopBatchPoll()
     batchPollRef.current = setInterval(async () => {
       try {
@@ -601,12 +601,12 @@ export default function App() {
         if (!res.ok) return
         const job = await res.json()
         setQueueDone(job.done)
-        setQueue(Array(Math.max(0, total - job.done)).fill('…'))
+        // mostrar tickers pendientes reales
+        setQueue(tickersList.slice(job.done))
         if (job.status === 'done') {
           stopBatchPoll()
           setQueue([])
           batchJobId.current = null
-          // Guardar todos los resultados en caché
           Object.entries(job.results).forEach(([ticker, data]) => {
             if (!data.error) cacheAnalysis(ticker, data)
           })
@@ -626,10 +626,10 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tickers, module: 'swing' }),
       })
-      if (!res.ok) return
+      if (!res.ok) { setQueue([]); return }
       const { job_id } = await res.json()
       batchJobId.current = job_id
-      pollBatchStatus(job_id, tickers.length)
+      pollBatchStatus(job_id, tickers)
     } catch {
       setQueue([])
     }

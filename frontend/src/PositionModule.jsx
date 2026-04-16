@@ -2571,7 +2571,7 @@ export default function PositionModule({ session, onBack, swingExposedTickers = 
     if (batchPollRef.current) { clearInterval(batchPollRef.current); batchPollRef.current = null }
   }
 
-  const pollBatchStatus = (jobId, total) => {
+  const pollBatchStatus = (jobId, tickersList) => {
     stopBatchPoll()
     batchPollRef.current = setInterval(async () => {
       try {
@@ -2579,7 +2579,7 @@ export default function PositionModule({ session, onBack, swingExposedTickers = 
         if (!res.ok) return
         const job = await res.json()
         setQueueDone(job.done)
-        setQueue(Array(Math.max(0, total - job.done)).fill('…'))
+        setQueue(tickersList.slice(job.done))
         if (job.status === 'done') {
           stopBatchPoll()
           setQueue([])
@@ -2606,7 +2606,7 @@ export default function PositionModule({ session, onBack, swingExposedTickers = 
       if (!res.ok) return
       const { job_id } = await res.json()
       batchJobId.current = job_id
-      pollBatchStatus(job_id, tickers.length)
+      pollBatchStatus(job_id, tickers)
     } catch {
       setQueue([])
     }
