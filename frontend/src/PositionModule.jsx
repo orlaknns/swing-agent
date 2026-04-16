@@ -825,9 +825,12 @@ function PositionScreener({ watchlist, onAdd, onRemove, onAddAll, posCache }) {
   const [historyWeeks,  setHistoryWeeks]  = useState(0)
   const [refreshing,   setRefreshing]   = useState(false)
   const [refreshMsg,   setRefreshMsg]   = useState(null)
-  const [preview,      setPreview]      = useState(null)   // ticker en modal
-  const [previewData,  setPreviewData]  = useState(null)   // datos del análisis
+  const [polling,      setPolling]      = useState(false)
+  const [preview,      setPreview]      = useState(null)
+  const [previewData,  setPreviewData]  = useState(null)
   const [previewLoad,  setPreviewLoad]  = useState(false)
+  const preRefreshDate = useRef(null)
+  const pollInterval   = useRef(null)
 
   const load = async () => {
     setLoading(true); setError(null)
@@ -835,28 +838,46 @@ function PositionScreener({ watchlist, onAdd, onRemove, onAddAll, posCache }) {
       const res = await fetch('/api/screener-position')
       if (!res.ok) throw new Error(`Error ${res.status}`)
       const data = await res.json()
+      const newDate = data.updatedAt || data.date || null
       setCandidates(data.candidates || [])
       setScreenerDate(data.date || null)
       setSource(data.source || null)
-      setUpdatedAt(data.updatedAt || null)
+      setUpdatedAt(newDate)
       setHistoryWeeks(data.historyWeeks || 0)
+      if (polling && preRefreshDate.current && newDate !== preRefreshDate.current) {
+        stopPolling()
+        setRefreshMsg({ ok:true, text:'✓ Screener actualizado' })
+        setTimeout(() => setRefreshMsg(null), 4000)
+      }
     } catch {
       setError('No se pudo conectar con el screener.')
     }
     setLoading(false)
   }
 
-  useEffect(() => { load() }, [])
+  const stopPolling = () => {
+    if (pollInterval.current) { clearInterval(pollInterval.current); pollInterval.current = null }
+    setPolling(false)
+  }
+
+  useEffect(() => {
+    load()
+    return () => stopPolling()
+  }, [])
+
+  useEffect(() => {
+    if (polling) {
+      pollInterval.current = setInterval(() => load(), 15000)
+    } else {
+      if (pollInterval.current) { clearInterval(pollInterval.current); pollInterval.current = null }
+    }
+    return () => { if (pollInterval.current) clearInterval(pollInterval.current) }
+  }, [polling])
 
   const openPreview = async (ticker) => {
     setPreview(ticker)
-    // Usar caché si existe
-    if (posCache?.[ticker]) {
-      setPreviewData(posCache[ticker])
-      return
-    }
-    setPreviewData(null)
-    setPreviewLoad(true)
+    if (posCache?.[ticker]) { setPreviewData(posCache[ticker]); return }
+    setPreviewData(null); setPreviewLoad(true)
     try {
       const res = await fetch(`/api/analyze-position/${ticker}`)
       if (res.ok) setPreviewData(await res.json())
@@ -866,12 +887,13 @@ function PositionScreener({ watchlist, onAdd, onRemove, onAddAll, posCache }) {
 
   const triggerRefresh = async () => {
     setRefreshing(true); setRefreshMsg(null)
+    preRefreshDate.current = updatedAt || screenerDate
     try {
       const res = await fetch('/api/screener-position/refresh', { method:'POST' })
       const data = await res.json()
       if (res.ok) {
-        setRefreshMsg({ ok:true, text:'Actualizando... listo en ~90 segundos' })
-        setTimeout(() => { load(); setRefreshMsg(null) }, 90000)
+        setRefreshMsg({ ok:true, text:'Actualizando… verificando cada 15s' })
+        setPolling(true)
       } else {
         setRefreshMsg({ ok:false, text: data.error || 'Error al actualizar' })
       }
@@ -892,13 +914,22 @@ function PositionScreener({ watchlist, onAdd, onRemove, onAddAll, posCache }) {
       <div style={{ marginBottom:16 }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
           <h2 style={{ fontSize:18, fontWeight:700, color:C.text, margin:0 }}>Screener Position Trading</h2>
-          <button onClick={triggerRefresh} disabled={refreshing}
-            style={{ background: refreshing ? C.border : C.green+'22',
-              border:`1px solid ${refreshing ? C.border : C.green}`,
-              borderRadius:7, color: refreshing ? C.muted : C.green,
-              fontWeight:700, padding:'6px 14px', cursor: refreshing ? 'default' : 'pointer', fontSize:11 }}>
-            {refreshing ? 'Actualizando...' : '↻ Actualizar screener'}
-          </button>
+          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+            {polling && (
+              <span style={{ fontSize:10, color:C.amber, display:'flex', alignItems:'center', gap:5 }}>
+                <span style={{ display:'inline-block', width:7, height:7, borderRadius:'50%',
+                  background:C.amber, animation:'pulse 1.2s infinite' }}/>
+                Verificando actualización…
+              </span>
+            )}
+            <button onClick={polling ? stopPolling : triggerRefresh} disabled={refreshing}
+              style={{ background: refreshing ? C.border : polling ? C.amber+'22' : C.green+'22',
+                border:`1px solid ${refreshing ? C.border : polling ? C.amber : C.green}`,
+                borderRadius:7, color: refreshing ? C.muted : polling ? C.amber : C.green,
+                fontWeight:700, padding:'6px 14px', cursor: refreshing ? 'default' : 'pointer', fontSize:11 }}>
+              {refreshing ? 'Iniciando...' : polling ? '✕ Cancelar' : '↻ Actualizar screener'}
+            </button>
+          </div>
         </div>
         <p style={{ fontSize:11, color:C.muted, margin:'4px 0 0' }}>
           Candidatas para position trading · Precio &gt; SMA200 · SMA50 &gt; SMA200 · RSI 40–65 · Cap &gt; $300M
