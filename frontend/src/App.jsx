@@ -595,21 +595,32 @@ export default function App() {
 
   const pollBatchStatus = (jobId, tickersList) => {
     stopBatchPoll()
+    // marcar todos los tickers del batch como "refreshing"
+    setRefreshingTickers(prev => {
+      const n = { ...prev }
+      tickersList.forEach(t => { n[t] = true })
+      return n
+    })
+    const seenTickers = new Set()
     batchPollRef.current = setInterval(async () => {
       try {
         const res = await fetch(`/api/batch-status/${jobId}`)
         if (!res.ok) return
         const job = await res.json()
         setQueueDone(job.done)
-        // mostrar tickers pendientes reales
         setQueue(tickersList.slice(job.done))
+        // guardar y quitar spinner de tickers ya completados
+        Object.entries(job.results || {}).forEach(([ticker, data]) => {
+          if (seenTickers.has(ticker)) return
+          seenTickers.add(ticker)
+          if (!data.error) cacheAnalysis(ticker, data)
+          setRefreshingTickers(prev => { const n = {...prev}; delete n[ticker]; return n })
+        })
         if (job.status === 'done') {
           stopBatchPoll()
           setQueue([])
           batchJobId.current = null
-          Object.entries(job.results).forEach(([ticker, data]) => {
-            if (!data.error) cacheAnalysis(ticker, data)
-          })
+          setRefreshingTickers({})
         }
       } catch {}
     }, 4000)
