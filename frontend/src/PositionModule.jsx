@@ -138,35 +138,124 @@ function CriterioSlider({ id, value, onChange, justificacion, esAutomatico, esVe
 }
 
 // ── Position Journal ─────────────────────────────────────────────────────────
-function PositionJournal({ session }) {
-  const [trades,   setTrades]   = useState([])
-  const [filter,   setFilter]   = useState('all')
-  const [selected, setSelected] = useState(null)
-  const [form,     setForm]     = useState(null)
-  const [confirmDelete, setConfirmDelete] = useState(null)
-  const [saving,   setSaving]   = useState(false)
+// ── SetupProgress — vigencia de la tesis position (Weinstein: ~3–12 meses) ──
+function PositionSetupBar({ trade }) {
+  if (trade.status === 'closed' || trade.status === 'planning') return null
+  const dateStr = trade.entry_date || trade.created_at?.slice(0,10)
+  if (!dateStr) return null
+  try {
+    const days = Math.floor((new Date() - new Date(dateStr + 'T00:00:00')) / (1000*60*60*24))
+    const maxDays = 365  // Position: hasta 12 meses
+    const entryRef = trade.entry_price ? parseFloat(trade.entry_price) : null
+    const exitRef  = trade.exit_price  ? parseFloat(trade.exit_price)  : null
+    const pnlPct   = entryRef && exitRef ? (((exitRef - entryRef) / entryRef) * 100) : null
 
-  useEffect(() => {
+    const greenLimit  = 90   // 0–3 meses: óptimo
+    const yellowLimit = 270  // 3–9 meses: monitorear
+    let color, label, rec
+    if (days <= greenLimit) {
+      color = C.green; label = `Día ${days} de ${maxDays} — Tesis activa`
+      rec = `Posición dentro de la ventana óptima de Weinstein (primeros 3 meses). Mantener si la estructura semanal se preserva.`
+    } else if (days <= yellowLimit) {
+      color = C.amber; label = `Día ${days} de ${maxDays} — Revisar tesis`
+      if (pnlPct !== null && pnlPct > 15) rec = `Llevas ${pnlPct.toFixed(1)}% de ganancia en ${days} días. Considera subir el stop a breakeven o mejor.`
+      else if (pnlPct !== null && pnlPct < -5) rec = `${days} días con pérdida (${pnlPct.toFixed(1)}%). Revisar si el Stage sigue siendo 2.`
+      else rec = `${days} días en posición. Revisar gráfico semanal: ¿price >SMA30w? ¿RS positivo? ¿Volumen en avances?`
+    } else if (days < maxDays) {
+      color = C.red; label = `Día ${days} de ${maxDays} — Alta vigilancia`
+      if (pnlPct !== null && pnlPct > 0) rec = `${days} días con ganancia (${pnlPct.toFixed(1)}%). Evalúa asegurar parciales si el gráfico muestra debilidad.`
+      else rec = `${days} días sin ganancia significativa. Stage puede estar girando a 3. Revisar estructura antes de continuar.`
+    } else {
+      color = C.red; label = `Día ${days} — Revisión obligatoria`
+      rec = `Han pasado ${days} días (12 meses). Evaluar cierre o renovación de tesis con análisis fresco de Stage y RS.`
+    }
+    const pct = Math.max(0, Math.min(100, ((maxDays - days) / maxDays) * 100))
+    return (
+      <div style={{ marginTop:8, background:C.bg, borderRadius:8, padding:'8px 10px', borderLeft:`3px solid ${color}` }}>
+        <div style={{ display:'flex', justifyContent:'space-between', marginBottom:5 }}>
+          <span style={{ fontSize:10, color, fontWeight:700 }}>{label}</span>
+          <span style={{ fontSize:10, color:C.muted }}>Vigencia posición</span>
+        </div>
+        <div style={{ height:4, background:C.border, borderRadius:2, marginBottom:6, overflow:'hidden' }}>
+          <div style={{ width:`${pct}%`, height:'100%', background:color, borderRadius:2 }}/>
+        </div>
+        <div style={{ fontSize:11, color:C.text, lineHeight:1.6 }}>{rec}</div>
+      </div>
+    )
+  } catch { return null }
+}
+
+function exportPositionCSV(trades) {
+  const M = '#a78bfa'
+  const headers = ['Fecha entrada','Fecha cierre','Ticker','Empresa','Score','Decisión',
+    'Entrada app','Stop app','Target app',
+    'Entrada real','Stop real','Target real','N° acciones','Precio cierre',
+    'P&L %','P&L USD','Estado','Catalizador','Invalidación','Notas']
+  const rows = trades.map(t => {
+    const entryRef = t.entry_price ? parseFloat(t.entry_price) : null
+    const exitRef  = t.exit_price  ? parseFloat(t.exit_price)  : null
+    const sharesN  = t.shares      ? parseFloat(t.shares)      : null
+    const pnlPct   = entryRef && exitRef ? (((exitRef - entryRef) / entryRef) * 100).toFixed(2) : ''
+    const pnlUsd   = entryRef && exitRef && sharesN ? ((exitRef - entryRef) * sharesN).toFixed(2) : ''
+    const STATUS_L = { planning:'Planificando', open:'Activo', closed:'Cerrado' }
+    const DEC_L    = { OPERAR_CONVICCION:'CONVICCIÓN', OPERAR_CAUTELA:'CAUTELA', NO_OPERAR:'NO OPERAR' }
+    return [t.entry_date||t.created_at?.slice(0,10)||'', t.exit_date||'',
+      t.ticker, t.company_name||'', t.score_total||'', DEC_L[t.decision]||t.decision||'',
+      t.entry_price||'', t.stop_loss||'', t.target1||'',
+      t.entry_price||'', t.stop_loss||'', t.target1||'', t.shares||'', t.exit_price||'',
+      pnlPct, pnlUsd, STATUS_L[t.status]||t.status, t.catalyst||'', t.invalidation||'', t.notes||'']
+  })
+  const csv = [headers,...rows].map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n')
+  const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'})
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a'); a.href=url; a.download=`journal-position-${new Date().toISOString().slice(0,10)}.csv`
+  a.click(); URL.revokeObjectURL(url)
+}
+
+function PositionJournal({ session }) {
+  const [trades,        setTrades]        = useState([])
+  const [filter,        setFilter]        = useState('all')
+  const [searchTicker,  setSearchTicker]  = useState('')
+  const [selected,      setSelected]      = useState(null)
+  const [form,          setForm]          = useState(null)
+  const [confirmDelete, setConfirmDelete] = useState(null)
+  const [saving,        setSaving]        = useState(false)
+
+  const reload = () => {
     if (!session) return
     supabase.from('position_trades')
       .select('*')
       .eq('user_id', session.user.id)
       .order('created_at', { ascending: false })
       .then(({ data }) => setTrades(data || []))
-  }, [session, saving])
-
-  const filtered = filter === 'all' ? trades : trades.filter(t => t.status === filter)
-
-  const openModal = (trade) => {
-    setSelected(trade)
-    setForm({ ...trade })
   }
 
+  useEffect(() => { reload() }, [session])
+
+  let filtered = filter === 'all' ? trades : trades.filter(t => t.status === filter)
+  if (searchTicker.trim()) filtered = filtered.filter(t => t.ticker?.includes(searchTicker.trim().toUpperCase()))
+
+  // Stats
+  const total     = trades.length
+  const planning  = trades.filter(t => t.status === 'planning').length
+  const open      = trades.filter(t => t.status === 'open').length
+  const closed    = trades.filter(t => t.status === 'closed')
+  const closedWithPnl = closed.filter(t => t.exit_price && t.entry_price)
+  const wins      = closedWithPnl.filter(t => parseFloat(t.exit_price) > parseFloat(t.entry_price)).length
+  const winRate   = closedWithPnl.length > 0 ? Math.round(wins / closedWithPnl.length * 100) : null
+
+  const openModal = (trade) => { setSelected(trade); setForm({ ...trade }) }
   const closeModal = () => { setSelected(null); setForm(null) }
 
   const handleUpdate = async () => {
     if (!form) return
     setSaving(true)
+    // auto-asignar entry_date si pasa a open y no tiene fecha
+    const entry_date = form.entry_date || (form.status === 'open' && !selected.entry_date
+      ? new Date().toISOString().slice(0,10) : selected.entry_date || null)
+    // auto-asignar exit_date si pasa a closed
+    const exit_date = form.exit_date || (form.status === 'closed' && !selected.exit_date
+      ? new Date().toISOString().slice(0,10) : form.status !== 'closed' ? null : (form.exit_date || null))
     const { error } = await supabase.from('position_trades')
       .update({
         status:       form.status,
@@ -175,13 +264,14 @@ function PositionJournal({ session }) {
         target1:      form.target1      || null,
         shares:       form.shares       || null,
         exit_price:   form.exit_price   || null,
-        exit_date:    form.exit_date    || null,
+        exit_date,
+        entry_date,
         notes:        form.notes        || null,
         catalyst:     form.catalyst     || null,
         invalidation: form.invalidation || null,
       })
       .eq('id', form.id)
-    if (!error) closeModal()
+    if (!error) { closeModal(); reload() }
     setSaving(false)
   }
 
@@ -193,115 +283,150 @@ function PositionJournal({ session }) {
   }
 
   const DECISION_SHORT = { OPERAR_CONVICCION:'CONVICCIÓN', OPERAR_CAUTELA:'CAUTELA', NO_OPERAR:'NO OPERAR' }
+  const M = '#a78bfa'  // color violeta Position
 
   return (
     <div style={{ maxWidth:960, margin:'0 auto', padding:'0 20px' }}>
-      {/* Filtros */}
-      <div style={{ display:'flex', gap:8, marginBottom:18, flexWrap:'wrap' }}>
-        {[['all','Todos'],['planning','Planificando'],['open','Activos'],['closed','Cerrados']].map(([v,l]) => (
+
+      {/* Header */}
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:18, flexWrap:'wrap', gap:10 }}>
+        <div>
+          <h2 style={{ fontSize:18, fontWeight:700, color:C.text, margin:0, marginBottom:3 }}>Position Journal</h2>
+          <div style={{ fontSize:11, color:C.muted }}>Sincronizado en la nube · accede desde cualquier dispositivo</div>
+        </div>
+        <button onClick={() => exportPositionCSV(trades)}
+          style={{ background:M, border:'none', borderRadius:8, color:'#000',
+            fontWeight:700, padding:'9px 16px', cursor:'pointer', fontSize:12 }}>
+          Exportar Excel / Sheets
+        </button>
+      </div>
+
+      {/* Stats */}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10, marginBottom:18 }}>
+        {[
+          ['TOTAL OPS.', total, C.text],
+          ['PLANIF. + ACTIVAS', planning + open, C.accent],
+          ['CERRADAS', closed.length, C.muted],
+          ['WIN RATE', winRate != null ? `${winRate}%` : '—', winRate != null ? (winRate >= 50 ? C.green : C.red) : C.muted],
+        ].map(([label, val, color]) => (
+          <div key={label} style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10,
+            padding:'14px', textAlign:'center' }}>
+            <div style={{ fontSize:9, color:C.muted, letterSpacing:'0.08em', textTransform:'uppercase', marginBottom:6 }}>{label}</div>
+            <div style={{ fontSize:22, fontWeight:700, fontFamily:'monospace', color }}>{val}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Filtros + búsqueda */}
+      <div style={{ display:'flex', gap:8, marginBottom:18, flexWrap:'wrap', alignItems:'center' }}>
+        {[['all','Todas'],['planning','Planificando'],['open','Activas'],['closed','Cerradas']].map(([v,l]) => (
           <button key={v} onClick={() => setFilter(v)}
-            style={{ background: filter===v ? C.accent+'22' : 'none',
-              border:`1px solid ${filter===v ? C.accent : C.border}`,
-              borderRadius:7, color: filter===v ? C.accent : C.muted,
+            style={{ background: filter===v ? M+'22' : 'none',
+              border:`1px solid ${filter===v ? M : C.border}`,
+              borderRadius:7, color: filter===v ? M : C.muted,
               padding:'5px 14px', cursor:'pointer', fontSize:11, fontWeight:600 }}>
             {l}
           </button>
         ))}
-        <span style={{ marginLeft:'auto', fontSize:11, color:C.muted, alignSelf:'center' }}>
-          {filtered.length} operaciones
-        </span>
+        <div style={{ marginLeft:'auto', position:'relative' }}>
+          <input value={searchTicker} onChange={e => setSearchTicker(e.target.value)}
+            placeholder="Buscar ticker…"
+            style={{ background:C.bg, border:`1px solid ${searchTicker ? M : C.border}`,
+              borderRadius:7, padding:'5px 28px 5px 10px', color:C.text, fontSize:11,
+              outline:'none', width:130 }} />
+          {searchTicker && (
+            <span onClick={() => setSearchTicker('')}
+              style={{ position:'absolute', right:8, top:'50%', transform:'translateY(-50%)',
+                color:C.muted, cursor:'pointer', fontSize:13 }}>×</span>
+          )}
+        </div>
+        <span style={{ fontSize:11, color:C.muted }}>{filtered.length} ops.</span>
       </div>
 
       {filtered.length === 0 ? (
         <div style={{ textAlign:'center', padding:'60px', color:C.muted, fontSize:13 }}>
-          No hay operaciones de position trading registradas.
+          {searchTicker || filter !== 'all' ? 'Sin resultados para este filtro' : 'No hay operaciones de position trading registradas.'}
         </div>
       ) : (
         <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
           {filtered.map(t => {
-            const pnl = t.exit_price && t.entry_price && t.shares
-              ? ((parseFloat(t.exit_price) - parseFloat(t.entry_price)) * parseFloat(t.shares)).toFixed(2)
-              : null
-            const pnlPct = t.exit_price && t.entry_price
-              ? (((parseFloat(t.exit_price) - parseFloat(t.entry_price)) / parseFloat(t.entry_price)) * 100).toFixed(2)
-              : null
-            const rrReal = t.entry_price && t.stop_loss && t.target1
-              ? Math.abs((parseFloat(t.target1) - parseFloat(t.entry_price)) / (parseFloat(t.entry_price) - parseFloat(t.stop_loss))).toFixed(1)
-              : null
-            const slPct = t.entry_price && t.stop_loss
-              ? (((parseFloat(t.stop_loss) - parseFloat(t.entry_price)) / parseFloat(t.entry_price)) * 100).toFixed(1)
-              : null
-            const tpPct = t.entry_price && t.target1
-              ? (((parseFloat(t.target1) - parseFloat(t.entry_price)) / parseFloat(t.entry_price)) * 100).toFixed(1)
-              : null
+            const ep  = t.entry_price ? parseFloat(t.entry_price) : null
+            const sl  = t.stop_loss   ? parseFloat(t.stop_loss)   : null
+            const tp  = t.target1     ? parseFloat(t.target1)     : null
+            const xp  = t.exit_price  ? parseFloat(t.exit_price)  : null
+            const sh  = t.shares      ? parseFloat(t.shares)      : null
+            const pnlPct = ep && xp ? (((xp - ep) / ep) * 100) : null
+            const pnlUsd = ep && xp && sh ? ((xp - ep) * sh) : null
+            const rrReal = ep && sl && tp ? Math.abs((tp - ep) / (ep - sl)) : null
+            const slPct  = ep && sl ? (((sl - ep) / ep) * 100) : null
+            const tpPct  = ep && tp ? (((tp - ep) / ep) * 100) : null
+            const pnlColor = pnlPct != null ? (pnlPct >= 0 ? C.green : C.red) : C.muted
             const statusColor = STATUS_COLORS[t.status] || C.muted
+            const dateLabel = t.entry_date || t.created_at?.slice(0,10)
             return (
               <div key={t.id}
-                style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:12,
-                  padding:'14px 16px', cursor:'pointer', transition:'border-color 0.15s' }}
-                onMouseEnter={e => e.currentTarget.style.borderColor = '#2a4060'}
-                onMouseLeave={e => e.currentTarget.style.borderColor = C.border}
+                style={{ background:C.card, borderLeft:`3px solid ${statusColor}`,
+                  border:`1px solid ${C.border}`, borderLeft:`3px solid ${statusColor}`,
+                  borderRadius:10, padding:'14px 16px', cursor:'pointer', transition:'background 0.15s' }}
+                onMouseEnter={e => e.currentTarget.style.background = '#131e30'}
+                onMouseLeave={e => e.currentTarget.style.background = C.card}
                 onClick={() => openModal(t)}>
+
                 {/* Header row */}
-                <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8, flexWrap:'wrap' }}>
-                  <span style={{ fontSize:16, fontWeight:800, color:C.text, fontFamily:'monospace' }}>{t.ticker}</span>
+                <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6, flexWrap:'wrap' }}>
+                  <span style={{ fontSize:17, fontWeight:800, color:C.text, fontFamily:'monospace' }}>{t.ticker}</span>
                   <span style={{ fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:99,
-                    color:DECISION_COLOR[t.decision], background:DECISION_COLOR[t.decision]+'18',
-                    border:`1px solid ${DECISION_COLOR[t.decision]}33` }}>
-                    {DECISION_SHORT[t.decision] || t.decision || '—'}
+                    color:DECISION_COLOR[t.decision]||M, background:(DECISION_COLOR[t.decision]||M)+'18',
+                    border:`1px solid ${(DECISION_COLOR[t.decision]||M)}33` }}>
+                    {DECISION_SHORT[t.decision] || '—'}
                   </span>
                   <span style={{ fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:99,
                     color:statusColor, background:statusColor+'18', border:`1px solid ${statusColor}33` }}>
                     {STATUS_LABELS[t.status] || t.status}
                   </span>
-                  {t.created_at && (
-                    <span style={{ fontSize:10, color:C.muted }}>{t.created_at?.slice(0,10)}</span>
+                  {dateLabel && <span style={{ fontSize:10, color:C.muted }}>{dateLabel}</span>}
+                  {/* P&L prominente */}
+                  {pnlPct != null && (
+                    <span style={{ marginLeft:'auto', fontSize:14, fontWeight:700, fontFamily:'monospace', color:pnlColor }}>
+                      {pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%
+                    </span>
                   )}
-                  <span style={{ marginLeft:'auto', fontSize:10, fontWeight:700,
-                    color: t.score_total >= 32 ? C.green : t.score_total >= 22 ? C.amber : C.red }}>
-                    Score {t.score_total ?? '—'}/{MAX_SCORE}
-                  </span>
-                  <div onClick={e => { e.stopPropagation(); setConfirmDelete(t.id) }}
-                    style={{ color:C.red, opacity:0.5, cursor:'pointer', fontSize:16, padding:'0 4px', marginLeft:4 }}>×</div>
+                  {pnlUsd != null && (
+                    <span style={{ fontSize:12, fontWeight:700, fontFamily:'monospace', color:pnlColor }}>
+                      ({pnlUsd >= 0 ? '+' : ''}${Math.abs(pnlUsd).toFixed(2)})
+                    </span>
+                  )}
+                  <button onClick={e => { e.stopPropagation(); openModal(t) }}
+                    style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:6,
+                      color:C.muted, padding:'3px 10px', cursor:'pointer', fontSize:10, marginLeft: pnlPct == null ? 'auto' : 0 }}>
+                    Editar
+                  </button>
+                  <div onClick={e => { e.stopPropagation(); setConfirmDelete(t) }}
+                    style={{ color:C.red, opacity:0.5, cursor:'pointer', fontSize:16, padding:'0 2px' }}>×</div>
                 </div>
-                {t.company_name && (
-                  <div style={{ fontSize:11, color:C.muted, marginBottom:8 }}>{t.company_name}</div>
-                )}
-                {/* Datos de operación */}
-                <div style={{ display:'flex', flexWrap:'wrap', gap:'4px 16px', fontSize:11 }}>
-                  {t.entry_price && (
-                    <span style={{ color:C.muted }}>Entrada: <b style={{ color:C.text, fontFamily:'monospace' }}>${t.entry_price}</b></span>
-                  )}
-                  {t.shares && (
-                    <span style={{ color:C.muted }}>Acciones: <b style={{ color:C.text, fontFamily:'monospace' }}>{t.shares}</b></span>
-                  )}
-                  {t.stop_loss && (
-                    <span style={{ color:C.muted }}>Stop: <b style={{ color:C.red, fontFamily:'monospace' }}>${t.stop_loss}{slPct ? ` (${slPct}%)` : ''}</b></span>
-                  )}
-                  {t.target1 && (
-                    <span style={{ color:C.muted }}>Target: <b style={{ color:C.green, fontFamily:'monospace' }}>${t.target1}{tpPct ? ` (+${tpPct}%)` : ''}</b></span>
-                  )}
-                  {rrReal && (
-                    <span style={{ color:C.muted }}>R/R: <b style={{ color: parseFloat(rrReal) >= 2 ? C.green : C.amber, fontFamily:'monospace' }}>{rrReal}x</b></span>
-                  )}
-                  {t.exit_price && (
-                    <span style={{ color:C.muted }}>Cierre: <b style={{ color:C.accent, fontFamily:'monospace' }}>${t.exit_price}</b></span>
-                  )}
-                  {pnl != null && (
-                    <span style={{ color:C.muted }}>P&L: <b style={{ color: parseFloat(pnl) >= 0 ? C.green : C.red, fontFamily:'monospace' }}>
-                      {parseFloat(pnl) >= 0 ? '+' : ''}${pnl} ({parseFloat(pnl) >= 0 ? '+' : ''}{pnlPct}%)
-                    </b></span>
-                  )}
+
+                {t.company_name && <div style={{ fontSize:11, color:C.muted, marginBottom:6 }}>{t.company_name}</div>}
+
+                {/* Datos inline */}
+                <div style={{ display:'flex', flexWrap:'wrap', gap:'3px 14px', fontSize:11, marginBottom:4 }}>
+                  {ep && <span style={{ color:C.muted }}>Entrada: <b style={{ color:C.text, fontFamily:'monospace' }}>${ep.toFixed(2)}</b></span>}
+                  {sh && <span style={{ color:C.muted }}>Acciones: <b style={{ color:C.text, fontFamily:'monospace' }}>{sh}</b></span>}
+                  {sl && <span style={{ color:C.muted }}>Stop: <b style={{ color:C.red, fontFamily:'monospace' }}>${sl.toFixed(2)}{slPct != null ? ` (${slPct.toFixed(1)}%)` : ''}</b></span>}
+                  {tp && <span style={{ color:C.muted }}>Target: <b style={{ color:C.green, fontFamily:'monospace' }}>${tp.toFixed(2)}{tpPct != null ? ` (+${tpPct.toFixed(1)}%)` : ''}</b></span>}
+                  {rrReal != null && <span style={{ color:C.muted }}>R/R: <b style={{ color: rrReal >= 2 ? C.green : C.amber, fontFamily:'monospace' }}>{rrReal.toFixed(1)}x</b></span>}
+                  {xp && <span style={{ color:C.muted }}>Cierre: <b style={{ color:C.accent, fontFamily:'monospace' }}>${xp.toFixed(2)}</b></span>}
+                  <span style={{ color:C.muted }}>Score: <b style={{ color: (t.score_total||0) >= 32 ? C.green : (t.score_total||0) >= 22 ? C.amber : C.red, fontFamily:'monospace' }}>{t.score_total ?? '—'}/{MAX_SCORE}</b></span>
                 </div>
+
                 {t.notes && (
-                  <div style={{ marginTop:7, fontSize:11, color:C.muted, fontStyle:'italic',
-                    borderTop:`1px solid ${C.border}`, paddingTop:6 }}>
+                  <div style={{ fontSize:11, color:C.muted, fontStyle:'italic',
+                    borderTop:`1px solid ${C.border}`, paddingTop:6, marginTop:6 }}>
                     {t.notes}
                   </div>
                 )}
-                <div style={{ marginTop:8, textAlign:'right' }}>
-                  <span style={{ fontSize:10, color:C.accent, fontWeight:600 }}>Editar →</span>
-                </div>
+
+                {/* Barra de vigencia — solo para posiciones activas */}
+                <PositionSetupBar trade={t} />
               </div>
             )
           })}
@@ -311,19 +436,23 @@ function PositionJournal({ session }) {
       {/* Confirm delete */}
       {confirmDelete && (
         <div onClick={() => setConfirmDelete(null)}
-          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.7)', zIndex:3000,
-            display:'flex', alignItems:'center', justifyContent:'center' }}>
+          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', zIndex:3000,
+            display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
           <div onClick={e => e.stopPropagation()}
-            style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:12,
-              padding:'24px', textAlign:'center', maxWidth:320 }}>
-            <div style={{ fontSize:14, color:C.text, marginBottom:16 }}>¿Eliminar esta operación?</div>
-            <div style={{ display:'flex', gap:10, justifyContent:'center' }}>
+            style={{ background:C.card, border:`1px solid ${C.red}44`, borderRadius:14,
+              padding:28, width:'100%', maxWidth:360, textAlign:'center' }}>
+            <div style={{ fontSize:28, marginBottom:12 }}>⚠️</div>
+            <div style={{ fontSize:16, fontWeight:700, color:C.text, marginBottom:8 }}>¿Eliminar operación?</div>
+            <div style={{ fontSize:13, color:C.muted, marginBottom:24 }}>
+              Se eliminará el registro de <span style={{ color:C.text, fontWeight:700 }}>{confirmDelete.ticker}</span> del journal. Esta acción no se puede deshacer.
+            </div>
+            <div style={{ display:'flex', gap:10 }}>
               <button onClick={() => setConfirmDelete(null)}
-                style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:7,
-                  color:C.muted, padding:'8px 18px', cursor:'pointer', fontSize:12 }}>Cancelar</button>
-              <button onClick={() => handleDelete(confirmDelete)}
-                style={{ background:C.red, border:'none', borderRadius:7,
-                  color:'#fff', padding:'8px 18px', cursor:'pointer', fontSize:12, fontWeight:700 }}>Eliminar</button>
+                style={{ flex:1, background:'none', border:`1px solid ${C.border}`, borderRadius:8,
+                  color:C.muted, padding:'10px', cursor:'pointer', fontSize:13 }}>Cancelar</button>
+              <button onClick={() => handleDelete(confirmDelete.id)}
+                style={{ flex:1, background:C.red, border:'none', borderRadius:8,
+                  color:'#fff', fontWeight:700, padding:'10px', cursor:'pointer', fontSize:13 }}>Eliminar</button>
             </div>
           </div>
         </div>
@@ -443,6 +572,37 @@ function PositionJournal({ session }) {
                       padding:'8px 10px', color:C.text, fontSize:12, outline:'none', boxSizing:'border-box' }} />
                 </div>
               )}
+
+              {/* P&L en tiempo real */}
+              {(() => {
+                const ep = form.entry_price ? parseFloat(form.entry_price) : null
+                const xp = form.exit_price  ? parseFloat(form.exit_price)  : null
+                const sh = form.shares      ? parseFloat(form.shares)      : null
+                if (!ep || !xp) return null
+                const pct = ((xp - ep) / ep) * 100
+                const usd = sh ? (xp - ep) * sh : null
+                const col = pct >= 0 ? C.green : C.red
+                return (
+                  <div style={{ marginTop:10, display:'grid', gridTemplateColumns: usd != null ? '1fr 1fr' : '1fr', gap:8 }}>
+                    <div style={{ background: col+'11', border:`1px solid ${col}33`, borderRadius:8,
+                      padding:'10px', textAlign:'center' }}>
+                      <div style={{ fontSize:9, color:C.muted, marginBottom:3, textTransform:'uppercase' }}>P&L %</div>
+                      <div style={{ fontSize:18, fontWeight:700, fontFamily:'monospace', color:col }}>
+                        {pct >= 0 ? '+' : ''}{pct.toFixed(2)}%
+                      </div>
+                    </div>
+                    {usd != null && (
+                      <div style={{ background: col+'11', border:`1px solid ${col}33`, borderRadius:8,
+                        padding:'10px', textAlign:'center' }}>
+                        <div style={{ fontSize:9, color:C.muted, marginBottom:3, textTransform:'uppercase' }}>P&L USD</div>
+                        <div style={{ fontSize:18, fontWeight:700, fontFamily:'monospace', color:col }}>
+                          {usd >= 0 ? '+' : ''}${Math.abs(usd).toFixed(2)}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
             </div>
 
             {/* Notas */}
@@ -2343,11 +2503,20 @@ function SectorRotation() {
 
 // ── Position Module (contenedor principal) ──────────────────────────────────
 export default function PositionModule({ session, onBack, swingExposedTickers = [] }) {
-  const [tab,        setTab]        = useState('dashboard')
-  const [viewMode,   setViewMode]   = useState('cards')   // 'cards' | 'table'
-  const [search,     setSearch]     = useState('')
-  const [tableModal, setTableModal] = useState(null)
+  const [tab,          setTab]          = useState('dashboard')
+  const [viewMode,     setViewMode]     = useState('cards')   // 'cards' | 'table'
+  const [search,       setSearch]       = useState('')
+  const [tableModal,   setTableModal]   = useState(null)
   const [refreshingTickers, setRefreshingTickers] = useState({})
+  const [journalCount, setJournalCount] = useState(0)
+
+  useEffect(() => {
+    if (!session) return
+    supabase.from('position_trades')
+      .select('id', { count:'exact', head:true })
+      .eq('user_id', session.user.id)
+      .then(({ count }) => setJournalCount(count || 0))
+  }, [session])
 
   // ── Selección y cola de actualización ────────────────────────────────────
   const [selected,     setSelected]     = useState(new Set())  // tickers seleccionados
@@ -2572,7 +2741,7 @@ export default function PositionModule({ session, onBack, swingExposedTickers = 
     ['watchlist', `Watchlist · ${wl.length}`],
     ['mercado',   'Mercado'],
     ['screener',  'Screener'],
-    ['journal',   'Journal'],
+    ['journal',   journalCount > 0 ? `Journal · ${journalCount}` : 'Journal'],
   ]
 
   return (
