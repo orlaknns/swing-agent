@@ -595,12 +595,6 @@ export default function App() {
 
   const pollBatchStatus = (jobId, tickersList) => {
     stopBatchPoll()
-    // marcar todos los tickers del batch como "refreshing"
-    setRefreshingTickers(prev => {
-      const n = { ...prev }
-      tickersList.forEach(t => { n[t] = true })
-      return n
-    })
     const seenTickers = new Set()
     batchPollRef.current = setInterval(async () => {
       try {
@@ -609,12 +603,13 @@ export default function App() {
         const job = await res.json()
         setQueueDone(job.done)
         setQueue(tickersList.slice(job.done))
-        // guardar y quitar spinner de tickers ya completados
+        // spinner solo en el ticker que se está procesando ahora
+        setRefreshingTickers(job.current_ticker ? { [job.current_ticker]: true } : {})
+        // guardar resultados nuevos (parciales o finales)
         Object.entries(job.results || {}).forEach(([ticker, data]) => {
           if (seenTickers.has(ticker)) return
           seenTickers.add(ticker)
           if (!data.error) cacheAnalysis(ticker, data)
-          setRefreshingTickers(prev => { const n = {...prev}; delete n[ticker]; return n })
         })
         if (job.status === 'done') {
           stopBatchPoll()

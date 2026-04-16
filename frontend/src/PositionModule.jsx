@@ -2573,11 +2573,6 @@ export default function PositionModule({ session, onBack, swingExposedTickers = 
 
   const pollBatchStatus = (jobId, tickersList) => {
     stopBatchPoll()
-    setRefreshingTickers(prev => {
-      const n = { ...prev }
-      tickersList.forEach(t => { n[t] = true })
-      return n
-    })
     const seenTickers = new Set()
     batchPollRef.current = setInterval(async () => {
       try {
@@ -2586,11 +2581,11 @@ export default function PositionModule({ session, onBack, swingExposedTickers = 
         const job = await res.json()
         setQueueDone(job.done)
         setQueue(tickersList.slice(job.done))
+        setRefreshingTickers(job.current_ticker ? { [job.current_ticker]: true } : {})
         Object.entries(job.results || {}).forEach(([ticker, data]) => {
           if (seenTickers.has(ticker)) return
           seenTickers.add(ticker)
           if (!data.error) cacheAnalysis(ticker, data)
-          setRefreshingTickers(prev => { const n = {...prev}; delete n[ticker]; return n })
         })
         if (job.status === 'done') {
           stopBatchPoll()

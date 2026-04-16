@@ -917,6 +917,7 @@ async def _run_batch(job_id: str, tickers: list[str], module: str):
     for i, ticker in enumerate(tickers):
         if job.get("cancelled"):
             break
+        job["current_ticker"] = ticker
         try:
             data = await analyze_fn(ticker)
             job["results"][ticker] = data
@@ -925,6 +926,7 @@ async def _run_batch(job_id: str, tickers: list[str], module: str):
         job["done"] = i + 1
         if i < len(tickers) - 1:
             await asyncio.sleep(3)
+    job["current_ticker"] = None
     job["status"] = "done"
 
 @app.post("/batch-analyze")
@@ -937,6 +939,7 @@ async def batch_analyze(req: BatchRequest, background_tasks: BackgroundTasks):
         "total": len(req.tickers),
         "done": 0,
         "results": {},
+        "current_ticker": None,
         "cancelled": False,
         "started_at": _time.time(),
     }
@@ -949,11 +952,12 @@ async def batch_status(job_id: str):
     if not job:
         raise HTTPException(404, "Job not found")
     return {
-        "job_id":  job_id,
-        "status":  job["status"],
-        "total":   job["total"],
-        "done":    job["done"],
-        "results": job["results"] if job["status"] == "done" else {},
+        "job_id":         job_id,
+        "status":         job["status"],
+        "total":          job["total"],
+        "done":           job["done"],
+        "current_ticker": job.get("current_ticker"),
+        "results":        job["results"],
     }
 
 @app.post("/batch-cancel/{job_id}")
