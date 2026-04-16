@@ -583,39 +583,64 @@ export default function App() {
 
   const [refreshingTickers, setRefreshingTickers] = useState({})  // { AAPL: true }
   const [selected,          setSelected]          = useState(new Set())
-  const [queue,             setQueue]             = useState([])
+  const [queue,             setQueue]             = useState([])   // tickers pendientes (display)
   const [queueTotal,        setQueueTotal]        = useState(0)
   const [queueDone,         setQueueDone]         = useState(0)
-  const queueRef       = useRef([])
-  const queueCancelled = useRef(false)
+  const batchJobId   = useRef(null)
+  const batchPollRef = useRef(null)
 
-  const processNextSwing = async (tickers, idx) => {
-    if (queueCancelled.current || idx >= tickers.length) {
-      setQueue([]); queueRef.current = []; return
-    }
-    const ticker = tickers[idx]
-    setRefreshingTickers(prev => ({ ...prev, [ticker]: true }))
-    try {
-      const res = await fetch(`/api/analyze/${ticker}`)
-      if (res.ok) cacheAnalysis(ticker, await res.json())
-    } catch {}
-    setRefreshingTickers(prev => { const n = {...prev}; delete n[ticker]; return n })
-    setQueueDone(idx + 1)
-    setQueue(queueRef.current.slice(idx + 1))
-    setTimeout(() => processNextSwing(tickers, idx + 1), 3000)
+  const stopBatchPoll = () => {
+    if (batchPollRef.current) { clearInterval(batchPollRef.current); batchPollRef.current = null }
   }
 
-  const runQueueSwing = (tickers) => {
-    queueCancelled.current = false
-    queueRef.current = [...tickers]
+  const pollBatchStatus = (jobId, total) => {
+    stopBatchPoll()
+    batchPollRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/batch-status/${jobId}`)
+        if (!res.ok) return
+        const job = await res.json()
+        setQueueDone(job.done)
+        setQueue(Array(Math.max(0, total - job.done)).fill('…'))
+        if (job.status === 'done') {
+          stopBatchPoll()
+          setQueue([])
+          batchJobId.current = null
+          // Guardar todos los resultados en caché
+          Object.entries(job.results).forEach(([ticker, data]) => {
+            if (!data.error) cacheAnalysis(ticker, data)
+          })
+        }
+      } catch {}
+    }, 4000)
+  }
+
+  const runQueueSwing = async (tickers) => {
+    if (!tickers.length) return
     setQueue([...tickers])
     setQueueTotal(tickers.length)
     setQueueDone(0)
-    processNextSwing(tickers, 0)
+    try {
+      const res = await fetch('/api/batch-analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tickers, module: 'swing' }),
+      })
+      if (!res.ok) return
+      const { job_id } = await res.json()
+      batchJobId.current = job_id
+      pollBatchStatus(job_id, tickers.length)
+    } catch {
+      setQueue([])
+    }
   }
 
-  const cancelQueueSwing = () => {
-    queueCancelled.current = true
+  const cancelQueueSwing = async () => {
+    if (batchJobId.current) {
+      await fetch(`/api/batch-cancel/${batchJobId.current}`, { method: 'POST' }).catch(() => {})
+      batchJobId.current = null
+    }
+    stopBatchPoll()
     setQueue([])
     setRefreshingTickers({})
   }

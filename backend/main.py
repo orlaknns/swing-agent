@@ -900,6 +900,70 @@ def health():
     return {"status": "ok"}
 
 
+# ── Batch analyze — corre en el servidor, el frontend solo hace polling ───────
+
+_batch_jobs: dict = {}   # job_id → { status, total, done, results, error }
+
+from fastapi import BackgroundTasks
+from pydantic import BaseModel
+
+class BatchRequest(BaseModel):
+    tickers: list[str]
+    module: str = "swing"   # "swing" | "position"
+
+async def _run_batch(job_id: str, tickers: list[str], module: str):
+    job = _batch_jobs[job_id]
+    analyze_fn = _analyze_inner if module == "swing" else _analyze_position_inner
+    for i, ticker in enumerate(tickers):
+        if job.get("cancelled"):
+            break
+        try:
+            data = await analyze_fn(ticker)
+            job["results"][ticker] = data
+        except Exception as e:
+            job["results"][ticker] = {"error": str(e)}
+        job["done"] = i + 1
+        if i < len(tickers) - 1:
+            await asyncio.sleep(3)
+    job["status"] = "done"
+
+@app.post("/api/batch-analyze")
+async def batch_analyze(req: BatchRequest, background_tasks: BackgroundTasks):
+    import uuid, time as _time
+    job_id = str(uuid.uuid4())[:8]
+    _batch_jobs[job_id] = {
+        "status": "running",
+        "module": req.module,
+        "total": len(req.tickers),
+        "done": 0,
+        "results": {},
+        "cancelled": False,
+        "started_at": _time.time(),
+    }
+    background_tasks.add_task(_run_batch, job_id, req.tickers, req.module)
+    return {"job_id": job_id, "total": len(req.tickers)}
+
+@app.get("/api/batch-status/{job_id}")
+async def batch_status(job_id: str):
+    job = _batch_jobs.get(job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    return {
+        "job_id":  job_id,
+        "status":  job["status"],
+        "total":   job["total"],
+        "done":    job["done"],
+        "results": job["results"] if job["status"] == "done" else {},
+    }
+
+@app.post("/api/batch-cancel/{job_id}")
+async def batch_cancel(job_id: str):
+    job = _batch_jobs.get(job_id)
+    if job:
+        job["cancelled"] = True
+    return {"ok": True}
+
+
 # ── Position Trading ────────────────────────────────────────────────────────
 
 SECTOR_ETF_MAP = {

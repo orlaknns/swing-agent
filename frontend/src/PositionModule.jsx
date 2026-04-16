@@ -2549,13 +2549,13 @@ export default function PositionModule({ session, onBack, swingExposedTickers = 
       .then(({ count }) => setJournalCount(count || 0))
   }, [session])
 
-  // ── Selección y cola de actualización ────────────────────────────────────
-  const [selected,     setSelected]     = useState(new Set())  // tickers seleccionados
-  const [queue,        setQueue]        = useState([])         // cola pendiente
+  // ── Selección y cola de actualización (batch en servidor) ────────────────
+  const [selected,     setSelected]     = useState(new Set())
+  const [queue,        setQueue]        = useState([])
   const [queueTotal,   setQueueTotal]   = useState(0)
   const [queueDone,    setQueueDone]    = useState(0)
-  const queueRef       = useRef([])
-  const queueCancelled = useRef(false)
+  const batchJobId   = useRef(null)
+  const batchPollRef = useRef(null)
 
   const toggleSelect = (ticker) => setSelected(s => {
     const next = new Set(s)
@@ -2567,36 +2567,57 @@ export default function PositionModule({ session, onBack, swingExposedTickers = 
     return new Set(tickers)
   })
 
-  const runQueue = (tickers) => {
+  const stopBatchPoll = () => {
+    if (batchPollRef.current) { clearInterval(batchPollRef.current); batchPollRef.current = null }
+  }
+
+  const pollBatchStatus = (jobId, total) => {
+    stopBatchPoll()
+    batchPollRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/batch-status/${jobId}`)
+        if (!res.ok) return
+        const job = await res.json()
+        setQueueDone(job.done)
+        setQueue(Array(Math.max(0, total - job.done)).fill('…'))
+        if (job.status === 'done') {
+          stopBatchPoll()
+          setQueue([])
+          batchJobId.current = null
+          Object.entries(job.results).forEach(([ticker, data]) => {
+            if (!data.error) cacheAnalysis(ticker, data)
+          })
+        }
+      } catch {}
+    }, 4000)
+  }
+
+  const runQueue = async (tickers) => {
     if (!tickers.length) return
-    queueCancelled.current = false
-    queueRef.current = [...tickers]
     setQueue([...tickers])
     setQueueTotal(tickers.length)
     setQueueDone(0)
-    processNext(tickers, 0)
-  }
-
-  const processNext = async (tickers, idx) => {
-    if (queueCancelled.current || idx >= tickers.length) {
-      setQueue([])
-      queueRef.current = []
-      return
-    }
-    const ticker = tickers[idx]
-    setRefreshingTickers(prev => ({ ...prev, [ticker]: true }))
     try {
-      const res = await fetch(`/api/analyze-position/${ticker}`)
-      if (res.ok) cacheAnalysis(ticker, await res.json())
-    } catch {}
-    setRefreshingTickers(prev => { const n={...prev}; delete n[ticker]; return n })
-    setQueueDone(idx + 1)
-    setQueue(queueRef.current.slice(idx + 1))
-    setTimeout(() => processNext(tickers, idx + 1), 3000)
+      const res = await fetch('/api/batch-analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tickers, module: 'position' }),
+      })
+      if (!res.ok) return
+      const { job_id } = await res.json()
+      batchJobId.current = job_id
+      pollBatchStatus(job_id, tickers.length)
+    } catch {
+      setQueue([])
+    }
   }
 
-  const cancelQueue = () => {
-    queueCancelled.current = true
+  const cancelQueue = async () => {
+    if (batchJobId.current) {
+      await fetch(`/api/batch-cancel/${batchJobId.current}`, { method: 'POST' }).catch(() => {})
+      batchJobId.current = null
+    }
+    stopBatchPoll()
     setQueue([])
     setRefreshingTickers({})
   }
