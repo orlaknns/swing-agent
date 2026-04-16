@@ -2935,6 +2935,27 @@ export default function PositionModule({ session, onBack, swingExposedTickers = 
                 </button>
               </div>
             )}
+            {/* Indicador de tickers con caché viejo */}
+            {queue.length === 0 && (() => {
+              const stale = wl.filter(t => {
+                const s = posCache[t]?._savedAt
+                if (!s) return true
+                return (Date.now() - new Date(s)) > 24 * 60 * 60 * 1000
+              })
+              if (stale.length === 0) return null
+              return (
+                <div style={{ marginBottom:10, display:'flex', alignItems:'center', gap:8,
+                  padding:'7px 12px', background:'#ffb80008', border:'1px solid #ffb80033',
+                  borderRadius:8, fontSize:11 }}>
+                  <span style={{ color:C.amber }}>⚠ {stale.length} ticker{stale.length > 1 ? 's' : ''} con datos de más de 24h</span>
+                  <button onClick={() => runQueue(stale)}
+                    style={{ background:C.amber+'22', border:`1px solid ${C.amber}`, borderRadius:6,
+                      color:C.amber, fontWeight:700, padding:'3px 10px', cursor:'pointer', fontSize:10, marginLeft:'auto' }}>
+                    ↻ Actualizar {stale.length > 1 ? 'estos' : 'este'}
+                  </button>
+                </div>
+              )
+            })()}
 
             <div style={{ display:'flex', gap:7, marginBottom:14, flexWrap:'wrap' }}>
               <input value={search} onChange={e => setSearch(e.target.value.toUpperCase())}
