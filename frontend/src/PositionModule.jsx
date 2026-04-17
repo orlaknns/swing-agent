@@ -2602,8 +2602,8 @@ export default function PositionModule({ session, onBack, swingExposedTickers = 
       } catch {}
     }
 
-    const onFocus = () => doPoll()
-    const onVisible = () => { if (document.visibilityState === 'visible') doPoll() }
+    const onFocus = () => { if (batchJobId.current) doPoll() }
+    const onVisible = () => { if (document.visibilityState === 'visible' && batchJobId.current) doPoll() }
     window.addEventListener('focus', onFocus)
     document.addEventListener('visibilitychange', onVisible)
     batchPollRef.current = setInterval(doPoll, 4000)
