@@ -2556,6 +2556,7 @@ export default function PositionModule({ session, onBack, swingExposedTickers = 
   const [queueDone,    setQueueDone]    = useState(0)
   const batchJobId   = useRef(null)
   const batchPollRef = useRef(null)
+  const cacheTimer   = useRef(null)
 
   const toggleSelect = (ticker) => setSelected(s => {
     const next = new Set(s)
@@ -2711,9 +2712,15 @@ export default function PositionModule({ session, onBack, swingExposedTickers = 
       const nextHist = { ...posHistoryRef.current, [ticker]: updated }
       posHistoryRef.current = nextHist
       setPosHistory(nextHist)
-      if (dbLoaded.current) upsertAll(null, next, nextHist)
+      if (dbLoaded.current) {
+        if (cacheTimer.current) clearTimeout(cacheTimer.current)
+        cacheTimer.current = setTimeout(() => upsertAll(null, posCacheRef.current, posHistoryRef.current), 2000)
+      }
     } else {
-      if (dbLoaded.current) upsertAll(null, next)
+      if (dbLoaded.current) {
+        if (cacheTimer.current) clearTimeout(cacheTimer.current)
+        cacheTimer.current = setTimeout(() => upsertAll(null, posCacheRef.current), 2000)
+      }
     }
   }
 

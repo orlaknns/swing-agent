@@ -393,6 +393,7 @@ export default function App() {
   const [viewModeMonitor,   setViewModeMonitor]   = useState('cards')  // 'cards' | 'table'
   const [tableModal,     setTableModal]     = useState(null)       // ticker string | null
   const saveTimer    = useRef(null)
+  const cacheTimer   = useRef(null)
   const dbLoaded     = useRef(false)  // true después de la primera carga desde Supabase
   const listsReady   = useRef(false)  // true después de que el primer useEffect de listas se ejecuta tras la carga
 
@@ -568,16 +569,19 @@ export default function App() {
     if (!wl.includes(ticker)) setWatchlist(p => [ticker, ...(p||[])])
   }
 
-  // Cache analysis data from StockCard — persiste en Supabase
+  // Cache analysis data from StockCard — persiste en Supabase con debounce
   const cacheAnalysis = (ticker, data) => {
     const entry = { ...data, _savedAt: new Date().toISOString() }
     const next = { ...analysisCacheRef.current, [ticker]: entry }
     analysisCacheRef.current = next
     setAnalysisCache(next)
     if (dbLoaded.current) {
-      upsertAll(null, null, next).then(({ error }) => {
-        if (error) console.error('[cacheAnalysis] upsert ERROR:', error)
-      })
+      if (cacheTimer.current) clearTimeout(cacheTimer.current)
+      cacheTimer.current = setTimeout(() => {
+        upsertAll(null, null, analysisCacheRef.current).then(({ error }) => {
+          if (error) console.error('[cacheAnalysis] upsert ERROR:', error)
+        })
+      }, 2000)
     }
   }
 
