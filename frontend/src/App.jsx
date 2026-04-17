@@ -625,15 +625,15 @@ export default function App() {
       } catch {}
     }
 
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') {
-        console.log('[visibilitychange] volvió al tab, forzando poll. jobId:', jobId)
-        doPoll()
-      }
-    }
+    const onFocus = () => { console.log('[window focus] volvió, forzando poll. jobId:', jobId); doPoll() }
+    const onVisible = () => { if (document.visibilityState === 'visible') { console.log('[visibilitychange] volvió al tab, forzando poll'); doPoll() } }
+    window.addEventListener('focus', onFocus)
     document.addEventListener('visibilitychange', onVisible)
     batchPollRef.current = setInterval(doPoll, 4000)
-    batchPollRef._removeListener = () => document.removeEventListener('visibilitychange', onVisible)
+    batchPollRef._removeListener = () => {
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
   }
 
   const runQueueSwing = async (tickers) => {

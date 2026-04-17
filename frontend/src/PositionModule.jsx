@@ -2602,10 +2602,15 @@ export default function PositionModule({ session, onBack, swingExposedTickers = 
       } catch {}
     }
 
+    const onFocus = () => doPoll()
     const onVisible = () => { if (document.visibilityState === 'visible') doPoll() }
+    window.addEventListener('focus', onFocus)
     document.addEventListener('visibilitychange', onVisible)
     batchPollRef.current = setInterval(doPoll, 4000)
-    batchPollRef._removeListener = () => document.removeEventListener('visibilitychange', onVisible)
+    batchPollRef._removeListener = () => {
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
   }
 
   const runQueue = async (tickers) => {
