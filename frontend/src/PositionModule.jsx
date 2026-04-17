@@ -2581,7 +2581,8 @@ export default function PositionModule({ session, onBack, swingExposedTickers = 
         const job = await res.json()
         setQueueDone(job.done)
         setQueue(tickersList.slice(job.done))
-        setRefreshingTickers(job.current_ticker ? { [job.current_ticker]: true } : {})
+        const currentTicker = job.status !== 'done' ? tickersList[job.done] : null
+        setRefreshingTickers(currentTicker ? { [currentTicker]: true } : {})
         Object.entries(job.results || {}).forEach(([ticker, data]) => {
           if (seenTickers.has(ticker)) return
           seenTickers.add(ticker)

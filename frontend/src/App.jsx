@@ -603,8 +603,9 @@ export default function App() {
         const job = await res.json()
         setQueueDone(job.done)
         setQueue(tickersList.slice(job.done))
-        // spinner solo en el ticker que se está procesando ahora
-        setRefreshingTickers(job.current_ticker ? { [job.current_ticker]: true } : {})
+        // spinner en el ticker que se está procesando: posición job.done en la lista
+        const currentTicker = job.status !== 'done' ? tickersList[job.done] : null
+        setRefreshingTickers(currentTicker ? { [currentTicker]: true } : {})
         // guardar resultados nuevos (parciales o finales)
         Object.entries(job.results || {}).forEach(([ticker, data]) => {
           if (seenTickers.has(ticker)) return
