@@ -2577,7 +2577,6 @@ export default function PositionModule({ session, onBack, swingExposedTickers = 
 
   const pollBatchStatus = (jobId, tickersList) => {
     stopBatchPoll()
-    const seenTickers = new Set()
 
     const doPoll = async () => {
       try {
@@ -2592,8 +2591,6 @@ export default function PositionModule({ session, onBack, swingExposedTickers = 
         const currentTicker = job.status !== 'done' ? tickersList[job.done] : null
         setRefreshingTickers(currentTicker ? { [currentTicker]: true } : {})
         Object.entries(job.results || {}).forEach(([ticker, data]) => {
-          if (seenTickers.has(ticker)) return
-          seenTickers.add(ticker)
           if (!data.error) cacheAnalysis(ticker, data)
         })
         if (job.status === 'done') {
@@ -2601,7 +2598,6 @@ export default function PositionModule({ session, onBack, swingExposedTickers = 
           setQueue([])
           batchJobId.current = null
           setRefreshingTickers({})
-          document.removeEventListener('visibilitychange', onVisible)
         }
       } catch {}
     }

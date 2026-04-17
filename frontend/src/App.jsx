@@ -599,7 +599,6 @@ export default function App() {
 
   const pollBatchStatus = (jobId, tickersList) => {
     stopBatchPoll()
-    const seenTickers = new Set()
 
     const doPoll = async () => {
       try {
@@ -613,9 +612,8 @@ export default function App() {
         setQueue(tickersList.slice(job.done))
         const currentTicker = job.status !== 'done' ? tickersList[job.done] : null
         setRefreshingTickers(currentTicker ? { [currentTicker]: true } : {})
+        // siempre procesar todos los resultados — sin seenTickers para no perder nada si el tab estuvo inactivo
         Object.entries(job.results || {}).forEach(([ticker, data]) => {
-          if (seenTickers.has(ticker)) return
-          seenTickers.add(ticker)
           if (!data.error) cacheAnalysis(ticker, data)
         })
         if (job.status === 'done') {
@@ -623,7 +621,6 @@ export default function App() {
           setQueue([])
           batchJobId.current = null
           setRefreshingTickers({})
-          document.removeEventListener('visibilitychange', onVisible)
         }
       } catch {}
     }
@@ -631,7 +628,6 @@ export default function App() {
     const onVisible = () => { if (document.visibilityState === 'visible') doPoll() }
     document.addEventListener('visibilitychange', onVisible)
     batchPollRef.current = setInterval(doPoll, 4000)
-    // guardar cleanup del listener en ref para cancelQueueSwing
     batchPollRef._removeListener = () => document.removeEventListener('visibilitychange', onVisible)
   }
 
