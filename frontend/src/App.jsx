@@ -795,6 +795,16 @@ export default function App() {
                   ↻ Actualizar selección ({[...selected].filter(t => activeWatchlist.includes(t)).length})
                 </button>
               )}
+              {selected.size > 0 && (() => {
+                const toRemove = [...selected].filter(t => activeWatchlist.includes(t))
+                return toRemove.length > 0 && (
+                  <button onClick={() => { toRemove.forEach(t => removeFromAll(t)); setSelected(new Set()) }}
+                    style={{ background:C.red+'22', border:`1px solid ${C.red}66`, borderRadius:9,
+                      color:C.red, fontWeight:700, padding:'10px 13px', cursor:'pointer', fontSize:12, whiteSpace:'nowrap' }}>
+                    ✕ Eliminar selección ({toRemove.length})
+                  </button>
+                )
+              })()}
               {queue.length === 0 && (
                 <button onClick={() => runQueueSwing(activeWatchlist)}
                   style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:9,
@@ -955,6 +965,16 @@ export default function App() {
                         ↻ Actualizar selección ({[...selected].filter(t => monitorWatchlist.includes(t)).length})
                       </button>
                     )}
+                    {selected.size > 0 && (() => {
+                      const toRemove = [...selected].filter(t => monitorWatchlist.includes(t))
+                      return toRemove.length > 0 && (
+                        <button onClick={() => { toRemove.forEach(t => removeFromAll(t)); setSelected(new Set()) }}
+                          style={{ background:C.red+'22', border:`1px solid ${C.red}66`, borderRadius:9,
+                            color:C.red, fontWeight:700, padding:'10px 13px', cursor:'pointer', fontSize:12, whiteSpace:'nowrap' }}>
+                          ✕ Eliminar selección ({toRemove.length})
+                        </button>
+                      )
+                    })()}
                     {queue.length === 0 && (
                       <button onClick={() => runQueueSwing(monitorWatchlist)}
                         style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:9,
