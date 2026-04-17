@@ -36,4 +36,5 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add data/screener.json
           git diff --staged --quiet || git commit -m "chore: screener update $(date -u +'%Y-%m-%d %H:%M UTC')"
+          git pull --rebase
           git push
