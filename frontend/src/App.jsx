@@ -701,7 +701,6 @@ export default function App() {
   )
   if (!session) return <Auth />
   if (module === 'selector') return <ModuleSelector onSelect={setModule} session={session} />
-  if (module === 'position') return <PositionModule session={session} onBack={() => setModule('selector')} swingExposedTickers={[...wl, ...monitor, ...Object.keys(openTrades)]} />
 
   const tabs = [
     ['dashboard', 'Dashboard'],
@@ -715,6 +714,8 @@ export default function App() {
 
   return (
     <div style={{ paddingBottom:48 }}>
+      {/* Swing module — display:none cuando estamos en Position */}
+      <div style={{ display: module === 'position' ? 'none' : 'block' }}>
       {/* Header */}
       <div style={{ background:'linear-gradient(180deg,#0c1828 0%,#070d1a 100%)', padding:'22px 20px 0', borderBottom:`1px solid ${C.border}` }}>
         <div style={{ maxWidth:960, margin:'0 auto' }}>
@@ -1129,6 +1130,13 @@ export default function App() {
             <Journal session={session} />
           </ErrorBoundary>
         )}
+      </div>
+
+      </div>{/* fin Swing module */}
+
+      {/* Position Module — siempre montado para preservar batch en curso */}
+      <div style={{ display: module === 'position' ? 'block' : 'none' }}>
+        <PositionModule session={session} onBack={() => setModule('selector')} swingExposedTickers={[...wl, ...monitor, ...Object.keys(openTrades)]} />
       </div>
 
       {/* Modal StockCard desde tabla */}
