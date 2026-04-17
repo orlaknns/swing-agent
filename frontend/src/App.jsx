@@ -573,6 +573,7 @@ export default function App() {
     const entry = { ...data, _savedAt: new Date().toISOString() }
     const next = { ...analysisCacheRef.current, [ticker]: entry }
     analysisCacheRef.current = next
+    console.log('[cacheAnalysis] setAnalysisCache', ticker, entry._savedAt)
     setAnalysisCache(next)
     if (dbLoaded.current) {
       upsertAll(null, null, next).then(({ error }) => {
