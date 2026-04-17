@@ -838,7 +838,7 @@ async def _analyze_inner(ticker: str):
         else:
             sma21_series.append(None)
 
-    return JSONResponse(content={
+    return {
         "ticker":       ticker,
         "price":        price,
         "change":       change,
@@ -1734,7 +1734,7 @@ async def _analyze_position_inner(ticker: str):
         market_penalty = 4
         score_total = max(0, score_total - market_penalty)
 
-    return JSONResponse(content={
+    return {
         "ticker":          ticker,
         "company_name":    (fundamentals or {}).get("name"),
         "sector":          sector,
