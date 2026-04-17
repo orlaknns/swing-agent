@@ -599,7 +599,10 @@ export default function App() {
     batchPollRef.current = setInterval(async () => {
       try {
         const res = await fetch(`/api/batch-status/${jobId}`)
-        if (!res.ok) return
+        if (!res.ok) {
+          if (res.status === 404) { stopBatchPoll(); setQueue([]); setRefreshingTickers({}); batchJobId.current = null }
+          return
+        }
         const job = await res.json()
         setQueueDone(job.done)
         setQueue(tickersList.slice(job.done))
