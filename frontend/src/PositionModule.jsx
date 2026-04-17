@@ -2568,13 +2568,18 @@ export default function PositionModule({ session, onBack, swingExposedTickers = 
   })
 
   const stopBatchPoll = () => {
-    if (batchPollRef.current) { clearInterval(batchPollRef.current); batchPollRef.current = null }
+    if (batchPollRef.current) {
+      clearInterval(batchPollRef.current)
+      if (batchPollRef._removeListener) { batchPollRef._removeListener(); batchPollRef._removeListener = null }
+      batchPollRef.current = null
+    }
   }
 
   const pollBatchStatus = (jobId, tickersList) => {
     stopBatchPoll()
     const seenTickers = new Set()
-    batchPollRef.current = setInterval(async () => {
+
+    const doPoll = async () => {
       try {
         const res = await fetch(`/api/batch-status/${jobId}`)
         if (!res.ok) {
@@ -2596,9 +2601,15 @@ export default function PositionModule({ session, onBack, swingExposedTickers = 
           setQueue([])
           batchJobId.current = null
           setRefreshingTickers({})
+          document.removeEventListener('visibilitychange', onVisible)
         }
       } catch {}
-    }, 4000)
+    }
+
+    const onVisible = () => { if (document.visibilityState === 'visible') doPoll() }
+    document.addEventListener('visibilitychange', onVisible)
+    batchPollRef.current = setInterval(doPoll, 4000)
+    batchPollRef._removeListener = () => document.removeEventListener('visibilitychange', onVisible)
   }
 
   const runQueue = async (tickers) => {
