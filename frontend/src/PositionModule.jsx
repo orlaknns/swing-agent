@@ -3008,6 +3008,13 @@ export default function PositionModule({ session, onBack, swingExposedTickers = 
                   ↻ Actualizar selección ({selected.size})
                 </button>
               )}
+              {selected.size > 0 && (
+                <button onClick={() => { [...selected].forEach(t => remove(t)); setSelected(new Set()) }}
+                  style={{ background:C.red+'22', border:`1px solid ${C.red}66`, borderRadius:9,
+                    color:C.red, fontWeight:700, padding:'10px 14px', cursor:'pointer', fontSize:12 }}>
+                  ✕ Eliminar selección ({selected.size})
+                </button>
+              )}
               {queue.length === 0 && (
                 <button onClick={() => runQueue([...wl])}
                   title="Actualizar todos los tickers (3s entre cada uno)"
