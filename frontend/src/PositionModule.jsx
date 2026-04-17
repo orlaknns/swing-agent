@@ -2093,6 +2093,7 @@ function PositionWatchlistTable({ tickers, cache, onRemove, onRefresh, refreshin
     let va, vb
     if (sortCol === 'ticker') { va=a.ticker; vb=b.ticker }
     if (sortCol === 'score')  { va=a.scoreTotal??-1; vb=b.scoreTotal??-1 }
+    if (sortCol === 'entry')  { va=a.d?.entry_suggested??-1; vb=b.d?.entry_suggested??-1 }
     if (sortCol === 'rsi')    { va=a.d?.rsi??-1; vb=b.d?.rsi??-1 }
     if (sortCol === 'rs')     { va=a.d?.mansfield_rs??-99; vb=b.d?.mansfield_rs??-99 }
     if (va<vb) return sortDir==='asc'?-1:1
@@ -2128,6 +2129,7 @@ function PositionWatchlistTable({ tickers, cache, onRemove, onRefresh, refreshin
               </th>
               <th style={thStyle('ticker')} onClick={() => handleSort('ticker')}>Ticker <SortIcon col="ticker"/></th>
               <th style={thStyle(null)}>Precio</th>
+              <th style={thStyle('entry')} onClick={() => handleSort('entry')}>Entrada <SortIcon col="entry"/></th>
               <th style={thStyle('score')} onClick={() => handleSort('score')}>Score <SortIcon col="score"/></th>
               <th style={thStyle(null)}>Decisión</th>
               <th style={thStyle('rsi')} onClick={() => handleSort('rsi')}>RSI <SortIcon col="rsi"/></th>
@@ -2192,6 +2194,20 @@ function PositionWatchlistTable({ tickers, cache, onRemove, onRefresh, refreshin
                   </td>
                   <td style={{ padding:'10px', fontFamily:'monospace', color:C.text }}>
                     {analyzed ? `$${d.price?.toFixed(2)}` : <span style={{ color:C.muted }}>—</span>}
+                  </td>
+                  <td style={{ padding:'10px', fontFamily:'monospace' }}>
+                    {analyzed && d.entry_suggested ? (() => {
+                      const pct = ((d.price - d.entry_suggested) / d.entry_suggested) * 100
+                      const color = pct <= 0 ? C.green : pct <= 5 ? C.amber : C.red
+                      return (
+                        <div>
+                          <div style={{ color:C.text }}>${d.entry_suggested.toFixed(2)}</div>
+                          <div style={{ fontSize:10, color, fontWeight:700 }}>
+                            {pct > 0 ? '+' : ''}{pct.toFixed(1)}%
+                          </div>
+                        </div>
+                      )
+                    })() : <span style={{ color:C.muted }}>—</span>}
                   </td>
                   <td style={{ padding:'10px', fontFamily:'monospace', fontWeight:700,
                     color: scoreTotal >= 32 ? C.green : scoreTotal >= 22 ? C.amber : scoreTotal != null ? C.red : C.muted }}>
