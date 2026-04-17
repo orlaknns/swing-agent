@@ -608,11 +608,11 @@ export default function App() {
           return
         }
         const job = await res.json()
+        console.log('[doPoll]', job.status, 'done:', job.done, 'results:', Object.keys(job.results||{}).length)
         setQueueDone(job.done)
         setQueue(tickersList.slice(job.done))
         const currentTicker = job.status !== 'done' ? tickersList[job.done] : null
         setRefreshingTickers(currentTicker ? { [currentTicker]: true } : {})
-        // siempre procesar todos los resultados — sin seenTickers para no perder nada si el tab estuvo inactivo
         Object.entries(job.results || {}).forEach(([ticker, data]) => {
           if (!data.error) cacheAnalysis(ticker, data)
         })
@@ -625,7 +625,12 @@ export default function App() {
       } catch {}
     }
 
-    const onVisible = () => { if (document.visibilityState === 'visible') doPoll() }
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('[visibilitychange] volvió al tab, forzando poll. jobId:', jobId)
+        doPoll()
+      }
+    }
     document.addEventListener('visibilitychange', onVisible)
     batchPollRef.current = setInterval(doPoll, 4000)
     batchPollRef._removeListener = () => document.removeEventListener('visibilitychange', onVisible)
