@@ -626,20 +626,6 @@ def extract_json(text: str) -> dict:
     return json.loads(text)
 
 
-@app.get("/analyze/{ticker}")
-async def analyze(ticker: str):
-    import traceback as _tb
-    ticker = ticker.upper().strip()
-    try:
-        return await _analyze_inner(ticker)
-    except HTTPException:
-        raise
-    except Exception as e:
-        detail = f"{type(e).__name__}: {e}\n{_tb.format_exc()[-800:]}"
-        print(f"ANALYZE ERROR {ticker}: {detail}")
-        raise HTTPException(status_code=500, detail=detail)
-
-
 def calc_levels(price: float, recent_low: float, recent_high: float, sma21: float) -> dict:
     """Calcula niveles de entrada/stop/target anclados a soportes técnicos reales.
 
@@ -891,7 +877,21 @@ async def _analyze_inner(ticker: str):
         "nextEarnings": next_earnings,
         "fundamentals": fundamentals,
         "entryZone":    entry_zone,
-    }, media_type="application/json; charset=utf-8")
+    }
+
+
+@app.get("/analyze/{ticker}")
+async def analyze(ticker: str):
+    import traceback as _tb
+    ticker = ticker.upper().strip()
+    try:
+        return JSONResponse(content=await _analyze_inner(ticker), media_type="application/json; charset=utf-8")
+    except HTTPException:
+        raise
+    except Exception as e:
+        detail = f"{type(e).__name__}: {e}\n{_tb.format_exc()[-800:]}"
+        print(f"ANALYZE ERROR {ticker}: {detail}")
+        raise HTTPException(status_code=500, detail=detail)
 
 
 
@@ -1564,20 +1564,6 @@ def calc_position_scorecard(data: dict) -> dict:
     return criteria
 
 
-@app.get("/analyze-position/{ticker}")
-async def analyze_position(ticker: str):
-    ticker = ticker.upper().strip()
-    try:
-        return await _analyze_position_inner(ticker)
-    except HTTPException:
-        raise
-    except Exception as e:
-        import traceback as _tb
-        detail = f"{type(e).__name__}: {e}\n{_tb.format_exc()[-800:]}"
-        print(f"ANALYZE-POSITION ERROR {ticker}: {detail}")
-        raise HTTPException(status_code=500, detail=detail)
-
-
 async def _analyze_position_inner(ticker: str):
     async with httpx.AsyncClient(timeout=25) as http:
         candles, fundamentals, spy_closes, next_earnings, rt_quote, weekly_candles, cashflow = \
@@ -1777,7 +1763,21 @@ async def _analyze_position_inner(ticker: str):
         "market_penalty":  market_penalty,
         "fundamentals":    fundamentals,
         "cashflow":        cashflow,
-    }, media_type="application/json; charset=utf-8")
+    }
+
+
+@app.get("/analyze-position/{ticker}")
+async def analyze_position(ticker: str):
+    ticker = ticker.upper().strip()
+    try:
+        return JSONResponse(content=await _analyze_position_inner(ticker), media_type="application/json; charset=utf-8")
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback as _tb
+        detail = f"{type(e).__name__}: {e}\n{_tb.format_exc()[-800:]}"
+        print(f"ANALYZE-POSITION ERROR {ticker}: {detail}")
+        raise HTTPException(status_code=500, detail=detail)
 
 
 # ── Screener — lee screener.json desde GitHub raw ──────────────────────────

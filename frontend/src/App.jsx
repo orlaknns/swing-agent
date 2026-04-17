@@ -573,7 +573,6 @@ export default function App() {
     const entry = { ...data, _savedAt: new Date().toISOString() }
     const next = { ...analysisCacheRef.current, [ticker]: entry }
     analysisCacheRef.current = next
-    console.log('[cacheAnalysis] setAnalysisCache', ticker, entry._savedAt)
     setAnalysisCache(next)
     if (dbLoaded.current) {
       upsertAll(null, null, next).then(({ error }) => {
@@ -602,7 +601,6 @@ export default function App() {
         const res = await fetch(`/api/batch-status/${jobId}`)
         if (!res.ok) return
         const job = await res.json()
-        console.log('[batch-poll]', job.status, 'done:', job.done, 'current:', job.current_ticker, 'results:', Object.keys(job.results || {}))
         setQueueDone(job.done)
         setQueue(tickersList.slice(job.done))
         // spinner solo en el ticker que se está procesando ahora
@@ -611,7 +609,6 @@ export default function App() {
         Object.entries(job.results || {}).forEach(([ticker, data]) => {
           if (seenTickers.has(ticker)) return
           seenTickers.add(ticker)
-          console.log('[batch-poll] cacheAnalysis:', ticker, !!data.error, data.error || '', !data.error ? JSON.stringify(data).slice(0,200) : '')
           if (!data.error) cacheAnalysis(ticker, data)
         })
         if (job.status === 'done') {
