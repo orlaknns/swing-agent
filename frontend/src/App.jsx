@@ -611,7 +611,7 @@ export default function App() {
         Object.entries(job.results || {}).forEach(([ticker, data]) => {
           if (seenTickers.has(ticker)) return
           seenTickers.add(ticker)
-          console.log('[batch-poll] cacheAnalysis:', ticker, !!data.error)
+          console.log('[batch-poll] cacheAnalysis:', ticker, !!data.error, data.error || '')
           if (!data.error) cacheAnalysis(ticker, data)
         })
         if (job.status === 'done') {
