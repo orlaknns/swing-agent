@@ -220,7 +220,7 @@ export default function Discover({ watchlist, monitorList = [], openTrades = {},
                   border:`1px solid ${filter===s ? (SECTOR_COLORS[s]||C.accent) : C.border}`,
                   borderRadius:6, color:filter===s ? '#000' : C.muted,
                   padding:'4px 12px', cursor:'pointer', fontSize:11, fontWeight:filter===s?700:400 }}>
-                {s === 'all' ? `Todos (${candidates.length})` : s}
+                {s === 'all' ? `Todos (${filtered.length})` : s}
               </button>
             ))}
           </div>
