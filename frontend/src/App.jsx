@@ -283,22 +283,6 @@ function WatchlistTable({ tickers, analysisCache, openTrades, lastClosedTrades, 
 }
 
 function ModuleSelector({ onSelect, session }) {
-  const [showDashboard, setShowDashboard] = useState(false)
-
-  if (showDashboard) return (
-    <div style={{ minHeight:'100vh', background:'#070d1a' }}>
-      <div style={{ padding:'14px 20px', borderBottom:'1px solid #1a2d45', display:'flex', alignItems:'center', gap:10 }}>
-        <button onClick={() => setShowDashboard(false)}
-          style={{ background:'none', border:'1px solid #1a2d45', borderRadius:6, color:'#4a6080',
-            padding:'4px 10px', cursor:'pointer', fontSize:11 }}>
-          ← Módulos
-        </button>
-        <span style={{ fontSize:13, fontWeight:700, color:'#dde6f0' }}>Dashboard General</span>
-      </div>
-      <UnifiedDashboard session={session} />
-    </div>
-  )
-
   return (
     <div style={{ minHeight:'100vh', background:'#070d1a', display:'flex', flexDirection:'column', alignItems:'center', padding:'60px 24px 48px' }}>
       <div style={{ marginBottom:40, textAlign:'center' }}>
@@ -352,7 +336,7 @@ function ModuleSelector({ onSelect, session }) {
 
       {/* Dashboard General */}
       <div style={{ marginTop:20, maxWidth:700, width:'100%' }}>
-        <div onClick={() => setShowDashboard(true)}
+        <div onClick={() => onSelect('dashboard')}
           style={{ background:'#0f1929', border:'1px solid #1a2d45', borderRadius:16, padding:'20px 28px',
             cursor:'pointer', transition:'border-color 0.2s, transform 0.15s',
             display:'flex', alignItems:'center', justifyContent:'space-between' }}
@@ -715,6 +699,42 @@ export default function App() {
   )
   if (!session) return <Auth />
   if (module === 'selector') return <ModuleSelector onSelect={setModule} session={session} />
+
+  if (module === 'dashboard') return (
+    <div style={{ paddingBottom:48 }}>
+      <div style={{ background:'linear-gradient(180deg,#0c1828 0%,#070d1a 100%)', padding:'22px 20px 0', borderBottom:`1px solid ${C.border}` }}>
+        <div style={{ maxWidth:960, margin:'0 auto' }}>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:5 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:7 }}>
+              <div style={{ width:7, height:7, borderRadius:'50%', background:C.green }}/>
+              <span style={{ fontSize:10, color:C.green, letterSpacing:'0.12em' }}>LIVE · DATOS REALES DE MERCADO</span>
+            </div>
+            <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+              <span style={{ fontSize:11, color:C.muted }}>{session.user.email}</span>
+              <button onClick={signOut}
+                style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:6, color:C.muted, padding:'3px 9px', cursor:'pointer', fontSize:10 }}>
+                Salir
+              </button>
+            </div>
+          </div>
+          <div style={{ display:'flex', alignItems:'baseline', gap:10, marginBottom:16 }}>
+            <button onClick={() => setModule('selector')}
+              style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:6, color:C.muted,
+                padding:'3px 9px', cursor:'pointer', fontSize:10, marginRight:4 }}>
+              ← Módulos
+            </button>
+            <div>
+              <span style={{ fontSize:11, color:C.muted, letterSpacing:'0.04em', textTransform:'uppercase' }}>KNNS TradeAgent</span>
+              <h1 style={{ fontSize:22, fontWeight:700, letterSpacing:'-0.02em', color:C.amber, margin:0 }}>Dashboard General</h1>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style={{ marginTop:24 }}>
+        <UnifiedDashboard session={session} />
+      </div>
+    </div>
+  )
 
   const tabs = [
     ['dashboard', 'Dashboard'],
