@@ -222,6 +222,94 @@ export default function UnifiedDashboard({ session }) {
             </div>
           </div>
 
+          {/* ── Operaciones abiertas ────────────────────────────────── */}
+          {(swOpen.length > 0 || posOpen.length > 0) && (() => {
+            const openRows = [
+              ...swOpen.map(t => ({
+                type: 'swing',
+                ticker: t.ticker,
+                date: t.date,
+                entry: parseFloat(t.entry_price),
+                stop: t.stop_price ? parseFloat(t.stop_price) : null,
+                target: null,
+                size: t.position_size ? parseFloat(t.position_size) : null,
+                status: t.status,
+              })),
+              ...posOpen.map(t => ({
+                type: 'position',
+                ticker: t.ticker,
+                date: t.entry_date || t.created_at?.slice(0,10),
+                entry: parseFloat(t.entry_price),
+                stop: t.stop_price ? parseFloat(t.stop_price) : null,
+                target: t.target_price ? parseFloat(t.target_price) : null,
+                size: t.shares ? parseFloat(t.shares) : null,
+                status: t.status,
+              })),
+            ].sort((a,b) => (b.date||'').localeCompare(a.date||''))
+            return (
+              <div style={{ marginBottom:28 }}>
+                <SectionHeader title={`Operaciones abiertas (${openRows.length})`} color={C.amber} />
+                <div style={{ background:C.card, border:`1px solid ${C.amber}33`, borderRadius:12, overflow:'hidden' }}>
+                  <table style={{ width:'100%', borderCollapse:'collapse' }}>
+                    <thead>
+                      <tr style={{ borderBottom:`1px solid ${C.border}` }}>
+                        {['Ticker','Módulo','Fecha entrada','Entrada','Stop','Target','Tamaño'].map(h => (
+                          <th key={h} style={{ padding:'8px 12px', textAlign:'left', fontSize:9,
+                            color:C.muted, letterSpacing:'0.08em', textTransform:'uppercase', fontWeight:600, whiteSpace:'nowrap' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {openRows.map((t, i) => {
+                        const rr = t.stop && t.target && t.entry
+                          ? ((t.target - t.entry) / (t.entry - t.stop)).toFixed(1)
+                          : null
+                        return (
+                          <tr key={i} style={{ borderBottom:`1px solid ${C.border}33` }}
+                            onMouseEnter={e => e.currentTarget.style.background='#1a2d4533'}
+                            onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                            <td style={{ padding:'9px 12px', fontFamily:'monospace', fontWeight:700, color:C.text, fontSize:12, whiteSpace:'nowrap' }}>
+                              {t.ticker}
+                              {t.status && t.status !== 'open' && (
+                                <span style={{ marginLeft:6, fontSize:8, fontWeight:700, padding:'1px 5px', borderRadius:99,
+                                  background:C.amber+'22', color:C.amber }}>{t.status}</span>
+                              )}
+                            </td>
+                            <td style={{ padding:'9px 12px', whiteSpace:'nowrap' }}>
+                              <span style={{ fontSize:9, fontWeight:700, padding:'2px 7px', borderRadius:99,
+                                color: t.type === 'swing' ? SWING_COLOR : POSITION_COLOR,
+                                background: t.type === 'swing' ? SWING_COLOR+'18' : POSITION_COLOR+'18' }}>
+                                {t.type === 'swing' ? '⚡ Swing' : '📈 Position'}
+                              </span>
+                            </td>
+                            <td style={{ padding:'9px 12px', fontSize:11, color:C.muted }}>{t.date || '—'}</td>
+                            <td style={{ padding:'9px 12px', fontFamily:'monospace', fontSize:11, color:C.text }}>
+                              {t.entry ? `$${t.entry.toFixed(2)}` : '—'}
+                            </td>
+                            <td style={{ padding:'9px 12px', fontFamily:'monospace', fontSize:11, color:C.red }}>
+                              {t.stop ? `$${t.stop.toFixed(2)}` : '—'}
+                            </td>
+                            <td style={{ padding:'9px 12px', fontFamily:'monospace', fontSize:11 }}>
+                              {t.target ? (
+                                <span>
+                                  <span style={{ color:C.green }}>${t.target.toFixed(2)}</span>
+                                  {rr && <span style={{ color:C.muted, fontSize:9, marginLeft:5 }}>R/R {rr}</span>}
+                                </span>
+                              ) : '—'}
+                            </td>
+                            <td style={{ padding:'9px 12px', fontFamily:'monospace', fontSize:11, color:C.muted }}>
+                              {t.size ?? '—'}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )
+          })()}
+
           {/* ── Gráfico P&L mensual ─────────────────────────────────── */}
           {monthlyData.length > 0 && (
             <div style={{ marginBottom:28 }}>
