@@ -2160,16 +2160,18 @@ function PositionWatchlistTable({ tickers, cache, onRemove, onRefresh, refreshin
                       {selected.has(ticker) && <span style={{ color:'#000', fontSize:10, fontWeight:700 }}>✓</span>}
                     </div>
                   </td>
-                  <td style={{ padding:'10px' }}>
+                  <td style={{ padding:'10px', whiteSpace:'nowrap' }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:4, flexWrap:'nowrap' }}>
                     <span style={{ fontFamily:'monospace', fontWeight:700, color:C.text }}>{ticker}</span>
                     {swingExposedTickers.includes(ticker) && (
                       <span title="Ticker en watchlist de Swing Trading"
-                        style={{ marginLeft:5, fontSize:9, fontWeight:700, color:'#00d4ff',
+                        style={{ fontSize:9, fontWeight:700, color:'#00d4ff',
                           background:'#00d4ff18', border:'1px solid #00d4ff44',
-                          borderRadius:99, padding:'1px 5px' }}>
+                          borderRadius:99, padding:'1px 5px', whiteSpace:'nowrap', flexShrink:0 }}>
                         ⚡ Swing
                       </span>
                     )}
+                    </div>
                     {d?._savedAt && (() => {
                       const dt = new Date(d._savedAt), now = new Date()
                       const ageH = (now - dt) / (1000*60*60)
@@ -2213,11 +2215,11 @@ function PositionWatchlistTable({ tickers, cache, onRemove, onRefresh, refreshin
                     color: scoreTotal >= 32 ? C.green : scoreTotal >= 22 ? C.amber : scoreTotal != null ? C.red : C.muted }}>
                     {scoreTotal != null ? `${scoreTotal}/${MAX_SCORE}` : '—'}
                   </td>
-                  <td style={{ padding:'10px' }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:4, flexWrap:'wrap' }}>
+                  <td style={{ padding:'10px', minWidth:130 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:4, flexWrap:'nowrap' }}>
                       {decision ? (
                         <span style={{ fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:99,
-                          color:dc, background:dc+'18' }}>
+                          color:dc, background:dc+'18', whiteSpace:'nowrap' }}>
                           {decision==='OPERAR_CONVICCION'?'CONVICCIÓN':decision==='OPERAR_CAUTELA'?'CAUTELA':'NO OPERAR'}
                         </span>
                       ) : <span style={{ color:C.muted }}>—</span>}
