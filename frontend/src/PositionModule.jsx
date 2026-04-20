@@ -2116,7 +2116,7 @@ function PositionWatchlistTable({ tickers, cache, onRemove, onRefresh, refreshin
         <span style={{ marginLeft:'auto', fontSize:10, color:C.muted }}>{rows.length} / {tickers.length}</span>
       </div>
       <div style={{ overflowX:'auto' }}>
-        <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+        <table style={{ width:'100%', minWidth:900, borderCollapse:'collapse', fontSize:12 }}>
           <thead>
             <tr style={{ borderBottom:`1px solid ${C.border}` }}>
               <th style={{ padding:'8px 10px', cursor:'pointer' }} onClick={onToggleSelectAll}>
