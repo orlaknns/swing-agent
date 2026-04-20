@@ -2101,7 +2101,7 @@ function PositionWatchlistTable({ tickers, cache, onRemove, onRefresh, refreshin
     return 0
   })
 
-  const thStyle = col => ({ padding:'8px 10px', textAlign:'left', fontSize:10,
+  const thStyle = col => ({ padding:'8px 7px', textAlign:'left', fontSize:10,
     color: sortCol===col ? C.green : C.muted, letterSpacing:'0.07em',
     textTransform:'uppercase', fontWeight:600, whiteSpace:'nowrap',
     cursor: col ? 'pointer' : 'default', userSelect:'none' })
@@ -2116,10 +2116,10 @@ function PositionWatchlistTable({ tickers, cache, onRemove, onRefresh, refreshin
         <span style={{ marginLeft:'auto', fontSize:10, color:C.muted }}>{rows.length} / {tickers.length}</span>
       </div>
       <div style={{ overflowX:'auto' }}>
-        <table style={{ width:'100%', minWidth:900, borderCollapse:'collapse', fontSize:12 }}>
+        <table style={{ width:'100%', minWidth:820, borderCollapse:'collapse', fontSize:12 }}>
           <thead>
             <tr style={{ borderBottom:`1px solid ${C.border}` }}>
-              <th style={{ padding:'8px 10px', cursor:'pointer' }} onClick={onToggleSelectAll}>
+              <th style={{ padding:'8px 7px', cursor:'pointer' }} onClick={onToggleSelectAll}>
                 <div style={{ width:16, height:16, borderRadius:3, border:`2px solid ${C.border}`,
                   background: tickers.length > 0 && tickers.every(t => selected.has(t)) ? M : 'transparent',
                   display:'flex', alignItems:'center', justifyContent:'center' }}>
@@ -2134,7 +2134,6 @@ function PositionWatchlistTable({ tickers, cache, onRemove, onRefresh, refreshin
               <th style={thStyle(null)}>Decisión</th>
               <th style={thStyle('rsi')} onClick={() => handleSort('rsi')}>RSI <SortIcon col="rsi"/></th>
               <th style={thStyle('rs')} onClick={() => handleSort('rs')}>RS SPY <SortIcon col="rs"/></th>
-              <th style={thStyle(null)}>Sector</th>
               <th style={thStyle(null)}>Macro</th>
               <th style={thStyle(null)}>HH/HL</th>
               <th style={thStyle(null)}>Stage</th>
@@ -2152,7 +2151,7 @@ function PositionWatchlistTable({ tickers, cache, onRemove, onRefresh, refreshin
                     background: selected.has(ticker) ? M+'11' : 'transparent' }}
                   onMouseEnter={e => { if (!selected.has(ticker)) e.currentTarget.style.background='#1a2d4533' }}
                   onMouseLeave={e => { e.currentTarget.style.background = selected.has(ticker) ? M+'11' : 'transparent' }}>
-                  <td style={{ padding:'10px 10px' }} onClick={e => { e.stopPropagation(); onToggleSelect(ticker) }}>
+                  <td style={{ padding:'10px 7px' }} onClick={e => { e.stopPropagation(); onToggleSelect(ticker) }}>
                     <div style={{ width:16, height:16, borderRadius:3, cursor:'pointer',
                       background: selected.has(ticker) ? M : 'transparent',
                       border:`2px solid ${selected.has(ticker) ? M : C.border}`,
@@ -2160,7 +2159,7 @@ function PositionWatchlistTable({ tickers, cache, onRemove, onRefresh, refreshin
                       {selected.has(ticker) && <span style={{ color:'#000', fontSize:10, fontWeight:700 }}>✓</span>}
                     </div>
                   </td>
-                  <td style={{ padding:'10px', whiteSpace:'nowrap' }}>
+                  <td style={{ padding:'9px 7px', whiteSpace:'nowrap' }}>
                     <div style={{ display:'flex', alignItems:'center', gap:4, flexWrap:'nowrap' }}>
                     <span style={{ fontFamily:'monospace', fontWeight:700, color:C.text }}>{ticker}</span>
                     {swingExposedTickers.includes(ticker) && (
@@ -2194,10 +2193,10 @@ function PositionWatchlistTable({ tickers, cache, onRemove, onRefresh, refreshin
                       )
                     })()}
                   </td>
-                  <td style={{ padding:'10px', fontFamily:'monospace', color:C.text }}>
+                  <td style={{ padding:'9px 7px', fontFamily:'monospace', color:C.text }}>
                     {analyzed ? `$${d.price?.toFixed(2)}` : <span style={{ color:C.muted }}>—</span>}
                   </td>
-                  <td style={{ padding:'10px', fontFamily:'monospace' }}>
+                  <td style={{ padding:'9px 7px', fontFamily:'monospace' }}>
                     {analyzed && d.entry_suggested ? (() => {
                       const pct = ((d.price - d.entry_suggested) / d.entry_suggested) * 100
                       const color = pct <= 0 ? C.green : pct <= 5 ? C.amber : C.red
@@ -2211,11 +2210,11 @@ function PositionWatchlistTable({ tickers, cache, onRemove, onRefresh, refreshin
                       )
                     })() : <span style={{ color:C.muted }}>—</span>}
                   </td>
-                  <td style={{ padding:'10px', fontFamily:'monospace', fontWeight:700,
+                  <td style={{ padding:'9px 7px', fontFamily:'monospace', fontWeight:700,
                     color: scoreTotal >= 32 ? C.green : scoreTotal >= 22 ? C.amber : scoreTotal != null ? C.red : C.muted }}>
                     {scoreTotal != null ? `${scoreTotal}/${MAX_SCORE}` : '—'}
                   </td>
-                  <td style={{ padding:'10px', minWidth:130 }}>
+                  <td style={{ padding:'9px 7px', minWidth:110 }}>
                     <div style={{ display:'flex', alignItems:'center', gap:4, flexWrap:'nowrap' }}>
                       {decision ? (
                         <span style={{ fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:99,
@@ -2254,11 +2253,11 @@ function PositionWatchlistTable({ tickers, cache, onRemove, onRefresh, refreshin
                       })()}
                     </div>
                   </td>
-                  <td style={{ padding:'10px', fontFamily:'monospace',
+                  <td style={{ padding:'9px 7px', fontFamily:'monospace',
                     color: analyzed && d.rsi > 65 ? C.red : analyzed && d.rsi < 40 ? C.green : C.text }}>
                     {analyzed ? d.rsi?.toFixed(0) : '—'}
                   </td>
-                  <td style={{ padding:'10px', fontFamily:'monospace',
+                  <td style={{ padding:'9px 7px', fontFamily:'monospace',
                     color: analyzed && d.mansfield_rs > 0 ? C.green : analyzed && d.mansfield_rs < 0 ? C.red : C.muted }}>
                     {analyzed
                       ? d.mansfield_rs_raw != null
@@ -2266,23 +2265,7 @@ function PositionWatchlistTable({ tickers, cache, onRemove, onRefresh, refreshin
                         : d.mansfield_rs
                       : '—'}
                   </td>
-                  <td style={{ padding:'10px', maxWidth:130 }}>
-                    {analyzed && d.sector ? (
-                      <div>
-                        <div style={{ fontSize:10, color:C.accent, whiteSpace:'nowrap',
-                          overflow:'hidden', textOverflow:'ellipsis' }}>
-                          {d.sector}
-                        </div>
-                        {d.rs_sector != null && (
-                          <div style={{ fontSize:9, fontFamily:'monospace', fontWeight:700,
-                            color: d.rs_sector > 2 ? C.green : d.rs_sector > 0 ? '#7fd4a0' : d.rs_sector > -2 ? C.amber : C.red }}>
-                            RS {d.rs_sector > 0 ? '+' : ''}{d.rs_sector}
-                          </div>
-                        )}
-                      </div>
-                    ) : <span style={{ color:C.muted }}>—</span>}
-                  </td>
-                  <td style={{ padding:'10px' }}>
+                  <td style={{ padding:'9px 7px' }}>
                     {analyzed ? (
                       <span style={{ fontSize:10, fontWeight:600,
                         color: d.macro_context?.spy_above_sma200 ? C.green : C.red }}>
@@ -2290,17 +2273,17 @@ function PositionWatchlistTable({ tickers, cache, onRemove, onRefresh, refreshin
                       </span>
                     ) : '—'}
                   </td>
-                  <td style={{ padding:'10px', fontFamily:'monospace', color:C.muted }}>
+                  <td style={{ padding:'9px 7px', fontFamily:'monospace', color:C.muted }}>
                     {analyzed && d.hh_hl ? `${d.hh_hl.hh_count}/${d.hh_hl.hl_count}` : '—'}
                   </td>
-                  <td style={{ padding:'10px' }}>
+                  <td style={{ padding:'9px 7px' }}>
                     {analyzed && d.stage?.stage != null ? (() => {
                       const stageColors = { 1: C.muted, 2: C.green, 3: C.amber, 4: C.red }
                       const color = stageColors[d.stage.stage] || C.muted
                       return <span style={{ fontFamily:'monospace', fontWeight:700, fontSize:11, color }}>S{d.stage.stage}</span>
                     })() : <span style={{ color:C.muted }}>—</span>}
                   </td>
-                  <td style={{ padding:'10px 8px', whiteSpace:'nowrap' }} onClick={e => e.stopPropagation()}>
+                  <td style={{ padding:'9px 7px', whiteSpace:'nowrap' }} onClick={e => e.stopPropagation()}>
                     <button onClick={() => onRefresh(ticker)} disabled={!!refreshingTickers?.[ticker]}
                       title="Actualizar"
                       style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:5,
