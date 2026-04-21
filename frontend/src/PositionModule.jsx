@@ -2254,7 +2254,7 @@ function PositionWatchlistTable({ tickers, cache, onRemove, onRefresh, refreshin
                     </div>
                   </td>
                   <td style={{ padding:'9px 7px', fontFamily:'monospace',
-                    color: analyzed && d.rsi > 65 ? C.red : analyzed && d.rsi < 40 ? C.green : C.text }}>
+                    color: analyzed && d.rsi > 65 ? C.red : analyzed && d.rsi < 40 ? C.amber : analyzed && d.rsi >= 40 ? C.green : C.text }}>
                     {analyzed ? d.rsi?.toFixed(0) : '—'}
                   </td>
                   <td style={{ padding:'9px 7px', fontFamily:'monospace',
