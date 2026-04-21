@@ -1904,7 +1904,9 @@ async def screener():
 
 _POSITION_SCREENER_CACHE: dict = {}
 _POSITION_SCREENER_TS: float = 0
-_POSITION_SCREENER_TTL = 3600  # 1 hora — se actualiza semanalmente
+_POSITION_SCREENER_TTL = 3600       # 1 hora normal
+_POSITION_SCREENER_TTL_SHORT = 30   # 30s mientras hay refresh pendiente
+_POSITION_REFRESH_PENDING: bool = False
 
 _GITHUB_RAW_POSITION         = "https://raw.githubusercontent.com/orlaknns/swing-agent/main/data/screener_position.json"
 _GITHUB_RAW_POSITION_HISTORY = "https://raw.githubusercontent.com/orlaknns/swing-agent/main/data/screener_position_history.json"
@@ -1934,10 +1936,11 @@ _POSITION_CURATED_FALLBACK = {
 
 
 async def _load_position_screener_json() -> dict:
-    """Lee screener_position.json desde GitHub raw con caché de 1 hora."""
-    global _POSITION_SCREENER_CACHE, _POSITION_SCREENER_TS
+    """Lee screener_position.json desde GitHub raw. TTL corto (30s) mientras hay refresh pendiente."""
+    global _POSITION_SCREENER_CACHE, _POSITION_SCREENER_TS, _POSITION_REFRESH_PENDING
     now = _time.time()
-    if _POSITION_SCREENER_CACHE and (now - _POSITION_SCREENER_TS) < _POSITION_SCREENER_TTL:
+    ttl = _POSITION_SCREENER_TTL_SHORT if _POSITION_REFRESH_PENDING else _POSITION_SCREENER_TTL
+    if _POSITION_SCREENER_CACHE and (now - _POSITION_SCREENER_TS) < ttl:
         return _POSITION_SCREENER_CACHE
     try:
         async with httpx.AsyncClient(timeout=10) as c:
@@ -1945,6 +1948,11 @@ async def _load_position_screener_json() -> dict:
             r = await c.get(bust_url, headers={"Cache-Control": "no-cache", "Pragma": "no-cache"})
             if r.status_code == 200:
                 data = r.json()
+                old_date = (_POSITION_SCREENER_CACHE or {}).get("updatedAt") or (_POSITION_SCREENER_CACHE or {}).get("date")
+                new_date = data.get("updatedAt") or data.get("date")
+                if _POSITION_REFRESH_PENDING and new_date and old_date and new_date != old_date:
+                    _POSITION_REFRESH_PENDING = False
+                    print(f"Position screener refresh detected: {old_date} → {new_date}")
                 _POSITION_SCREENER_CACHE = data
                 _POSITION_SCREENER_TS = now
                 print(f"Position screener loaded: {data.get('count', 0)} tickers | source={data.get('source')} | date={data.get('date')}")
@@ -2030,7 +2038,8 @@ async def screener_position_refresh():
             r = await c.post(url, headers=headers, json={"ref": "main"})
             if r.status_code == 204:
                 _POSITION_SCREENER_TS = 0
-                return JSONResponse(content={"ok": True, "message": "Screener en ejecución — listo en ~90 segundos"})
+                _POSITION_REFRESH_PENDING = True
+                return JSONResponse(content={"ok": True, "message": "Screener en ejecución — listo en ~2-5 minutos"})
             return JSONResponse(status_code=r.status_code, content={"error": f"GitHub respondió {r.status_code}", "detail": r.text})
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})

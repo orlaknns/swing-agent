@@ -953,7 +953,7 @@ function PositionScreener({ watchlist, onAdd, onRemove, onAddAll, posCache }) {
           ) : (
             <span style={{ color:C.muted }}>Cargando...</span>
           )}
-          <span style={{ color:C.muted, fontSize:10 }}>· Actualización semanal (lunes)</span>
+          <span style={{ color:C.muted, fontSize:10 }}>· Actualización diaria (lun-vie)</span>
           {historyWeeks > 0 && (
             <span style={{ fontSize:10, color:C.accent, background:C.accent+'15',
               padding:'1px 7px', borderRadius:99 }}>
