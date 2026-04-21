@@ -1,8 +1,8 @@
-name: Weekly Position Screener
+name: Daily Position Screener
 
 on:
   schedule:
-    - cron: '0 14 * * 1'  # Lunes 14:00 UTC = 10:00 AM ET
+    - cron: '0 14 * * 1-5'  # Lun-Vie 14:00 UTC = 10:00 AM ET
   workflow_dispatch:
 
 permissions:
