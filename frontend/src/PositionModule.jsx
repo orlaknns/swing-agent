@@ -3102,7 +3102,7 @@ export default function PositionModule({ session, onBack, swingExposedTickers = 
                     <div key={t} style={{ position:'relative' }}>
                       {/* Checkbox sobre la tarjeta */}
                       <div onClick={e => { e.stopPropagation(); toggleSelect(t) }}
-                        style={{ position:'absolute', top:10, right:10, zIndex:10, cursor:'pointer' }}>
+                        style={{ position:'absolute', top:10, left:10, zIndex:10, cursor:'pointer' }}>
                         <div style={{ width:18, height:18, borderRadius:4,
                           background: selected.has(t) ? M : C.card,
                           border:`2px solid ${selected.has(t) ? M : C.border}`,
