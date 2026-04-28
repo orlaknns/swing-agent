@@ -646,7 +646,7 @@
   "count": 80,
   "date": "2026-04-27",
   "updatedAt": "2026-04-27 15:52 UTC",
-  "source": "finviz",
+  "source": "cached",
   "criteria": {
     "exchange": "NYSE, NASDAQ",
     "marketCap": "> $300M",
@@ -655,5 +655,6 @@
     "rsi": "40-65 (momentum sin sobrecompra)",
     "sma50_200": "SMA50 > SMA200 (golden cross)",
     "price_sma200": "Precio > SMA200 (tendencia alcista)"
-  }
+  },
+  "fetchError": "Finviz no disponible \u2014 usando resultados anteriores"
 }
