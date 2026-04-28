@@ -486,12 +486,13 @@
   "count": 80,
   "date": "2026-04-27",
   "updatedAt": "2026-04-27 15:22 UTC",
-  "source": "finviz",
+  "source": "cached",
   "criteria": {
     "exchange": "NYSE, NASDAQ",
     "avgVolume": "> 500k",
     "price": "> $20",
     "rsi": "30-60 (pullback zone)",
     "ema": "EMA20 recently crossed above EMA50 (Finviz filter \u2014 app uses SMA21/SMA50 for analysis)"
-  }
+  },
+  "fetchError": "Finviz no disponible \u2014 usando resultados anteriores"
 }
