@@ -1,498 +1,109 @@
 {
   "candidates": [
     {
-      "ticker": "TSLA",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "PLTR",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "VZ",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "NOW",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "BMNR",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "IREN",
-      "company": "",
-      "sector": ""
-    },
-    {
       "ticker": "AAPL",
-      "company": "",
-      "sector": ""
+      "company": "Apple Inc",
+      "sector": "Technology"
     },
     {
-      "ticker": "SMCI",
-      "company": "",
-      "sector": ""
+      "ticker": "MSFT",
+      "company": "Microsoft Corp",
+      "sector": "Technology"
     },
     {
-      "ticker": "ORCL",
-      "company": "",
-      "sector": ""
+      "ticker": "NVDA",
+      "company": "NVIDIA Corp",
+      "sector": "Technology"
     },
     {
-      "ticker": "PFE",
-      "company": "",
-      "sector": ""
+      "ticker": "GOOGL",
+      "company": "Alphabet Inc",
+      "sector": "Technology"
     },
     {
-      "ticker": "IONQ",
-      "company": "",
-      "sector": ""
+      "ticker": "META",
+      "company": "Meta Platforms",
+      "sector": "Technology"
     },
     {
-      "ticker": "NFLX",
-      "company": "",
-      "sector": ""
+      "ticker": "AMZN",
+      "company": "Amazon.com",
+      "sector": "Consumer Cyclical"
     },
     {
-      "ticker": "CMCSA",
-      "company": "",
-      "sector": ""
+      "ticker": "TSLA",
+      "company": "Tesla Inc",
+      "sector": "Consumer Cyclical"
     },
     {
-      "ticker": "CRWV",
-      "company": "",
-      "sector": ""
+      "ticker": "JPM",
+      "company": "JPMorgan Chase",
+      "sector": "Financial"
     },
     {
-      "ticker": "HOOD",
-      "company": "",
-      "sector": ""
+      "ticker": "V",
+      "company": "Visa Inc",
+      "sector": "Financial"
     },
     {
-      "ticker": "BAC",
-      "company": "",
-      "sector": ""
+      "ticker": "MA",
+      "company": "Mastercard",
+      "sector": "Financial"
     },
     {
-      "ticker": "CNQ",
-      "company": "",
-      "sector": ""
+      "ticker": "UNH",
+      "company": "UnitedHealth Group",
+      "sector": "Healthcare"
     },
     {
-      "ticker": "T",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "RKLB",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "SHEL",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "PBR",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "NBIS",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "AXTI",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "TTD",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "ASTS",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "WMT",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "CCL",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "AAOI",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "UBER",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "WBD",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "CRM",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "FCX",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "ABT",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "NKE",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "QXO",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "WFC",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "COP",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "CMG",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "LUNR",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "COIN",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "BP",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "BSX",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "CRCL",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "DOW",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "XOM",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "PL",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "KO",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "PYPL",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "TEVA",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "CPNG",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "COHR",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "EPD",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "MOS",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "BMY",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "DKNG",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "LITE",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "B",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "OXY",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "BABA",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "AIG",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "CELH",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "LRCX",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "RBLX",
-      "company": "",
-      "sector": ""
+      "ticker": "JNJ",
+      "company": "Johnson & Johnson",
+      "sector": "Healthcare"
     },
     {
       "ticker": "PG",
-      "company": "",
-      "sector": ""
+      "company": "Procter & Gamble",
+      "sector": "Consumer Defensive"
     },
     {
-      "ticker": "MP",
-      "company": "",
-      "sector": ""
+      "ticker": "HD",
+      "company": "Home Depot",
+      "sector": "Consumer Cyclical"
     },
     {
-      "ticker": "CVX",
-      "company": "",
-      "sector": ""
+      "ticker": "AVGO",
+      "company": "Broadcom Inc",
+      "sector": "Technology"
     },
     {
-      "ticker": "IBM",
-      "company": "",
-      "sector": ""
+      "ticker": "CRM",
+      "company": "Salesforce",
+      "sector": "Technology"
     },
     {
-      "ticker": "ABBV",
-      "company": "",
-      "sector": ""
+      "ticker": "AMD",
+      "company": "Advanced Micro Devices",
+      "sector": "Technology"
     },
     {
-      "ticker": "TOST",
-      "company": "",
-      "sector": ""
+      "ticker": "NFLX",
+      "company": "Netflix Inc",
+      "sector": "Communication"
     },
     {
-      "ticker": "KMI",
-      "company": "",
-      "sector": ""
+      "ticker": "PLTR",
+      "company": "Palantir Technologies",
+      "sector": "Technology"
     },
     {
-      "ticker": "CPB",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "CHWY",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "GM",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "APH",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "KHC",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "GLXY",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "NEM",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "DVN",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "SNOW",
-      "company": "",
-      "sector": ""
-    },
-    {
-      "ticker": "MRK",
-      "company": "",
-      "sector": ""
+      "ticker": "CRWD",
+      "company": "CrowdStrike",
+      "sector": "Technology"
     }
   ],
-  "tickers": [
-    "TSLA",
-    "PLTR",
-    "VZ",
-    "NOW",
-    "BMNR",
-    "IREN",
-    "AAPL",
-    "SMCI",
-    "ORCL",
-    "PFE",
-    "IONQ",
-    "NFLX",
-    "CMCSA",
-    "CRWV",
-    "HOOD",
-    "BAC",
-    "CNQ",
-    "T",
-    "RKLB",
-    "SHEL",
-    "PBR",
-    "NBIS",
-    "AXTI",
-    "TTD",
-    "ASTS",
-    "WMT",
-    "CCL",
-    "AAOI",
-    "UBER",
-    "WBD",
-    "CRM",
-    "FCX",
-    "ABT",
-    "NKE",
-    "QXO",
-    "WFC",
-    "COP",
-    "CMG",
-    "LUNR",
-    "COIN",
-    "BP",
-    "BSX",
-    "CRCL",
-    "DOW",
-    "XOM",
-    "PL",
-    "KO",
-    "PYPL",
-    "TEVA",
-    "CPNG",
-    "COHR",
-    "EPD",
-    "MOS",
-    "BMY",
-    "DKNG",
-    "LITE",
-    "B",
-    "OXY",
-    "BABA",
-    "AIG",
-    "CELH",
-    "LRCX",
-    "RBLX",
-    "PG",
-    "MP",
-    "CVX",
-    "IBM",
-    "ABBV",
-    "TOST",
-    "KMI",
-    "CPB",
-    "CHWY",
-    "GM",
-    "APH",
-    "KHC",
-    "GLXY",
-    "NEM",
-    "DVN",
-    "SNOW",
-    "MRK"
-  ],
-  "count": 80,
-  "date": "2026-04-27",
-  "updatedAt": "2026-04-27 15:22 UTC",
-  "source": "cached",
-  "criteria": {
-    "exchange": "NYSE, NASDAQ",
-    "avgVolume": "> 500k",
-    "price": "> $20",
-    "rsi": "30-60 (pullback zone)",
-    "ema": "EMA20 recently crossed above EMA50 (Finviz filter \u2014 app uses SMA21/SMA50 for analysis)"
-  },
-  "fetchError": "Finviz no disponible \u2014 usando resultados anteriores"
+  "count": 20,
+  "date": "2026-04-29",
+  "updatedAt": "2026-04-29 15:32 UTC",
+  "source": "curated",
+  "fetchError": "Finviz no disponible \u2014 usando lista curada"
 }
